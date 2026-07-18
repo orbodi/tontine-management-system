@@ -1,0 +1,19 @@
+Fonctionnalités :
+
+- gestion des clients : enregistrement des cleints avec 
+des infos personnelles complete, attribution d'un identifiants
+a chque cleints, suivi des activités financirers des clients
+
+- Gestion des comptes : 
+    - Creation des comptes : 
+        - compte courant : possibilité d'effectuer des depots et des retraits
+        - compte épargne : le client doit prevenir la microfinance 48H avant d'effectuer un retraits
+        - La tontine : le carnet vendue à 300 FCFA, et compte 31 carreaux. Le montant à cotiser depends da la capacité du cleints
+        et celui versé au premier versement. Le premier versement revient à la microfinance
+        communement appellé premiere cotisation (P.C)
+            - Compte carte pour tous : le carnet vendue à 300 FCFA, et compte 31 carreaux. Le montant à cotiser depends da la capacité du cleints
+        et celui versé au premier versement. Le premier versement revient à la microfinance
+        communement appellé premiere cotisation (P.C)
+            - Compte de carte pour enfants : le carnet vendue à 300 FCFA, et compte 31 carreaux. un retrait est conditionné
+            à 6 moins de cotisations minimum.
+            - compte à carte bloquée : elle contient 31 carreaux un retrait est conditionné à une cotisation reguliere de 6 moins minimum.
