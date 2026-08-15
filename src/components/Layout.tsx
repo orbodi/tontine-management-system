@@ -8,7 +8,6 @@ import {
   FileBarChart,
   HandCoins,
   LayoutDashboard,
-  Landmark,
   LogOut,
   Menu,
   RefreshCw,
@@ -18,7 +17,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react'
-import { MODULE_CREDITS_ACTIF } from '../config'
+import { MODULE_CREDITS_ACTIF, LOGO_URL, NOM_APPLICATION, SOUS_TITRE_APPLICATION } from '../config'
 import { LIBELLES_ROLE, useStore } from '../store'
 import { useConfirmation } from './Confirmation'
 
@@ -67,13 +66,13 @@ export default function Layout() {
   )
 
   const entete = (
-    <div className="flex items-center gap-3 px-6 py-6">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500 text-white">
-        <Landmark className="h-6 w-6" />
-      </div>
-      <div>
-        <div className="text-base font-bold text-white">MicroFinance Pro</div>
-        <div className="text-xs text-slate-400">Gestion de microfinance</div>
+    <div className="px-5 py-5">
+      <div className="rounded-2xl bg-white p-3 shadow-sm">
+        <img
+          src={LOGO_URL}
+          alt={`${SOUS_TITRE_APPLICATION} ${NOM_APPLICATION}`}
+          className="mx-auto h-auto w-full max-w-[180px] object-contain"
+        />
       </div>
     </div>
   )
@@ -125,9 +124,13 @@ export default function Layout() {
 
       {/* Barre mobile */}
       <div className="sticky top-0 z-30 flex items-center justify-between bg-slate-900 px-4 py-3 lg:hidden print:hidden">
-        <div className="flex items-center gap-2 text-white">
-          <Landmark className="h-6 w-6 text-brand-400" />
-          <span className="font-bold">MicroFinance Pro</span>
+        <div className="flex items-center gap-2.5 text-white">
+          <img
+            src={LOGO_URL}
+            alt={NOM_APPLICATION}
+            className="h-9 w-9 rounded-lg bg-white object-contain p-0.5"
+          />
+          <span className="font-bold">{NOM_APPLICATION}</span>
         </div>
         <button
           onClick={() => setMenuOuvert(true)}

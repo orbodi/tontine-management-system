@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Download, Printer } from 'lucide-react'
-import { MODULE_CREDITS_ACTIF } from '../config'
+import { MODULE_CREDITS_ACTIF, NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
 import { LIBELLES_TYPE, TYPES_SORTIE, situationCredit } from '../metier'
 import { exporterCsv, formatDate, formatMontant } from '../utils'
@@ -150,7 +150,7 @@ export default function Rapports() {
           </div>
         )}
         <div className="card">
-          <div className="text-xs text-slate-500">Revenus microfinance (P.C + carnets)</div>
+          <div className="text-xs text-slate-500">Revenus {NOM_APPLICATION} (P.C + carnets)</div>
           <div className="mt-1 text-lg font-bold text-brand-700">{formatMontant(epargne.revenus)}</div>
         </div>
       </div>

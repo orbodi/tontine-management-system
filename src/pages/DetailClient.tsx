@@ -9,7 +9,7 @@ import {
   UserCheck,
   UserX,
 } from 'lucide-react'
-import { MODULE_CREDITS_ACTIF } from '../config'
+import { MODULE_CREDITS_ACTIF, NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
 import { LIBELLES_CARNET, TYPES_SORTIE, situationCredit } from '../metier'
 import { formatDate, formatDateHeure, formatMontant } from '../utils'
@@ -64,9 +64,9 @@ export default function DetailClient() {
     let texte = `Bonjour ${client.prenom} ${client.nom}, `
     if (creditEnRetard) {
       const sit = situationCredit(creditEnRetard, data.remboursements)
-      texte += `nous vous rappelons que votre crédit ${creditEnRetard.numero} présente un retard de paiement. Reste à payer : ${formatMontant(sit.resteAPayer)} (mensualité : ${formatMontant(sit.mensualite)}). Merci de passer à l'agence. MicroFinance Pro`
+      texte += `nous vous rappelons que votre crédit ${creditEnRetard.numero} présente un retard de paiement. Reste à payer : ${formatMontant(sit.resteAPayer)} (mensualité : ${formatMontant(sit.mensualite)}). Merci de passer à l'agence. ${NOM_APPLICATION}`
     } else {
-      texte += `votre situation chez MicroFinance Pro : épargne ${formatMontant(activite.soldeEpargne)}, tontine en cours ${formatMontant(activite.soldeTontine)}. Merci de votre confiance.`
+      texte += `votre situation chez ${NOM_APPLICATION} : épargne ${formatMontant(activite.soldeEpargne)}, tontine en cours ${formatMontant(activite.soldeTontine)}. Merci de votre confiance.`
     }
     setTexteMessage(texte)
     setModaleMessage(true)

@@ -1,6 +1,6 @@
-# MicroFinance Pro — Système de gestion de microfinance
+# DON DE DIEU — Système de gestion de microfinance
 
-Application web moderne de gestion de microfinance : clients, tontine individuelle (carnets),
+Application web de gestion pour la microfinance **DON DE DIEU** : clients, tontine individuelle (carnets),
 épargne, crédits, journal des transactions et rapports. Interface entièrement en français,
 devise FCFA.
 
@@ -29,10 +29,13 @@ devise FCFA.
 
 ```bash
 npm install
-npm run dev
+npm run start
 ```
 
-Puis ouvrez http://localhost:5173
+`npm run start` (ou `npm run dev:open`) démarre le serveur et ouvre le navigateur automatiquement.  
+Sans ouverture auto : `npm run dev`, puis http://localhost:5173
+
+Sous Windows, vous pouvez aussi double-cliquer sur `lancer.bat`.
 
 ## Build de production
 

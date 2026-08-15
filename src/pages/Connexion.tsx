@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Landmark, LogIn } from 'lucide-react'
+import { LogIn } from 'lucide-react'
+import { LOGO_URL, NOM_APPLICATION, SOUS_TITRE_APPLICATION } from '../config'
 import { useStore } from '../store'
 
 export default function Connexion() {
@@ -19,11 +20,13 @@ export default function Connexion() {
     <div className="flex min-h-screen items-center justify-center bg-slate-900 p-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500 text-white shadow-lg">
-            <Landmark className="h-8 w-8" />
+          <div className="mx-auto mb-2 inline-flex rounded-2xl bg-white p-5 shadow-lg">
+            <img
+              src={LOGO_URL}
+              alt={`${SOUS_TITRE_APPLICATION} ${NOM_APPLICATION}`}
+              className="h-36 w-auto object-contain"
+            />
           </div>
-          <h1 className="text-2xl font-bold text-white">MicroFinance Pro</h1>
-          <p className="mt-1 text-sm text-slate-400">Gestion de microfinance</p>
         </div>
 
         <form onSubmit={valider} className="rounded-2xl bg-white p-6 shadow-xl">
@@ -51,20 +54,12 @@ export default function Connexion() {
                 placeholder="••••••••"
               />
             </div>
-            {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
-            <button type="submit" className="btn-primary w-full justify-center">
-              <LogIn className="h-4 w-4" />
-              Se connecter
-            </button>
+            {erreur && <p className="text-sm text-rose-600">{erreur}</p>}
           </div>
-
-          <div className="mt-5 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-            <p className="mb-1 font-semibold text-slate-600">Comptes de démonstration :</p>
-            <p>Admin : <code className="font-mono">admin / admin123</code></p>
-            <p>Chef d'agence : <code className="font-mono">chef / chef123</code></p>
-            <p>Caissière : <code className="font-mono">caisse / caisse123</code></p>
-            <p>Caissier : <code className="font-mono">caisse2 / caisse123</code></p>
-          </div>
+          <button type="submit" className="btn-primary mt-5 w-full">
+            <LogIn className="h-4 w-4" />
+            Se connecter
+          </button>
         </form>
       </div>
     </div>

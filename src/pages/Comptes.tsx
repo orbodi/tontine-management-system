@@ -10,6 +10,7 @@ import {
   Search,
   Wallet,
 } from 'lucide-react'
+import { NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
 import { DELAI_RETRAIT_EPARGNE_H, type Compte, type TypeCompte } from '../types'
 import { formatDate, formatDateHeure, formatMontant } from '../utils'
@@ -148,7 +149,7 @@ export default function Comptes() {
             Demandes de retrait épargne ({demandesEnAttente.length})
           </h3>
           <p className="mb-4 text-xs text-slate-500">
-            Le client doit prévenir la microfinance {DELAI_RETRAIT_EPARGNE_H}h avant d'effectuer un retrait sur
+            Le client doit prévenir {NOM_APPLICATION} {DELAI_RETRAIT_EPARGNE_H}h avant d'effectuer un retrait sur
             son compte épargne.
           </p>
           <div className="space-y-2">

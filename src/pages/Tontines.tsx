@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUpFromLine, CheckCircle2, HandCoins, Lock, LockOpen, Plus, Search } from 'lucide-react'
+import { NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
 import {
   CYCLES_PAR_CARNET,
@@ -436,7 +437,7 @@ export default function Tontines() {
               </div>
               {carreauxNets(encaissement, data.mises) === 0 && (
                 <p className="mt-2 text-xs text-amber-800">
-                  Dont 1 P.C ({formatMontant(encaissement.mise)}) pour la microfinance.
+                  Dont 1 P.C ({formatMontant(encaissement.mise)}) pour {NOM_APPLICATION}.
                 </p>
               )}
             </div>
