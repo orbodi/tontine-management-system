@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Download, Printer } from 'lucide-react'
+import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
-import { situationCredit } from '../metier'
+import { LIBELLES_TYPE, TYPES_SORTIE, situationCredit } from '../metier'
 import { exporterCsv, formatDate, formatMontant } from '../utils'
 import { EnTetePage } from '../components/ui'
-import { LIBELLES_TYPE, TYPES_SORTIE } from './Transactions'
 
 function aujourdHuiIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -48,9 +48,10 @@ export default function Rapports() {
     return { lignes, encours, enRetard }
   }, [data])
 
-  // ----- Épargne et tontine -----
+  // ----- Comptes et carnets -----
   const epargne = useMemo(() => {
-    const totalEpargne = data.comptes.reduce((s, c) => s + c.solde, 0)
+    const totalCourant = data.comptes.filter((c) => c.type === 'courant').reduce((s, c) => s + c.solde, 0)
+    const totalEpargne = data.comptes.filter((c) => c.type === 'epargne').reduce((s, c) => s + c.solde, 0)
     const encoursTontine = data.carnets
       .filter((c) => c.actif)
       .reduce((s, carnet) => {
@@ -59,10 +60,11 @@ export default function Rapports() {
           .reduce((x, m) => x + m.nombreMises, 0)
         return s + mises * carnet.mise
       }, 0)
-    const commissions = data.transactions
-      .filter((t) => t.type === 'commission_tontine')
+    // Revenus de la microfinance : premières cotisations (P.C) + ventes de carnets
+    const revenus = data.transactions
+      .filter((t) => t.type === 'commission_tontine' || t.type === 'vente_carnet')
       .reduce((s, t) => s + t.montant, 0)
-    return { totalEpargne, encoursTontine, commissions }
+    return { totalCourant, totalEpargne, encoursTontine, revenus }
   }, [data])
 
   const exporterClients = () => {
@@ -128,22 +130,28 @@ export default function Rapports() {
       />
 
       {/* Synthèse générale */}
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className={`mb-6 grid grid-cols-2 gap-4 ${MODULE_CREDITS_ACTIF ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
+        <div className="card">
+          <div className="text-xs text-slate-500">Encours comptes courants</div>
+          <div className="mt-1 text-lg font-bold text-slate-900">{formatMontant(epargne.totalCourant)}</div>
+        </div>
         <div className="card">
           <div className="text-xs text-slate-500">Encours d'épargne</div>
           <div className="mt-1 text-lg font-bold text-slate-900">{formatMontant(epargne.totalEpargne)}</div>
         </div>
         <div className="card">
-          <div className="text-xs text-slate-500">Encours de tontine</div>
+          <div className="text-xs text-slate-500">Encours tontine & cartes</div>
           <div className="mt-1 text-lg font-bold text-slate-900">{formatMontant(epargne.encoursTontine)}</div>
         </div>
+        {MODULE_CREDITS_ACTIF && (
+          <div className="card">
+            <div className="text-xs text-slate-500">Encours de crédits</div>
+            <div className="mt-1 text-lg font-bold text-slate-900">{formatMontant(portefeuille.encours)}</div>
+          </div>
+        )}
         <div className="card">
-          <div className="text-xs text-slate-500">Encours de crédits</div>
-          <div className="mt-1 text-lg font-bold text-slate-900">{formatMontant(portefeuille.encours)}</div>
-        </div>
-        <div className="card">
-          <div className="text-xs text-slate-500">Commissions tontine perçues</div>
-          <div className="mt-1 text-lg font-bold text-brand-700">{formatMontant(epargne.commissions)}</div>
+          <div className="text-xs text-slate-500">Revenus microfinance (P.C + carnets)</div>
+          <div className="mt-1 text-lg font-bold text-brand-700">{formatMontant(epargne.revenus)}</div>
         </div>
       </div>
 
@@ -211,6 +219,7 @@ export default function Rapports() {
       </div>
 
       {/* Portefeuille de crédits */}
+      {MODULE_CREDITS_ACTIF && (
       <div className="card mb-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold text-slate-900">
@@ -268,6 +277,7 @@ export default function Rapports() {
           </div>
         )}
       </div>
+      )}
 
       {/* Export clients */}
       <div className="card flex flex-wrap items-center justify-between gap-3">

@@ -62,7 +62,8 @@ export default function Connexion() {
             <p className="mb-1 font-semibold text-slate-600">Comptes de démonstration :</p>
             <p>Admin : <code className="font-mono">admin / admin123</code></p>
             <p>Chef d'agence : <code className="font-mono">chef / chef123</code></p>
-            <p>Caissier : <code className="font-mono">caisse / caisse123</code></p>
+            <p>Caissière : <code className="font-mono">caisse / caisse123</code></p>
+            <p>Caissier : <code className="font-mono">caisse2 / caisse123</code></p>
           </div>
         </form>
       </div>

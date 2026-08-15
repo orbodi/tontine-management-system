@@ -3,33 +3,44 @@ import { NavLink, Outlet } from 'react-router-dom'
 import {
   ArrowLeftRight,
   Banknote,
+  Building2,
+  ClipboardList,
   FileBarChart,
   HandCoins,
   LayoutDashboard,
   Landmark,
   LogOut,
   Menu,
-  PiggyBank,
   RefreshCw,
+  Scale,
   ShieldCheck,
   Users,
+  Wallet,
   X,
 } from 'lucide-react'
+import { MODULE_CREDITS_ACTIF } from '../config'
 import { LIBELLES_ROLE, useStore } from '../store'
+import { useConfirmation } from './Confirmation'
 
 export default function Layout() {
   const [menuOuvert, setMenuOuvert] = useState(false)
-  const { utilisateurConnecte, deconnexion, estAdmin, reinitialiserDemo } = useStore()
+  const { data, employeConnecte, deconnexion, estAdmin, aDroit, reinitialiserDemo } = useStore()
+  const { confirmer } = useConfirmation()
+
+  const agence = data.agences.find((a) => a.id === employeConnecte?.agenceId)
 
   const liens = [
     { to: '/', label: 'Tableau de bord', icon: LayoutDashboard },
     { to: '/clients', label: 'Clients', icon: Users },
-    { to: '/tontines', label: 'Tontine', icon: HandCoins },
-    { to: '/epargne', label: 'Épargne', icon: PiggyBank },
-    { to: '/credits', label: 'Crédits', icon: Banknote },
+    { to: '/tontines', label: 'Tontine & cartes', icon: HandCoins },
+    { to: '/comptes', label: 'Comptes', icon: Wallet },
+    ...(MODULE_CREDITS_ACTIF ? [{ to: '/credits', label: 'Crédits', icon: Banknote }] : []),
     { to: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-    { to: '/rapports', label: 'Rapports', icon: FileBarChart },
-    ...(estAdmin ? [{ to: '/utilisateurs', label: 'Utilisateurs', icon: ShieldCheck }] : []),
+    { to: '/caisse', label: 'Caisse', icon: Scale },
+    ...(aDroit('voir_rapports') ? [{ to: '/rapports', label: 'Rapports', icon: FileBarChart }] : []),
+    ...(estAdmin ? [{ to: '/agences', label: 'Agences', icon: Building2 }] : []),
+    ...(estAdmin ? [{ to: '/employes', label: 'Employés', icon: ShieldCheck }] : []),
+    ...(estAdmin ? [{ to: '/audit', label: 'Audit', icon: ClipboardList }] : []),
   ]
 
   const navigation = (
@@ -67,11 +78,16 @@ export default function Layout() {
     </div>
   )
 
-  const piedDePage = utilisateurConnecte && (
+  const piedDePage = employeConnecte && (
     <div className="border-t border-white/10 px-4 py-4">
       <div className="mb-2 px-2">
-        <div className="text-sm font-semibold text-white">{utilisateurConnecte.nomComplet}</div>
-        <div className="text-xs text-brand-300">{LIBELLES_ROLE[utilisateurConnecte.role]}</div>
+        <div className="text-sm font-semibold text-white">{employeConnecte.nomComplet}</div>
+        <div className="text-xs text-brand-300">{LIBELLES_ROLE[employeConnecte.role]}</div>
+        {agence && (
+          <div className="mt-0.5 text-xs text-slate-400">
+            {agence.code} — {agence.nom}
+          </div>
+        )}
       </div>
       <button
         onClick={deconnexion}
@@ -81,10 +97,14 @@ export default function Layout() {
         Se déconnecter
       </button>
       <button
-        onClick={() => {
-          if (confirm('Réinitialiser toutes les données avec le jeu de démonstration ?')) {
-            reinitialiserDemo()
-          }
+        onClick={async () => {
+          const ok = await confirmer({
+            titre: 'Réinitialiser les données',
+            message: 'Réinitialiser toutes les données avec le jeu de démonstration ? Les saisies actuelles seront perdues.',
+            labelValider: 'Réinitialiser',
+            danger: true,
+          })
+          if (ok) reinitialiserDemo()
         }}
         className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-xs text-slate-500 transition hover:text-slate-300"
       >

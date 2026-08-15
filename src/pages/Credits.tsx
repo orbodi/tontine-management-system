@@ -6,12 +6,14 @@ import type { Credit, StatutCredit } from '../types'
 import { situationCredit } from '../metier'
 import { formatDate, formatMontant } from '../utils'
 import { Avatar, BadgeStatutCredit, EnTetePage, EtatVide, Modale } from '../components/ui'
+import { useConfirmation } from '../components/Confirmation'
 
 type Filtre = 'tous' | StatutCredit
 
 export default function Credits() {
-  const { data, peutApprouverCredits, demanderCredit, approuverCredit, rejeterCredit, rembourserCredit } =
-    useStore()
+  const { data, aDroit, demanderCredit, approuverCredit, rejeterCredit, rembourserCredit } = useStore()
+  const peutApprouverCredits = aDroit('approuver_credits')
+  const { confirmer } = useConfirmation()
   const [filtre, setFiltre] = useState<Filtre>('tous')
   const [modaleDemande, setModaleDemande] = useState(false)
   const [clientChoisi, setClientChoisi] = useState('')
@@ -150,14 +152,13 @@ export default function Credits() {
                         <>
                           <button
                             className="btn-primary !py-2 text-xs"
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  `Approuver le crédit ${credit.numero} de ${formatMontant(credit.montant)} pour ${client.prenom} ${client.nom} ?`,
-                                )
-                              ) {
-                                approuverCredit(credit.id)
-                              }
+                            onClick={async () => {
+                              const ok = await confirmer({
+                                titre: 'Approuver le crédit',
+                                message: `Approuver le crédit ${credit.numero} de ${formatMontant(credit.montant)} pour ${client.prenom} ${client.nom} ?`,
+                                labelValider: 'Approuver',
+                              })
+                              if (ok) approuverCredit(credit.id)
                             }}
                           >
                             <Check className="h-4 w-4" />
@@ -165,8 +166,14 @@ export default function Credits() {
                           </button>
                           <button
                             className="btn-danger !py-2 text-xs"
-                            onClick={() => {
-                              if (confirm(`Rejeter la demande ${credit.numero} ?`)) rejeterCredit(credit.id)
+                            onClick={async () => {
+                              const ok = await confirmer({
+                                titre: 'Rejeter la demande',
+                                message: `Rejeter la demande de crédit ${credit.numero} de ${client.prenom} ${client.nom} ?`,
+                                labelValider: 'Rejeter',
+                                danger: true,
+                              })
+                              if (ok) rejeterCredit(credit.id)
                             }}
                           >
                             <X className="h-4 w-4" />

@@ -28,8 +28,22 @@ export function initiales(nom: string, prenom: string): string {
   return (prenom[0] ?? '') + (nom[0] ?? '')
 }
 
+export function pad2(n: number | string): string {
+  return String(n).padStart(2, '0')
+}
+
 export function pad4(n: number): string {
   return String(n).padStart(4, '0')
+}
+
+/** Numéro de carnet tontine : code agence (2) + ordre client (4). Ex. 010001 */
+export function numeroCarnet(codeAgence: string, ordreClient: number): string {
+  return `${pad2(codeAgence)}${pad4(ordreClient)}`
+}
+
+/** Numéro de compte courant/épargne : B + ordre. Ex. B0001 */
+export function numeroCompteSolde(ordre: number): string {
+  return `B${pad4(ordre)}`
 }
 
 /** Numéro au format international sans espaces ni signes, pour wa.me */

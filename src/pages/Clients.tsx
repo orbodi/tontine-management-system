@@ -29,11 +29,12 @@ const formulaireVide: FormulaireClient = {
 }
 
 export default function Clients() {
-  const { data, ajouterClient, modifierClient } = useStore()
+  const { data, estCaissier, ajouterClient, modifierClient } = useStore()
   const [recherche, setRecherche] = useState('')
   const [modaleOuverte, setModaleOuverte] = useState(false)
   const [clientEnEdition, setClientEnEdition] = useState<Client | null>(null)
   const [form, setForm] = useState<FormulaireClient>(formulaireVide)
+  const [erreur, setErreur] = useState('')
 
   const clientsFiltres = useMemo(() => {
     const q = recherche.trim().toLowerCase()
@@ -56,6 +57,7 @@ export default function Clients() {
   }
 
   const ouvrirEdition = (c: Client) => {
+    if (estCaissier) return
     setClientEnEdition(c)
     setForm({
       nom: c.nom,
@@ -82,8 +84,13 @@ export default function Clients() {
       adresse: form.adresse.trim() || undefined,
       pieceIdentite: form.pieceIdentite.trim() || undefined,
     }
-    if (clientEnEdition) modifierClient(clientEnEdition.id, patch)
-    else ajouterClient(patch)
+    if (clientEnEdition) {
+      const err = modifierClient(clientEnEdition.id, patch)
+      if (err) {
+        setErreur(err)
+        return
+      }
+    } else ajouterClient(patch)
     setModaleOuverte(false)
   }
 
@@ -123,6 +130,7 @@ export default function Clients() {
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-5 py-3.5">ID</th>
                 <th className="px-5 py-3.5">Client</th>
+                <th className="px-5 py-3.5">Agence</th>
                 <th className="px-5 py-3.5">Téléphone</th>
                 <th className="px-5 py-3.5">Profession</th>
                 <th className="px-5 py-3.5">Inscrit le</th>
@@ -142,6 +150,9 @@ export default function Clients() {
                       </span>
                     </Link>
                   </td>
+                  <td className="px-5 py-3 font-mono text-xs text-slate-600">
+                    {data.agences.find((a) => a.id === c.agenceId)?.code ?? '—'}
+                  </td>
                   <td className="px-5 py-3 text-slate-600">{c.telephone}</td>
                   <td className="px-5 py-3 text-slate-600">{c.profession ?? '—'}</td>
                   <td className="px-5 py-3 text-slate-600">{formatDate(c.dateInscription)}</td>
@@ -152,12 +163,14 @@ export default function Clients() {
                   </td>
                   <td className="px-5 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button
-                        className="text-xs font-medium text-slate-500 hover:text-brand-600"
-                        onClick={() => ouvrirEdition(c)}
-                      >
-                        Modifier
-                      </button>
+                      {!estCaissier && (
+                        <button
+                          className="text-xs font-medium text-slate-500 hover:text-brand-600"
+                          onClick={() => ouvrirEdition(c)}
+                        >
+                          Modifier
+                        </button>
+                      )}
                       <Link to={`/clients/${c.id}`} className="text-brand-600 hover:text-brand-700" title="Voir la fiche">
                         <ChevronRight className="h-4 w-4" />
                       </Link>
@@ -215,6 +228,7 @@ export default function Clients() {
             <label className="label">Adresse</label>
             <input className="input" value={form.adresse} onChange={champ('adresse')} />
           </div>
+          {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className="btn-secondary" onClick={() => setModaleOuverte(false)}>
               Annuler

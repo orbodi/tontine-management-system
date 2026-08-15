@@ -17,3 +17,46 @@ a chque cleints, suivi des activités financirers des clients
             - Compte de carte pour enfants : le carnet vendue à 300 FCFA, et compte 31 carreaux. un retrait est conditionné
             à 6 moins de cotisations minimum.
             - compte à carte bloquée : elle contient 31 carreaux un retrait est conditionné à une cotisation reguliere de 6 moins minimum.
+
+
+- Suivi des soldes et des transactions : l'administration (administrateur) doit avoir la possibilité
+ de consulter les soldes et l'historique des transactions de chaque compte, possibilité de verouiller ou de deverouiller un compte
+
+- Gestion des employés : Enregistrement des employés avec leur informations personnelles. l'administrateur doit avoir
+la possibilité d'ajouter, supprimer, ou modifier les infos sur les employés. 
+L'administrateur est le seul à avoir tous les droits qu'il peut accorder à ces employés
+L'administrateur doit avoir la possibilité de consulter et suivre toutes 
+
+- AUtres : chaque cassier possede un compte de caisse, arret de caisse
+
+
+- Ajout la notion d'agences : on a plusieurs agences et leur tete un chef. un client peut etre 
+creer dans une agence donnees, mais un caissier d'une autre agence peut effectuer les operations sur 
+sur ce dernier. Cela sous attend la gestion des agences.
+
+- Le chef agence doit avoir les infos dans son profile que sur son agence
+
+- Rapport journalier de chaque de chaque caisse et un raccourci pour avoir les details des transactions
+
+- La mise des tontine est modifiable apres un cycle (un mois de cotisation)
+
+- Pour la caisse, utilise les mot depot et retrait pour les operations sur les comptes
+
+- Pour les comptes tontines, desormais, on fait la saisi du montant cotisé, et deduire 
+le nombre de mise sachant qu'on connait le montant de la mise . Affiche la recaptulatif sur un modal pop
+confirmant les calculs avant que la caissier valide. S'il y a incoherence, un message d'erreur doit aviser le caissier.
+
+- Un caissier peut ajouter uniquement un client tontine, peut pas faire de modification .
+
+- Pour chaque caisse on doit avoir l'eta journalier 
+
+- Un carnet compte 12 mois ainsi 12 cycles
+
+- Sur un compte tontine on peut faire un retrait partiel, et le niveau est recalculer automatiquement
+
+- Pour les admin, on doit avoit l'historique des autres comptes (date et heur de connexion, activités effectuées)
+
+- Pour les comptes de tontine voici le format de du numero : exemple : 010001
+01 est le numero de l'agence, et 0001 le numero d'ordre du client.
+
+- pour les compte adompte ce format : B0001, prefixe 'B' et 0001 le numero d'ordre du client.

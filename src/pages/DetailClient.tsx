@@ -9,8 +9,9 @@ import {
   UserCheck,
   UserX,
 } from 'lucide-react'
+import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
-import { situationCredit } from '../metier'
+import { LIBELLES_CARNET, TYPES_SORTIE, situationCredit } from '../metier'
 import { formatDate, formatDateHeure, formatMontant } from '../utils'
 import { Avatar, BadgeStatutCredit, BoutonsMessage, EnTetePage, Modale } from '../components/ui'
 
@@ -55,7 +56,9 @@ export default function DetailClient() {
     )
   }
 
-  const creditEnRetard = activite.credits.find((c) => c.statut === 'en_retard')
+  const creditEnRetard = MODULE_CREDITS_ACTIF
+    ? activite.credits.find((c) => c.statut === 'en_retard')
+    : undefined
 
   const ouvrirModaleMessage = () => {
     let texte = `Bonjour ${client.prenom} ${client.nom}, `
@@ -99,6 +102,14 @@ export default function DetailClient() {
           <Avatar nom={client.nom} prenom={client.prenom} taille="lg" />
           <dl className="grid flex-1 grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-3">
             <div>
+              <dt className="text-xs text-slate-500">Agence</dt>
+              <dd className="font-medium text-slate-900">
+                {data.agences.find((a) => a.id === client.agenceId)
+                  ? `${data.agences.find((a) => a.id === client.agenceId)!.code} — ${data.agences.find((a) => a.id === client.agenceId)!.nom}`
+                  : '—'}
+              </dd>
+            </div>
+            <div>
               <dt className="text-xs text-slate-500">Téléphone</dt>
               <dd className="font-medium text-slate-900">{client.telephone}</dd>
             </div>
@@ -131,7 +142,7 @@ export default function DetailClient() {
       </div>
 
       {/* Synthèse financière */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className={`mb-6 grid grid-cols-1 gap-4 ${MODULE_CREDITS_ACTIF ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
         <div className="card flex items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
             <HandCoins className="h-6 w-6" />
@@ -147,9 +158,10 @@ export default function DetailClient() {
           </div>
           <div>
             <div className="text-lg font-bold text-slate-900">{formatMontant(activite.soldeEpargne)}</div>
-            <div className="text-sm text-slate-500">Épargne</div>
+            <div className="text-sm text-slate-500">Comptes (courant + épargne)</div>
           </div>
         </div>
+        {MODULE_CREDITS_ACTIF && (
         <div className="card flex items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
             <Banknote className="h-6 w-6" />
@@ -159,10 +171,12 @@ export default function DetailClient() {
             <div className="text-sm text-slate-500">Crédits restant dus</div>
           </div>
         </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div className={`grid grid-cols-1 gap-6 ${MODULE_CREDITS_ACTIF ? 'xl:grid-cols-2' : ''}`}>
         {/* Crédits */}
+        {MODULE_CREDITS_ACTIF && (
         <div className="card">
           <h3 className="mb-4 font-semibold text-slate-900">Crédits</h3>
           {activite.credits.length === 0 ? (
@@ -192,6 +206,7 @@ export default function DetailClient() {
             </div>
           )}
         </div>
+        )}
 
         {/* Comptes et carnets */}
         <div className="card">
@@ -201,7 +216,10 @@ export default function DetailClient() {
               <div key={c.id} className="flex items-center justify-between rounded-xl border border-slate-200 p-3 text-sm">
                 <div>
                   <span className="font-mono text-xs font-semibold text-brand-700">{c.numero}</span>
-                  <span className="ml-2 text-slate-600">Compte épargne</span>
+                  <span className="ml-2 text-slate-600">
+                    {c.type === 'courant' ? 'Compte courant' : 'Compte épargne'}
+                  </span>
+                  {c.verrouille && <span className="badge ml-2 bg-rose-100 text-rose-700">Verrouillé</span>}
                 </div>
                 <span className="font-bold text-slate-900">{formatMontant(c.solde)}</span>
               </div>
@@ -214,7 +232,10 @@ export default function DetailClient() {
                 <div key={carnet.id} className="rounded-xl border border-slate-200 p-3 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-600">
-                      Carnet tontine — mise {formatMontant(carnet.mise)} (cycle {carnet.cycleActuel})
+                      <span className="font-mono text-xs font-semibold text-brand-700">{carnet.numero}</span>{' '}
+                      {LIBELLES_CARNET[carnet.typeCarnet]} — mise {formatMontant(carnet.mise)} (cycle{' '}
+                      {carnet.cycleActuel}/12)
+                      {carnet.verrouille && <span className="badge ml-2 bg-rose-100 text-rose-700">Verrouillé</span>}
                     </span>
                     <span className="font-bold text-slate-900">
                       {mises}/{carnet.misesParCycle} mises
@@ -246,7 +267,7 @@ export default function DetailClient() {
         ) : (
           <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
             {activite.transactions.map((t) => {
-              const sortie = t.type === 'retrait_epargne' || t.type === 'retrait_tontine' || t.type === 'octroi_credit'
+              const sortie = TYPES_SORTIE.includes(t.type)
               return (
                 <div key={t.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                   <div className="min-w-0">

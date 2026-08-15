@@ -21,20 +21,20 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
-import { situationCredit } from '../metier'
+import { TYPES_SORTIE, situationCredit } from '../metier'
 import { formatDate, formatMontant } from '../utils'
 import { EnTetePage } from '../components/ui'
-import { TYPES_SORTIE } from './Transactions'
 
 const MOIS_COURTS = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'août', 'sep', 'oct', 'nov', 'déc']
 
 export default function TableauDeBord() {
-  const { data, utilisateurConnecte } = useStore()
+  const { data, employeConnecte } = useStore()
 
   const stats = useMemo(() => {
     const clientsActifs = data.clients.filter((c) => c.actif).length
-    const totalEpargne = data.comptes.reduce((s, c) => s + c.solde, 0)
+    const totalComptes = data.comptes.reduce((s, c) => s + c.solde, 0)
     const encoursTontine = data.carnets
       .filter((c) => c.actif)
       .reduce((s, carnet) => {
@@ -50,7 +50,16 @@ export default function TableauDeBord() {
     )
     const creditsEnRetard = data.credits.filter((c) => c.statut === 'en_retard').length
     const demandesEnAttente = data.credits.filter((c) => c.statut === 'en_attente').length
-    return { clientsActifs, totalEpargne, encoursTontine, encoursCredits, creditsEnRetard, demandesEnAttente }
+    const retraitsAPreparer = data.demandesRetrait.filter((dr) => dr.statut === 'en_attente').length
+    return {
+      clientsActifs,
+      totalComptes,
+      encoursTontine,
+      encoursCredits,
+      creditsEnRetard,
+      demandesEnAttente,
+      retraitsAPreparer,
+    }
   }, [data])
 
   const fluxMensuels = useMemo(() => {
@@ -100,38 +109,52 @@ export default function TableauDeBord() {
       lien: '/clients',
     },
     {
-      label: 'Encours tontine',
+      label: 'Encours tontine & cartes',
       valeur: formatMontant(stats.encoursTontine),
       icone: HandCoins,
       couleur: 'bg-amber-100 text-amber-600',
       lien: '/tontines',
     },
     {
-      label: 'Encours épargne',
-      valeur: formatMontant(stats.totalEpargne),
+      label: 'Encours des comptes',
+      valeur: formatMontant(stats.totalComptes),
       icone: PiggyBank,
       couleur: 'bg-emerald-100 text-emerald-600',
-      lien: '/epargne',
+      lien: '/comptes',
     },
-    {
-      label: 'Encours crédits',
-      valeur: formatMontant(Math.round(stats.encoursCredits)),
-      icone: Banknote,
-      couleur: 'bg-violet-100 text-violet-600',
-      lien: '/credits',
-    },
+    ...(MODULE_CREDITS_ACTIF
+      ? [
+          {
+            label: 'Encours crédits',
+            valeur: formatMontant(Math.round(stats.encoursCredits)),
+            icone: Banknote,
+            couleur: 'bg-violet-100 text-violet-600',
+            lien: '/credits',
+          },
+        ]
+      : []),
   ]
 
   return (
     <div>
       <EnTetePage
-        titre={`Bonjour, ${utilisateurConnecte?.nomComplet.split(' ')[0] ?? ''}`}
+        titre={`Bonjour, ${employeConnecte?.nomComplet.split(' ')[0] ?? ''}`}
         sousTitre={`Vue d'ensemble au ${formatDate(new Date().toISOString())}`}
       />
 
-      {(stats.creditsEnRetard > 0 || stats.demandesEnAttente > 0) && (
+      {((MODULE_CREDITS_ACTIF && (stats.creditsEnRetard > 0 || stats.demandesEnAttente > 0)) ||
+        stats.retraitsAPreparer > 0) && (
         <div className="mb-6 flex flex-wrap gap-3">
-          {stats.creditsEnRetard > 0 && (
+          {stats.retraitsAPreparer > 0 && (
+            <Link
+              to="/comptes"
+              className="flex items-center gap-2 rounded-xl bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700 ring-1 ring-sky-200 transition hover:bg-sky-100"
+            >
+              <PiggyBank className="h-4 w-4" />
+              {stats.retraitsAPreparer} demande{stats.retraitsAPreparer > 1 ? 's' : ''} de retrait épargne en cours
+            </Link>
+          )}
+          {MODULE_CREDITS_ACTIF && stats.creditsEnRetard > 0 && (
             <Link
               to="/credits"
               className="flex items-center gap-2 rounded-xl bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700 ring-1 ring-rose-200 transition hover:bg-rose-100"
@@ -140,7 +163,7 @@ export default function TableauDeBord() {
               {stats.creditsEnRetard} crédit{stats.creditsEnRetard > 1 ? 's' : ''} en retard de paiement
             </Link>
           )}
-          {stats.demandesEnAttente > 0 && (
+          {MODULE_CREDITS_ACTIF && stats.demandesEnAttente > 0 && (
             <Link
               to="/credits"
               className="flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-700 ring-1 ring-amber-200 transition hover:bg-amber-100"
@@ -152,7 +175,7 @@ export default function TableauDeBord() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${MODULE_CREDITS_ACTIF ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
         {cartes.map((c) => (
           <Link key={c.label} to={c.lien} className="card transition hover:shadow-md">
             <div className="flex items-center gap-4">
@@ -169,7 +192,7 @@ export default function TableauDeBord() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="card xl:col-span-2">
+        <div className={`card ${MODULE_CREDITS_ACTIF ? 'xl:col-span-2' : 'xl:col-span-3'}`}>
           <h3 className="mb-4 font-semibold text-slate-900">Flux de caisse (6 derniers mois)</h3>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={fluxMensuels}>
@@ -198,6 +221,7 @@ export default function TableauDeBord() {
           </ResponsiveContainer>
         </div>
 
+        {MODULE_CREDITS_ACTIF && (
         <div className="card">
           <h3 className="mb-4 font-semibold text-slate-900">Portefeuille de crédits</h3>
           {repartitionCredits.length === 0 ? (
@@ -228,6 +252,7 @@ export default function TableauDeBord() {
             </>
           )}
         </div>
+        )}
       </div>
 
       <div className="card mt-6">

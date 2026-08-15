@@ -1,22 +1,11 @@
 import { useMemo, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, Download, Search } from 'lucide-react'
+import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
 import type { TypeTransaction } from '../types'
+import { LIBELLES_TYPE, TYPES_SORTIE } from '../metier'
 import { exporterCsv, formatDateHeure, formatMontant } from '../utils'
 import { EnTetePage, EtatVide } from '../components/ui'
-
-export const LIBELLES_TYPE: Record<TypeTransaction, string> = {
-  mise_tontine: 'Mise tontine',
-  retrait_tontine: 'Retrait tontine',
-  commission_tontine: 'Commission tontine',
-  depot_epargne: 'Dépôt épargne',
-  retrait_epargne: 'Retrait épargne',
-  octroi_credit: 'Octroi de crédit',
-  remboursement_credit: 'Remboursement crédit',
-}
-
-/** Sorties de caisse (argent qui sort de l'établissement) */
-export const TYPES_SORTIE: TypeTransaction[] = ['retrait_tontine', 'retrait_epargne', 'octroi_credit']
 
 export default function Transactions() {
   const { data } = useStore()
@@ -85,11 +74,16 @@ export default function Transactions() {
         </div>
         <select className="input" value={typeFiltre} onChange={(e) => setTypeFiltre(e.target.value as typeof typeFiltre)}>
           <option value="tous">Tous les types</option>
-          {Object.entries(LIBELLES_TYPE).map(([valeur, label]) => (
-            <option key={valeur} value={valeur}>
-              {label}
-            </option>
-          ))}
+          {Object.entries(LIBELLES_TYPE)
+            .filter(
+              ([valeur]) =>
+                MODULE_CREDITS_ACTIF || (valeur !== 'octroi_credit' && valeur !== 'remboursement_credit'),
+            )
+            .map(([valeur, label]) => (
+              <option key={valeur} value={valeur}>
+                {label}
+              </option>
+            ))}
         </select>
         <input className="input" type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} title="Date de début" />
         <input className="input" type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} title="Date de fin" />
