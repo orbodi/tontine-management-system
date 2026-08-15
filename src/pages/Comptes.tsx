@@ -67,8 +67,7 @@ export default function Comptes() {
       .sort((a, b) => b.solde - a.solde)
   }, [data.comptes, data.clients, recherche, typeFiltre])
 
-  const clientsSansCeType = (type: TypeCompte) =>
-    data.clients.filter((c) => c.actif && !data.comptes.some((k) => k.clientId === c.id && k.type === type))
+  const clientsActifs = () => data.clients.filter((c) => c.actif)
 
   const totalCourant = data.comptes.filter((c) => c.type === 'courant').reduce((s, c) => s + c.solde, 0)
   const totalEpargne = data.comptes.filter((c) => c.type === 'epargne').reduce((s, c) => s + c.solde, 0)
@@ -300,14 +299,14 @@ export default function Comptes() {
             <label className="label">Client titulaire *</label>
             <select className="input" required value={clientPourCompte} onChange={(e) => setClientPourCompte(e.target.value)}>
               <option value="">— Choisir un client —</option>
-              {clientsSansCeType(typeNouveauCompte).map((c) => (
+              {clientsActifs().map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.codeClient} — {c.prenom} {c.nom}
                 </option>
               ))}
             </select>
             <p className="mt-1 text-xs text-slate-400">
-              Seuls les clients sans {LIBELLES_COMPTE[typeNouveauCompte].toLowerCase()} sont proposés.
+              Un client peut avoir plusieurs comptes courant ou épargne.
             </p>
           </div>
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}

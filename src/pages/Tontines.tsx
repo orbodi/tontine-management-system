@@ -65,16 +65,13 @@ export default function Tontines() {
     [data.zones, agenceChoisie],
   )
 
-  /** Clients de la zone (sans carnet) : liste dès qu’agence+zone sont choisies ; la saisie affine. */
+  /** Clients de la zone : liste dès qu’agence+zone sont choisies ; la saisie affine. */
   const suggestionsClients = useMemo(() => {
     if (!agenceChoisie || !zoneChoisie) return []
     const q = normaliser(rechercheClient)
-    const idsAvecCarnet = new Set(
-      data.carnets.filter((k) => k.actif).map((k) => k.clientId),
-    )
     return data.clients
       .filter((c) => {
-        if (!c.actif || idsAvecCarnet.has(c.id)) return false
+        if (!c.actif) return false
         if (c.agenceId !== agenceChoisie || c.zoneId !== zoneChoisie) return false
         if (!q) return true
         const texte = normaliser(`${c.codeClient} ${c.prenom} ${c.nom} ${c.telephone}`)
@@ -82,7 +79,7 @@ export default function Tontines() {
       })
       .sort((a, b) => a.codeClient.localeCompare(b.codeClient))
       .slice(0, q ? 15 : 30)
-  }, [data.clients, data.carnets, agenceChoisie, zoneChoisie, rechercheClient])
+  }, [data.clients, agenceChoisie, zoneChoisie, rechercheClient])
 
   const clientSelectionne = data.clients.find((c) => c.id === clientChoisi)
   const zoneSelectionnee = data.zones.find((z) => z.id === (zoneChoisie || clientSelectionne?.zoneId))
@@ -199,7 +196,7 @@ export default function Tontines() {
             <button
               className="btn-primary"
               onClick={ouvrirModale}
-              disabled={data.clients.every((c) => !c.actif || data.carnets.some((k) => k.actif && k.clientId === c.id))}
+              disabled={data.clients.every((c) => !c.actif)}
             >
               <Plus className="h-4 w-4" />
               Ouvrir un carnet
@@ -387,7 +384,7 @@ export default function Tontines() {
               <ul className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
                 {suggestionsClients.length === 0 ? (
                   <li className="px-3 py-2.5 text-sm text-slate-500">
-                    Aucun client sans carnet dans cette zone
+                    Aucun client trouvé dans cette zone
                     {rechercheClient.trim() ? ' pour cette recherche' : ''}.
                   </li>
                 ) : (

@@ -364,17 +364,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             resultat = { erreur: 'Client introuvable.' }
             return d
           }
-          if (d.carnets.some((k) => k.actif && k.clientId === clientId)) {
-            resultat = { erreur: 'Ce client a déjà un carnet actif.' }
-            return d
-          }
           const zone = d.zones.find((z) => z.id === client.zoneId)
           if (!zone) {
             resultat = { erreur: 'Zone du client introuvable.' }
             return d
           }
           const date = maintenant()
-          const numero = numeroCarnet(zone.code, client.ordreZone)
+          // N° unique : préfixe zone + prochain ordre libre (plusieurs carnets / client possibles)
+          let ordre = client.ordreZone
+          let numero = numeroCarnet(zone.code, ordre)
+          const numerosExistants = new Set(d.carnets.map((c) => c.numero))
+          while (numerosExistants.has(numero)) {
+            ordre += 1
+            numero = numeroCarnet(zone.code, ordre)
+          }
           const id = uid()
           resultat = { id, numero }
           return {
@@ -626,8 +629,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (estCaissier) return { erreur: 'Un caissier ne peut pas ouvrir un compte courant ou épargne.' }
         let resultat: { id: string; numero: string } | { erreur: string } = { erreur: 'Erreur inconnue.' }
         setData((d) => {
-          if (d.comptes.some((c) => c.clientId === clientId && c.type === type)) {
-            resultat = { erreur: 'Ce client a déjà ce type de compte.' }
+          const client = d.clients.find((c) => c.id === clientId)
+          if (!client) {
+            resultat = { erreur: 'Client introuvable.' }
             return d
           }
           const numeroOrdre = d.compteurs.compte + 1

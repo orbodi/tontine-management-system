@@ -85,11 +85,8 @@ export default function DetailClient() {
     )
   }
 
-  const aCarnetActif = activite.carnets.some((c) => c.actif)
-  const aCourant = activite.comptes.some((c) => c.type === 'courant')
-  const aEpargne = activite.comptes.some((c) => c.type === 'epargne')
-  const peutOuvrirCarnet = peutOperer && client.actif && !aCarnetActif
-  const peutOuvrirCompte = peutOperer && !estCaissier && client.actif && (!aCourant || !aEpargne)
+  const peutOuvrirCarnet = peutOperer && client.actif
+  const peutOuvrirCompte = peutOperer && !estCaissier && client.actif
 
   const creditEnRetard = MODULE_CREDITS_ACTIF
     ? activite.credits.find((c) => c.statut === 'en_retard')
@@ -178,7 +175,7 @@ export default function DetailClient() {
                 className="btn-secondary"
                 onClick={() => {
                   setErreur('')
-                  setTypeCompte(!aCourant ? 'courant' : 'epargne')
+                  setTypeCompte('courant')
                   setModaleCompte(true)
                 }}
               >
@@ -343,7 +340,7 @@ export default function DetailClient() {
                   className="btn-secondary !py-1.5 text-xs"
                   onClick={() => {
                     setErreur('')
-                    setTypeCompte(!aCourant ? 'courant' : 'epargne')
+                    setTypeCompte('courant')
                     setModaleCompte(true)
                   }}
                 >
@@ -531,8 +528,8 @@ export default function DetailClient() {
           <div>
             <label className="label">Type de compte *</label>
             <select className="input" value={typeCompte} onChange={(e) => setTypeCompte(e.target.value as TypeCompte)}>
-              {!aCourant && <option value="courant">Compte courant (n° Bxxxx)</option>}
-              {!aEpargne && <option value="epargne">Compte épargne (n° Bxxxx)</option>}
+              <option value="courant">Compte courant (n° Bxxxx)</option>
+              <option value="epargne">Compte épargne (n° Bxxxx)</option>
             </select>
           </div>
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
