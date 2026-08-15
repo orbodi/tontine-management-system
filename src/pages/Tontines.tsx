@@ -40,6 +40,8 @@ export default function Tontines() {
   const [agenceChoisie, setAgenceChoisie] = useState('')
   const [zoneChoisie, setZoneChoisie] = useState('')
   const [clientChoisi, setClientChoisi] = useState('')
+  const [rechercheClient, setRechercheClient] = useState('')
+  const [listeClientOuverte, setListeClientOuverte] = useState(false)
   const [typeNouveauCarnet, setTypeNouveauCarnet] = useState<TypeCarnet>('tontine')
   const [mise, setMise] = useState('')
   const [frequence, setFrequence] = useState<FrequenceMise>('journaliere')
@@ -55,29 +57,49 @@ export default function Tontines() {
     [data.zones, agenceChoisie],
   )
 
-  const clientsSansCarnet = useMemo(
-    () =>
-      data.clients.filter(
-        (c) =>
-          c.actif &&
-          !data.carnets.some((k) => k.actif && k.clientId === c.id) &&
-          (!zoneChoisie || c.zoneId === zoneChoisie) &&
-          (!agenceChoisie || c.agenceId === agenceChoisie),
-      ),
-    [data.clients, data.carnets, zoneChoisie, agenceChoisie],
-  )
+  /** Suggestions uniquement après saisie (évite de charger toute la liste). */
+  const suggestionsClients = useMemo(() => {
+    const q = rechercheClient.trim().toLowerCase()
+    if (q.length < 2) return []
+    return data.clients
+      .filter((c) => {
+        if (!c.actif) return false
+        if (data.carnets.some((k) => k.actif && k.clientId === c.id)) return false
+        if (agenceChoisie && c.agenceId !== agenceChoisie) return false
+        if (zoneChoisie && c.zoneId !== zoneChoisie) return false
+        const texte = `${c.codeClient} ${c.prenom} ${c.nom} ${c.telephone}`.toLowerCase()
+        return texte.includes(q)
+      })
+      .sort((a, b) => a.codeClient.localeCompare(b.codeClient))
+      .slice(0, 8)
+  }, [data.clients, data.carnets, agenceChoisie, zoneChoisie, rechercheClient])
 
   const clientSelectionne = data.clients.find((c) => c.id === clientChoisi)
-  const zoneSelectionnee = data.zones.find((z) => z.id === zoneChoisie)
+  const zoneSelectionnee = data.zones.find((z) => z.id === (zoneChoisie || clientSelectionne?.zoneId))
   const apercuNumero =
     clientSelectionne && zoneSelectionnee
       ? numeroCarnet(zoneSelectionnee.code, clientSelectionne.ordreZone)
       : null
 
+  const libelleClient = (c: { codeClient: string; prenom: string; nom: string }) =>
+    `${c.codeClient} — ${c.prenom} ${c.nom}`
+
+  const choisirClient = (id: string) => {
+    const c = data.clients.find((x) => x.id === id)
+    if (!c) return
+    setClientChoisi(c.id)
+    setRechercheClient(libelleClient(c))
+    setListeClientOuverte(false)
+    if (!agenceChoisie) setAgenceChoisie(c.agenceId)
+    if (!zoneChoisie) setZoneChoisie(c.zoneId)
+  }
+
   const ouvrirModale = () => {
     setAgenceChoisie(data.agences.find((a) => a.actif)?.id ?? '')
     setZoneChoisie('')
     setClientChoisi('')
+    setRechercheClient('')
+    setListeClientOuverte(false)
     setMise('')
     setTypeNouveauCarnet('tontine')
     setFrequence('journaliere')
@@ -123,7 +145,7 @@ export default function Tontines() {
       return
     }
     if (!clientChoisi) {
-      setErreur('Choisissez un client.')
+      setErreur('Sélectionnez un client dans la liste de suggestions.')
       return
     }
     const client = data.clients.find((c) => c.id === clientChoisi)
@@ -141,6 +163,7 @@ export default function Tontines() {
     const zone = data.zones.find((z) => z.id === zoneChoisie)
     setModaleOuverture(false)
     setClientChoisi('')
+    setRechercheClient('')
     setZoneChoisie('')
     setMise('')
     setErreur('')
@@ -292,6 +315,7 @@ export default function Tontines() {
                   setAgenceChoisie(e.target.value)
                   setZoneChoisie('')
                   setClientChoisi('')
+                  setRechercheClient('')
                 }}
               >
                 <option value="">— Choisir —</option>
@@ -314,6 +338,7 @@ export default function Tontines() {
                 onChange={(e) => {
                   setZoneChoisie(e.target.value)
                   setClientChoisi('')
+                  setRechercheClient('')
                 }}
               >
                 <option value="">— Choisir —</option>
@@ -326,24 +351,68 @@ export default function Tontines() {
               </select>
             </div>
           </div>
-          <div>
+          <div className="relative">
             <label className="label">Client *</label>
-            <select
-              className="input"
-              required
-              value={clientChoisi}
-              disabled={!zoneChoisie}
-              onChange={(e) => setClientChoisi(e.target.value)}
-            >
-              <option value="">— Choisir —</option>
-              {clientsSansCarnet.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.codeClient} — {c.prenom} {c.nom}
-                </option>
-              ))}
-            </select>
-            {zoneChoisie && clientsSansCarnet.length === 0 && (
-              <p className="mt-1 text-xs text-amber-700">Aucun client sans carnet dans cette zone.</p>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="input pl-10"
+                required
+                disabled={!zoneChoisie}
+                placeholder={
+                  zoneChoisie
+                    ? 'Tapez au moins 2 caractères (nom, prénom, n°…)'
+                    : 'Choisissez d’abord une zone'
+                }
+                value={rechercheClient}
+                autoComplete="off"
+                onFocus={() => setListeClientOuverte(true)}
+                onBlur={() => {
+                  // Laisse le clic sur une suggestion s’enregistrer
+                  window.setTimeout(() => setListeClientOuverte(false), 150)
+                }}
+                onChange={(e) => {
+                  setRechercheClient(e.target.value)
+                  setClientChoisi('')
+                  setListeClientOuverte(true)
+                }}
+              />
+            </div>
+            {listeClientOuverte && zoneChoisie && rechercheClient.trim().length >= 2 && (
+              <ul className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+                {suggestionsClients.length === 0 ? (
+                  <li className="px-3 py-2.5 text-sm text-slate-500">
+                    Aucun client sans carnet trouvé
+                  </li>
+                ) : (
+                  suggestionsClients.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-brand-50"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => choisirClient(c.id)}
+                      >
+                        <Avatar nom={c.nom} prenom={c.prenom} />
+                        <span>
+                          <span className="font-mono text-xs font-semibold text-brand-700">{c.codeClient}</span>
+                          <span className="ml-2 font-medium text-slate-900">
+                            {c.prenom} {c.nom}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
+            {zoneChoisie && rechercheClient.trim().length > 0 && rechercheClient.trim().length < 2 && (
+              <p className="mt-1 text-xs text-slate-400">Continuez à saisir pour afficher des suggestions…</p>
+            )}
+            {clientChoisi && clientSelectionne && (
+              <p className="mt-1 text-xs text-emerald-700">
+                Client sélectionné : {libelleClient(clientSelectionne)}
+              </p>
             )}
           </div>
           {apercuNumero && (
