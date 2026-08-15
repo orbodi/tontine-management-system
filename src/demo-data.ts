@@ -11,6 +11,7 @@ import {
   type TypeCarnet,
   type TypeCompte,
   type TypeTransaction,
+  type Zone,
 } from './types'
 import { numeroCarnet, numeroClient, numeroCompteSolde, pad4, uid } from './utils'
 
@@ -24,18 +25,50 @@ function ilYa(jours: number, heure = 10): string {
 export function genererDonneesDemo(): AppData {
   const agencePlateau: Agence = {
     id: uid(),
-    code: '01',
+    code: 'A1',
     nom: 'Agence Plateau',
     adresse: 'Abidjan, Plateau',
+    telephone: '+225 27 20 30 40 50',
     actif: true,
   }
   const agenceYopougon: Agence = {
     id: uid(),
-    code: '02',
+    code: 'A2',
     nom: 'Agence Yopougon',
     adresse: 'Abidjan, Yopougon',
+    telephone: '+225 27 20 30 40 51',
     actif: true,
   }
+
+  const zonePlateauNord: Zone = {
+    id: uid(),
+    agenceId: agencePlateau.id,
+    code: '01',
+    nom: 'Plateau Nord',
+    actif: true,
+  }
+  const zonePlateauSud: Zone = {
+    id: uid(),
+    agenceId: agencePlateau.id,
+    code: '02',
+    nom: 'Plateau Sud',
+    actif: true,
+  }
+  const zoneYopCentre: Zone = {
+    id: uid(),
+    agenceId: agenceYopougon.id,
+    code: '03',
+    nom: 'Yopougon Centre',
+    actif: true,
+  }
+  const zoneYopSideci: Zone = {
+    id: uid(),
+    agenceId: agenceYopougon.id,
+    code: '04',
+    nom: 'Yopougon Sideci',
+    actif: true,
+  }
+  const zones = [zonePlateauNord, zonePlateauSud, zoneYopCentre, zoneYopSideci]
 
   const adminId = uid()
   const chefId = uid()
@@ -110,36 +143,39 @@ export function genererDonneesDemo(): AppData {
   const op = (i: number) => caissiers[i % 2]
 
   const infos: [string, string, 'M' | 'F', string, string, string][] = [
-    ['Diallo', 'Aminata', 'F', 'Commerçante', 'Abidjan, Yopougon', agencePlateau.id],
-    ['Traoré', 'Moussa', 'M', 'Chauffeur', 'Abidjan, Adjamé', agencePlateau.id],
-    ['Koné', 'Fatoumata', 'F', 'Couturière', 'Abidjan, Cocody', agencePlateau.id],
-    ['Ouattara', 'Ibrahim', 'M', 'Agriculteur', 'Bouaké centre', agenceYopougon.id],
-    ['Camara', 'Mariam', 'F', 'Restauratrice', 'Abidjan, Yopougon', agenceYopougon.id],
-    ['Bamba', 'Sékou', 'M', 'Menuisier', 'Abidjan, Abobo', agencePlateau.id],
-    ['Touré', 'Awa', 'F', 'Coiffeuse', 'Abidjan, Adjamé', agenceYopougon.id],
-    ['Coulibaly', 'Adama', 'M', 'Électricien', 'Abidjan, Cocody', agencePlateau.id],
-    ['Sanogo', 'Kadiatou', 'F', 'Vendeuse', 'Abidjan, Treichville', agenceYopougon.id],
-    ['Keïta', 'Oumar', 'M', 'Mécanicien', 'Abidjan, Abobo', agencePlateau.id],
-    ['Doumbia', 'Rokia', 'F', 'Enseignante', 'Abidjan, Plateau', agencePlateau.id],
-    ['Cissé', 'Lassina', 'M', 'Maçon', 'Bouaké centre', agenceYopougon.id],
+    ['Diallo', 'Aminata', 'F', 'Commerçante', 'Abidjan, Yopougon', zonePlateauNord.id],
+    ['Traoré', 'Moussa', 'M', 'Chauffeur', 'Abidjan, Adjamé', zonePlateauNord.id],
+    ['Koné', 'Fatoumata', 'F', 'Couturière', 'Abidjan, Cocody', zonePlateauSud.id],
+    ['Ouattara', 'Ibrahim', 'M', 'Agriculteur', 'Bouaké centre', zoneYopCentre.id],
+    ['Camara', 'Mariam', 'F', 'Restauratrice', 'Abidjan, Yopougon', zoneYopCentre.id],
+    ['Bamba', 'Sékou', 'M', 'Menuisier', 'Abidjan, Abobo', zonePlateauSud.id],
+    ['Touré', 'Awa', 'F', 'Coiffeuse', 'Abidjan, Adjamé', zoneYopSideci.id],
+    ['Coulibaly', 'Adama', 'M', 'Électricien', 'Abidjan, Cocody', zonePlateauNord.id],
+    ['Sanogo', 'Kadiatou', 'F', 'Vendeuse', 'Abidjan, Treichville', zoneYopSideci.id],
+    ['Keïta', 'Oumar', 'M', 'Mécanicien', 'Abidjan, Abobo', zonePlateauSud.id],
+    ['Doumbia', 'Rokia', 'F', 'Enseignante', 'Abidjan, Plateau', zonePlateauNord.id],
+    ['Cissé', 'Lassina', 'M', 'Maçon', 'Bouaké centre', zoneYopCentre.id],
   ]
 
-  const compteursOrdreAgence: Record<string, number> = {
-    [agencePlateau.id]: 0,
-    [agenceYopougon.id]: 0,
+  const compteursOrdreZone: Record<string, number> = {
+    [zonePlateauNord.id]: 0,
+    [zonePlateauSud.id]: 0,
+    [zoneYopCentre.id]: 0,
+    [zoneYopSideci.id]: 0,
   }
 
-  const codeAg = (agenceId: string) =>
-    agenceId === agencePlateau.id ? agencePlateau.code : agenceYopougon.code
+  const zoneParId = (zoneId: string) => zones.find((z) => z.id === zoneId)!
 
-  const clients: Client[] = infos.map(([nom, prenom, sexe, profession, adresse, agenceId], i) => {
-    compteursOrdreAgence[agenceId]++
-    const ordre = compteursOrdreAgence[agenceId]
+  const clients: Client[] = infos.map(([nom, prenom, sexe, profession, adresse, zoneId], i) => {
+    compteursOrdreZone[zoneId]++
+    const ordre = compteursOrdreZone[zoneId]
+    const zone = zoneParId(zoneId)
     return {
       id: uid(),
       codeClient: numeroClient(i + 1),
-      agenceId,
-      ordreAgence: ordre,
+      agenceId: zone.agenceId,
+      zoneId,
+      ordreZone: ordre,
       nom,
       prenom,
       sexe,
@@ -155,6 +191,7 @@ export function genererDonneesDemo(): AppData {
 
   const data: AppData = {
     agences: [agencePlateau, agenceYopougon],
+    zones,
     employes,
     clients,
     carnets: [],
@@ -191,7 +228,7 @@ export function genererDonneesDemo(): AppData {
         type: 'deconnexion',
       },
     ],
-    compteursOrdreAgence,
+    compteursOrdreZone,
     compteurs: { client: clients.length, compte: 0, credit: 0 },
   }
 
@@ -231,13 +268,14 @@ export function genererDonneesDemo(): AppData {
 
   parametresCarnets.forEach(([ic, typeCarnet, mise, misesPayees, joursOuverture, cycleActuel, verrouille], k) => {
     const client = clients[ic]
-    const agenceId = client.agenceId
-    const numero = numeroCarnet(codeAg(agenceId), client.ordreAgence)
+    const zone = zoneParId(client.zoneId)
+    const numero = numeroCarnet(zone.code, client.ordreZone)
     const carnet = {
       id: uid(),
       clientId: client.id,
       numero,
-      agenceId,
+      zoneId: zone.id,
+      agenceId: zone.agenceId,
       typeCarnet,
       mise,
       frequence: 'journaliere' as const,
@@ -254,6 +292,7 @@ export function genererDonneesDemo(): AppData {
     )
 
     if (cycleActuel === 2) {
+      // Cycle 1 passé : 31 carreaux (argent restant jusqu'au retrait)
       for (let j = 0; j < 31; j += 3) {
         const nombre = Math.min(3, 31 - j)
         const date = ilYa(joursOuverture - 2 - j)
@@ -261,16 +300,41 @@ export function genererDonneesDemo(): AppData {
         if (j === 0) {
           data.transactions.push(tx('commission_tontine', client, mise, date, `Première cotisation (P.C) — ${nomComplet(client)} (cycle 1)`, op(k)))
           if (nombre > 1) {
-            data.transactions.push(tx('mise_tontine', client, mise * (nombre - 1), date, `Cotisation ×${nombre - 1} — ${nomComplet(client)} (cycle 1)`, op(k)))
+            data.transactions.push(tx('mise_tontine', client, mise * (nombre - 1), date, `Dépôt ×${nombre - 1} — ${nomComplet(client)} (cycle 1)`, op(k)))
           }
         } else {
-          data.transactions.push(tx('mise_tontine', client, mise * nombre, date, `Cotisation ×${nombre} — ${nomComplet(client)} (cycle 1)`, op(j)))
+          data.transactions.push(tx('mise_tontine', client, mise * nombre, date, `Dépôt ×${nombre} — ${nomComplet(client)} (cycle 1)`, op(j)))
         }
       }
-      const dateCloture = ilYa(joursOuverture - 40)
-      data.transactions.push(
-        tx('retrait_tontine', client, mise * 30, dateCloture, `Clôture cycle 1/12 — remise de ${nomComplet(client)}`, chef),
-      )
+      // Exemple : un cycle partiellement retiré, un autre soldé (grisé) selon le carnet
+      if (k === 0) {
+        // retrait partiel 10 carreaux sur cycle 1
+        data.mises.push({
+          id: uid(),
+          carnetId: carnet.id,
+          cycle: 1,
+          nombreMises: -10,
+          montant: -mise * 10,
+          date: ilYa(joursOuverture - 45),
+        })
+        data.transactions.push(
+          tx('retrait_tontine', client, mise * 10, ilYa(joursOuverture - 45), `Retrait partiel ×10 — cycle 1 — ${nomComplet(client)}`, chef),
+        )
+      }
+      if (k === 4) {
+        // retrait total hors P.C (30) → cycle grisé
+        data.mises.push({
+          id: uid(),
+          carnetId: carnet.id,
+          cycle: 1,
+          nombreMises: -30,
+          montant: -mise * 30,
+          date: ilYa(joursOuverture - 42),
+        })
+        data.transactions.push(
+          tx('retrait_tontine', client, mise * 30, ilYa(joursOuverture - 42), `Retrait total ×30 — cycle 1 — ${nomComplet(client)}`, chef),
+        )
+      }
     }
 
     for (let j = 0; j < misesPayees; j += 2) {
@@ -280,10 +344,10 @@ export function genererDonneesDemo(): AppData {
       if (j === 0) {
         data.transactions.push(tx('commission_tontine', client, mise, date, `Première cotisation (P.C) — ${nomComplet(client)} (cycle ${cycleActuel})`, op(k)))
         if (nombre > 1) {
-          data.transactions.push(tx('mise_tontine', client, mise * (nombre - 1), date, `Cotisation ×${nombre - 1} — ${nomComplet(client)} (cycle ${cycleActuel})`, op(k)))
+          data.transactions.push(tx('mise_tontine', client, mise * (nombre - 1), date, `Dépôt ×${nombre - 1} — ${nomComplet(client)} (cycle ${cycleActuel})`, op(k)))
         }
       } else {
-        data.transactions.push(tx('mise_tontine', client, mise * nombre, date, `Cotisation ×${nombre} — ${nomComplet(client)} (cycle ${cycleActuel})`, op(j / 2 + k)))
+        data.transactions.push(tx('mise_tontine', client, mise * nombre, date, `Dépôt ×${nombre} — ${nomComplet(client)} (cycle ${cycleActuel})`, op(j / 2 + k)))
       }
     }
   })

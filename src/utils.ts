@@ -36,9 +36,9 @@ export function pad4(n: number): string {
   return String(n).padStart(4, '0')
 }
 
-/** Numéro de carnet tontine : code agence (2) + ordre client (4). Ex. 010001 */
-export function numeroCarnet(codeAgence: string, ordreClient: number): string {
-  return `${pad2(codeAgence)}${pad4(ordreClient)}`
+/** Numéro de carnet tontine : n° zone (2) + ordre client dans la zone (4). Ex. 010001 */
+export function numeroCarnet(codeZone: string, ordreClient: number): string {
+  return `${pad2(codeZone)}${pad4(ordreClient)}`
 }
 
 /** Identifiant client : numéro d'ordre global sur 4 chiffres. Ex. 0001 */

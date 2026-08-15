@@ -9,6 +9,7 @@ import {
   HandCoins,
   LayoutDashboard,
   LogOut,
+  MapPinned,
   Menu,
   RefreshCw,
   Scale,
@@ -38,6 +39,7 @@ export default function Layout() {
     { to: '/caisse', label: 'Caisse', icon: Scale },
     ...(aDroit('voir_rapports') ? [{ to: '/rapports', label: 'Rapports', icon: FileBarChart }] : []),
     ...(estAdmin ? [{ to: '/agences', label: 'Agences', icon: Building2 }] : []),
+    ...(aDroit('gerer_zones') ? [{ to: '/zones', label: 'Zones', icon: MapPinned }] : []),
     ...(estAdmin ? [{ to: '/employes', label: 'Employés', icon: ShieldCheck }] : []),
     ...(estAdmin ? [{ to: '/audit', label: 'Audit', icon: ClipboardList }] : []),
   ]

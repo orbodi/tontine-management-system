@@ -8,6 +8,7 @@ import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
 
 interface FormulaireClient {
+  zoneId: string
   nom: string
   prenom: string
   telephone: string
@@ -19,6 +20,7 @@ interface FormulaireClient {
 }
 
 const formulaireVide: FormulaireClient = {
+  zoneId: '',
   nom: '',
   prenom: '',
   telephone: '',
@@ -30,13 +32,19 @@ const formulaireVide: FormulaireClient = {
 }
 
 export default function Clients() {
-  const { data, estCaissier, ajouterClient, modifierClient } = useStore()
+  const { data, estCaissier, estAdmin, employeConnecte, ajouterClient, modifierClient } = useStore()
   const { alerter } = useConfirmation()
   const [recherche, setRecherche] = useState('')
   const [modaleOuverte, setModaleOuverte] = useState(false)
   const [clientEnEdition, setClientEnEdition] = useState<Client | null>(null)
   const [form, setForm] = useState<FormulaireClient>(formulaireVide)
   const [erreur, setErreur] = useState('')
+
+  const zonesDisponibles = useMemo(() => {
+    const zones = data.zones.filter((z) => z.actif)
+    if (estAdmin) return zones
+    return zones.filter((z) => z.agenceId === employeConnecte?.agenceId)
+  }, [data.zones, estAdmin, employeConnecte?.agenceId])
 
   const clientsFiltres = useMemo(() => {
     const q = recherche.trim().toLowerCase()
@@ -54,7 +62,8 @@ export default function Clients() {
 
   const ouvrirCreation = () => {
     setClientEnEdition(null)
-    setForm(formulaireVide)
+    setForm({ ...formulaireVide, zoneId: zonesDisponibles[0]?.id ?? '' })
+    setErreur('')
     setModaleOuverte(true)
   }
 
@@ -62,6 +71,7 @@ export default function Clients() {
     if (estCaissier) return
     setClientEnEdition(c)
     setForm({
+      zoneId: c.zoneId,
       nom: c.nom,
       prenom: c.prenom,
       telephone: c.telephone,
@@ -71,6 +81,7 @@ export default function Clients() {
       adresse: c.adresse ?? '',
       pieceIdentite: c.pieceIdentite ?? '',
     })
+    setErreur('')
     setModaleOuverte(true)
   }
 
@@ -100,15 +111,21 @@ export default function Clients() {
       )
       return
     }
-    const cree = ajouterClient(patch)
+    if (!form.zoneId) {
+      setErreur('Choisissez une zone.')
+      return
+    }
+    const cree = ajouterClient({ ...patch, zoneId: form.zoneId })
+    if (!cree) {
+      setErreur('Impossible d’ajouter le client (zone inactive ou introuvable).')
+      return
+    }
     setModaleOuverte(false)
     setErreur('')
-    if (cree) {
-      await alerter(
-        'Client ajouté',
-        `Le client ${cree.prenom} ${cree.nom} a été ajouté avec succès.\nNuméro client : ${cree.codeClient}`,
-      )
-    }
+    await alerter(
+      'Client ajouté',
+      `Le client ${cree.prenom} ${cree.nom} a été ajouté avec succès.\nNuméro client : ${cree.codeClient}`,
+    )
   }
 
   const champ =
@@ -147,7 +164,7 @@ export default function Clients() {
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-5 py-3.5">ID</th>
                 <th className="px-5 py-3.5">Client</th>
-                <th className="px-5 py-3.5">Agence</th>
+                <th className="px-5 py-3.5">Zone</th>
                 <th className="px-5 py-3.5">Téléphone</th>
                 <th className="px-5 py-3.5">Profession</th>
                 <th className="px-5 py-3.5">Inscrit le</th>
@@ -170,7 +187,10 @@ export default function Clients() {
                     </Link>
                   </td>
                   <td className="px-5 py-3 font-mono text-xs text-slate-600">
-                    {data.agences.find((a) => a.id === c.agenceId)?.code ?? '—'}
+                    {(() => {
+                      const z = data.zones.find((x) => x.id === c.zoneId)
+                      return z ? z.code : '—'
+                    })()}
                   </td>
                   <td className="px-5 py-3 text-slate-600">{c.telephone}</td>
                   <td className="px-5 py-3 text-slate-600">{c.profession ?? '—'}</td>
@@ -208,6 +228,39 @@ export default function Clients() {
         onFermer={() => setModaleOuverte(false)}
       >
         <form onSubmit={enregistrer} className="space-y-4">
+          {!clientEnEdition && (
+            <div>
+              <label className="label">Zone *</label>
+              <select
+                className="input"
+                required
+                value={form.zoneId}
+                onChange={champ('zoneId')}
+              >
+                <option value="">— Choisir —</option>
+                {zonesDisponibles.map((z) => {
+                  const agence = data.agences.find((a) => a.id === z.agenceId)
+                  return (
+                    <option key={z.id} value={z.id}>
+                      {z.code} — {z.nom ?? 'Zone'} ({agence?.nom ?? 'Agence'})
+                    </option>
+                  )
+                })}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                Le n° de carnet héritera du n° de zone (ex. 010001).
+              </p>
+            </div>
+          )}
+          {clientEnEdition && (
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Zone :{' '}
+              <span className="font-mono font-semibold text-brand-700">
+                {data.zones.find((z) => z.id === clientEnEdition.zoneId)?.code ?? '—'}
+              </span>{' '}
+              (non modifiable — détermine le n° de carnet)
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Prénom *</label>

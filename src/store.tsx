@@ -19,13 +19,14 @@ import {
   type Transaction,
   type TypeCarnet,
   type TypeCompte,
+  type Zone,
 } from './types'
-import { calculerMisesDepuisMontant, carreauxNets, eligibiliteRetraitCarnet } from './metier'
+import { calculerMisesDepuisMontant, carreauxNets, carreauxRetirables, eligibiliteRetraitCarnet } from './metier'
 import { genererDonneesDemo } from './demo-data'
 import { numeroCarnet, numeroClient, numeroCompteSolde, pad4, uid } from './utils'
 
-const STORAGE_KEY = 'microfinance-data-v10'
-const SESSION_KEY = 'microfinance-session-v10'
+const STORAGE_KEY = 'microfinance-data-v12'
+const SESSION_KEY = 'microfinance-session-v12'
 
 export const LIBELLES_ROLE: Record<Role, string> = {
   admin: 'Administrateur',
@@ -41,6 +42,7 @@ export const LIBELLES_DROIT: Record<Droit, string> = {
   gerer_employes: 'Gérer les employés',
   voir_rapports: 'Consulter les rapports',
   gerer_agences: 'Gérer les agences',
+  gerer_zones: 'Gérer les zones',
 }
 
 export const TOUS_DROITS = Object.keys(LIBELLES_DROIT) as Droit[]
@@ -60,9 +62,13 @@ interface StoreApi {
   ajouterAgence: (a: Omit<Agence, 'id' | 'actif'>) => boolean
   modifierAgence: (id: string, patch: Partial<Agence>) => void
   basculerActifAgence: (id: string) => void
+  // Zones
+  ajouterZone: (z: Omit<Zone, 'id' | 'actif'>) => string | null
+  modifierZone: (id: string, patch: Partial<Zone>) => string | null
+  basculerActifZone: (id: string) => void
   // Clients
   ajouterClient: (
-    c: Omit<Client, 'id' | 'codeClient' | 'dateInscription' | 'actif' | 'agenceId' | 'ordreAgence'>,
+    c: Omit<Client, 'id' | 'codeClient' | 'dateInscription' | 'actif' | 'agenceId' | 'ordreZone'>,
   ) => { codeClient: string; prenom: string; nom: string } | null
   modifierClient: (id: string, patch: Partial<Client>) => string | null
   basculerActifClient: (id: string) => void
@@ -72,13 +78,13 @@ interface StoreApi {
     typeCarnet: TypeCarnet,
     mise: number,
     frequence: CarnetTontine['frequence'],
-  ) => string | null
+  ) => { id: string; numero: string } | { erreur: string }
   encaisserCotisation: (carnetId: string, montant: number) => string | null
-  retraitPartielCarnet: (carnetId: string, nombreCarreaux: number) => string | null
-  cloturerCycle: (carnetId: string, nouvelleMise?: number) => string | null
+  /** Retrait partiel ou total sur un cycle (souvent un cycle passé). */
+  retraitCycle: (carnetId: string, cycle: number, nombreCarreaux: number) => string | null
   basculerVerrouCarnet: (id: string) => void
   // Comptes à solde
-  ouvrirCompte: (clientId: string, type: TypeCompte) => string | null
+  ouvrirCompte: (clientId: string, type: TypeCompte) => { id: string; numero: string } | { erreur: string }
   deposerCompte: (compteId: string, montant: number, note?: string) => string | null
   retirerCompte: (compteId: string, montant: number, note?: string) => string | null
   basculerVerrouCompte: (id: string) => void
@@ -154,9 +160,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return c ? `${c.prenom} ${c.nom}` : 'Inconnu'
     }
 
-    const codeAgence = (d: AppData, agenceId: string) =>
-      d.agences.find((a) => a.id === agenceId)?.code ?? '00'
-
     return {
       data,
       employeConnecte,
@@ -229,29 +232,100 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }))
       },
 
+      // ---------- Zones ----------
+
+      ajouterZone(z) {
+        const code = z.code.trim()
+        if (!/^\d{2}$/.test(code)) return 'Le numéro de zone doit être sur 2 chiffres (ex. 01).'
+        // Unique globalement : le n° de carnet = zone + ordre (sans préfixe agence).
+        if (data.zones.some((x) => x.code === code)) {
+          return 'Ce numéro de zone existe déjà.'
+        }
+        if (!data.agences.some((a) => a.id === z.agenceId)) return 'Agence introuvable.'
+        const id = uid()
+        setData((d) => ({
+          ...d,
+          zones: [
+            ...d.zones,
+            {
+              ...z,
+              code,
+              nom: z.nom?.trim() || undefined,
+              id,
+              actif: true,
+            },
+          ],
+          compteursOrdreZone: { ...d.compteursOrdreZone, [id]: 0 },
+        }))
+        return null
+      },
+
+      modifierZone(id, patch) {
+        let erreur: string | null = null
+        setData((d) => {
+          const zone = d.zones.find((z) => z.id === id)
+          if (!zone) {
+            erreur = 'Zone introuvable.'
+            return d
+          }
+          const code = patch.code !== undefined ? patch.code.trim() : zone.code
+          if (patch.code !== undefined && !/^\d{2}$/.test(code)) {
+            erreur = 'Le numéro de zone doit être sur 2 chiffres (ex. 01).'
+            return d
+          }
+          if (d.zones.some((x) => x.id !== id && x.code === code)) {
+            erreur = 'Ce numéro de zone existe déjà.'
+            return d
+          }
+          return {
+            ...d,
+            zones: d.zones.map((z) =>
+              z.id === id
+                ? {
+                    ...z,
+                    ...patch,
+                    code,
+                    nom: patch.nom !== undefined ? patch.nom.trim() || undefined : z.nom,
+                  }
+                : z,
+            ),
+          }
+        })
+        return erreur
+      },
+
+      basculerActifZone(id) {
+        setData((d) => ({
+          ...d,
+          zones: d.zones.map((z) => (z.id === id ? { ...z, actif: !z.actif } : z)),
+        }))
+      },
+
       // ---------- Clients ----------
 
       ajouterClient(c) {
         if (!employeConnecte) return null
-        const agenceId = employeConnecte.agenceId
         let cree: { codeClient: string; prenom: string; nom: string } | null = null
         setData((d) => {
+          const zone = d.zones.find((z) => z.id === c.zoneId && z.actif)
+          if (!zone) return d
           const numero = d.compteurs.client + 1
-          const ordre = (d.compteursOrdreAgence[agenceId] ?? 0) + 1
+          const ordre = (d.compteursOrdreZone[zone.id] ?? 0) + 1
           const codeClient = numeroClient(numero)
           cree = { codeClient, prenom: c.prenom, nom: c.nom }
           return {
             ...d,
             compteurs: { ...d.compteurs, client: numero },
-            compteursOrdreAgence: { ...d.compteursOrdreAgence, [agenceId]: ordre },
+            compteursOrdreZone: { ...d.compteursOrdreZone, [zone.id]: ordre },
             clients: [
               ...d.clients,
               {
                 ...c,
                 id: uid(),
                 codeClient,
-                agenceId,
-                ordreAgence: ordre,
+                agenceId: zone.agenceId,
+                zoneId: zone.id,
+                ordreZone: ordre,
                 dateInscription: maintenant(),
                 actif: true,
               },
@@ -280,27 +354,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // ---------- Carnets ----------
 
       ouvrirCarnet(clientId, typeCarnet, mise, frequence) {
-        if (!employeConnecte) return 'Non connecté.'
-        let erreur: string | null = null
+        if (!employeConnecte) return { erreur: 'Non connecté.' }
+        let resultat: { id: string; numero: string } | { erreur: string } = { erreur: 'Erreur inconnue.' }
         setData((d) => {
           const client = d.clients.find((c) => c.id === clientId)
-          if (!client) return d
-          if (d.carnets.some((k) => k.actif && k.clientId === clientId)) {
-            erreur = 'Ce client a déjà un carnet actif.'
+          if (!client) {
+            resultat = { erreur: 'Client introuvable.' }
             return d
           }
-          const agenceId = employeConnecte.agenceId
+          if (d.carnets.some((k) => k.actif && k.clientId === clientId)) {
+            resultat = { erreur: 'Ce client a déjà un carnet actif.' }
+            return d
+          }
+          const zone = d.zones.find((z) => z.id === client.zoneId)
+          if (!zone) {
+            resultat = { erreur: 'Zone du client introuvable.' }
+            return d
+          }
           const date = maintenant()
-          const numero = numeroCarnet(codeAgence(d, agenceId), client.ordreAgence)
+          const numero = numeroCarnet(zone.code, client.ordreZone)
+          const id = uid()
+          resultat = { id, numero }
           return {
             ...d,
             carnets: [
               ...d.carnets,
               {
-                id: uid(),
+                id,
                 clientId,
                 numero,
-                agenceId,
+                zoneId: zone.id,
+                agenceId: zone.agenceId,
                 typeCarnet,
                 mise,
                 frequence,
@@ -323,7 +407,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ],
           }
         })
-        return erreur
+        return resultat
       },
 
       encaisserCotisation(carnetId, montant) {
@@ -341,20 +425,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             return d
           }
           const payees = carreauxNets(carnet, d.mises)
-          const nombre = Math.min(calc.nombreMises, carnet.misesParCycle - payees)
+          const restants = carnet.misesParCycle - payees
+          const nombre = Math.min(calc.nombreMises, restants)
           if (nombre <= 0) {
-            erreur = 'Le carnet est déjà complet pour ce cycle.'
+            erreur = 'Le cycle actuel est déjà complet (31 carreaux).'
             return d
           }
           if (nombre !== calc.nombreMises) {
-            erreur = `Seulement ${carnet.misesParCycle - payees} carreau(x) restant(s) sur ce cycle.`
+            erreur = `Seulement ${restants} carreau(x) restant(s) sur ce cycle.`
             return d
           }
           const date = maintenant()
+          const cycleDepot = carnet.cycleActuel
           const miseEntree: MiseTontine = {
             id: uid(),
             carnetId,
-            cycle: carnet.cycleActuel,
+            cycle: cycleDepot,
             nombreMises: nombre,
             montant: carnet.mise * nombre,
             date,
@@ -367,7 +453,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 clientId: carnet.clientId,
                 montant: carnet.mise,
                 date,
-                description: `Première cotisation (P.C) — ${nomClient(d, carnet.clientId)} (cycle ${carnet.cycleActuel})`,
+                description: `Première cotisation (P.C) — ${nomClient(d, carnet.clientId)} (cycle ${cycleDepot})`,
               }),
             )
             if (nombre > 1) {
@@ -377,7 +463,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   clientId: carnet.clientId,
                   montant: carnet.mise * (nombre - 1),
                   date,
-                  description: `Cotisation ×${nombre - 1} — ${nomClient(d, carnet.clientId)} (cycle ${carnet.cycleActuel})`,
+                  description: `Dépôt ×${nombre - 1} — ${nomClient(d, carnet.clientId)} (cycle ${cycleDepot})`,
                 }),
               )
             }
@@ -388,12 +474,53 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 clientId: carnet.clientId,
                 montant: miseEntree.montant,
                 date,
-                description: `Cotisation ×${nombre} — ${nomClient(d, carnet.clientId)} (cycle ${carnet.cycleActuel})`,
+                description: `Dépôt ×${nombre} — ${nomClient(d, carnet.clientId)} (cycle ${cycleDepot})`,
               }),
             )
           }
+
+          // Passage automatique au mois / cycle suivant si 31 carreaux atteints
+          const netsApres = payees + nombre
+          let carnets = d.carnets
+          if (netsApres >= carnet.misesParCycle) {
+            if (carnet.cycleActuel >= CYCLES_PAR_CARNET) {
+              // Fin des 12 mois : renouvellement — n° hérite toujours de la zone du client
+              const client = d.clients.find((c) => c.id === carnet.clientId)
+              const zone = client ? d.zones.find((z) => z.id === client.zoneId) : undefined
+              const nouveauNumero = client && zone
+                ? numeroCarnet(zone.code, client.ordreZone)
+                : carnet.numero
+              nouvelles.push(
+                transaction({
+                  type: 'vente_carnet',
+                  clientId: carnet.clientId,
+                  montant: PRIX_CARNET,
+                  date,
+                  description: `Renouvellement auto carnet ${nouveauNumero} — ${nomClient(d, carnet.clientId)} (nouveau cycle 1/12)`,
+                }),
+              )
+              carnets = d.carnets.map((c) =>
+                c.id === carnetId
+                  ? {
+                      ...c,
+                      cycleActuel: 1,
+                      zoneId: zone?.id ?? c.zoneId,
+                      agenceId: zone?.agenceId ?? c.agenceId,
+                      numero: nouveauNumero,
+                      dateOuverture: date,
+                    }
+                  : c,
+              )
+            } else {
+              carnets = d.carnets.map((c) =>
+                c.id === carnetId ? { ...c, cycleActuel: c.cycleActuel + 1 } : c,
+              )
+            }
+          }
+
           return {
             ...d,
+            carnets,
             mises: [...d.mises, miseEntree],
             transactions: [...nouvelles, ...d.transactions],
           }
@@ -401,7 +528,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return erreur
       },
 
-      retraitPartielCarnet(carnetId, nombreCarreaux) {
+      retraitCycle(carnetId, cycle, nombreCarreaux) {
         if (nombreCarreaux <= 0) return 'Nombre de carreaux invalide.'
         let erreur: string | null = null
         setData((d) => {
@@ -416,11 +543,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             erreur = 'Retrait impossible : 6 mois de cotisations minimum requis.'
             return d
           }
-          const payees = carreauxNets(carnet, d.mises)
-          // On ne peut retirer que les carreaux au-delà de la P.C (1re mise)
-          const disponibles = Math.max(0, payees - 1)
+          // Retrait sur cycle passé (ou cycle actuel déjà complet avant auto-avance)
+          if (cycle > carnet.cycleActuel) {
+            erreur = 'Cycle invalide.'
+            return d
+          }
+          const disponibles = carreauxRetirables(carnet, d.mises, cycle)
+          if (disponibles <= 0) {
+            erreur = 'Aucun carreau retirable sur ce cycle (déjà soldé ou P.C seule restante).'
+            return d
+          }
           if (nombreCarreaux > disponibles) {
-            erreur = `Retrait partiel impossible : seulement ${disponibles} carreau(x) disponible(s) (hors P.C).`
+            erreur = `Retrait impossible : seulement ${disponibles} carreau(x) disponible(s) (hors P.C).`
             return d
           }
           const date = maintenant()
@@ -428,11 +562,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const retrait: MiseTontine = {
             id: uid(),
             carnetId,
-            cycle: carnet.cycleActuel,
+            cycle,
             nombreMises: -nombreCarreaux,
             montant: -montant,
             date,
           }
+          const total = nombreCarreaux === disponibles
           return {
             ...d,
             mises: [...d.mises, retrait],
@@ -442,97 +577,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 clientId: carnet.clientId,
                 montant,
                 date,
-                description: `Retrait partiel ×${nombreCarreaux} — ${nomClient(d, carnet.clientId)} (carnet ${carnet.numero})`,
+                description: `Retrait ${total ? 'total' : 'partiel'} ×${nombreCarreaux} — cycle ${cycle} — ${nomClient(d, carnet.clientId)} (carnet ${carnet.numero})`,
               }),
               ...d.transactions,
             ],
-          }
-        })
-        return erreur
-      },
-
-      cloturerCycle(carnetId, nouvelleMise) {
-        if (!employeConnecte) return 'Non connecté.'
-        let erreur: string | null = null
-        setData((d) => {
-          const carnet = d.carnets.find((c) => c.id === carnetId)
-          if (!carnet || !carnet.actif) return d
-          if (carnet.verrouille) {
-            erreur = 'Ce carnet est verrouillé.'
-            return d
-          }
-          const eligibilite = eligibiliteRetraitCarnet(carnet, d.mises)
-          if (!eligibilite.autorise) {
-            erreur = 'Retrait impossible : 6 mois de cotisations minimum requis.'
-            return d
-          }
-          const payees = carreauxNets(carnet, d.mises)
-          if (payees <= 0) {
-            erreur = 'Aucune cotisation sur ce cycle.'
-            return d
-          }
-          const date = maintenant()
-          const remise = carnet.mise * Math.max(0, payees - 1)
-          const nouvelles: Transaction[] = []
-          if (remise > 0) {
-            nouvelles.push(
-              transaction({
-                type: 'retrait_tontine',
-                clientId: carnet.clientId,
-                montant: remise,
-                date,
-                description: `Clôture cycle ${carnet.cycleActuel}/12 — remise de ${nomClient(d, carnet.clientId)} (${payees} carreaux − 1 P.C)`,
-              }),
-            )
-          }
-
-          const finDes12 = carnet.cycleActuel >= CYCLES_PAR_CARNET
-          const agencePaiement = employeConnecte.agenceId
-          const client = d.clients.find((c) => c.id === carnet.clientId)
-          const miseSuivante =
-            nouvelleMise && nouvelleMise > 0 ? nouvelleMise : carnet.mise
-
-          if (finDes12) {
-            // Nouveau carnet de 12 cycles : vente 300 FCFA ; n° hérite de l'agence de paiement
-            const nouveauNumero = client
-              ? numeroCarnet(codeAgence(d, agencePaiement), client.ordreAgence)
-              : carnet.numero
-            nouvelles.push(
-              transaction({
-                type: 'vente_carnet',
-                clientId: carnet.clientId,
-                montant: PRIX_CARNET,
-                date,
-                description: `Renouvellement carnet ${nouveauNumero} — ${nomClient(d, carnet.clientId)} (nouveau cycle 1/12)`,
-              }),
-            )
-            return {
-              ...d,
-              carnets: d.carnets.map((c) =>
-                c.id === carnetId
-                  ? {
-                      ...c,
-                      cycleActuel: 1,
-                      mise: miseSuivante,
-                      agenceId: agencePaiement,
-                      numero: nouveauNumero,
-                      dateOuverture: date,
-                    }
-                  : c,
-              ),
-              transactions: [...nouvelles, ...d.transactions],
-            }
-          }
-
-          // Cycle suivant (2..12) : pas de nouvelle vente ; mise modifiable ici
-          return {
-            ...d,
-            carnets: d.carnets.map((c) =>
-              c.id === carnetId
-                ? { ...c, cycleActuel: c.cycleActuel + 1, mise: miseSuivante }
-                : c,
-            ),
-            transactions: [...nouvelles, ...d.transactions],
           }
         })
         return erreur
@@ -548,24 +596,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // ---------- Comptes à solde ----------
 
       ouvrirCompte(clientId, type) {
-        if (estCaissier) return 'Un caissier ne peut pas ouvrir un compte courant ou épargne.'
-        let erreur: string | null = null
+        if (estCaissier) return { erreur: 'Un caissier ne peut pas ouvrir un compte courant ou épargne.' }
+        let resultat: { id: string; numero: string } | { erreur: string } = { erreur: 'Erreur inconnue.' }
         setData((d) => {
           if (d.comptes.some((c) => c.clientId === clientId && c.type === type)) {
-            erreur = 'Ce client a déjà ce type de compte.'
+            resultat = { erreur: 'Ce client a déjà ce type de compte.' }
             return d
           }
-          const numero = d.compteurs.compte + 1
+          const numeroOrdre = d.compteurs.compte + 1
+          const id = uid()
+          const numero = numeroCompteSolde(numeroOrdre)
+          resultat = { id, numero }
           return {
             ...d,
-            compteurs: { ...d.compteurs, compte: numero },
+            compteurs: { ...d.compteurs, compte: numeroOrdre },
             comptes: [
               ...d.comptes,
               {
-                id: uid(),
+                id,
                 clientId,
                 type,
-                numero: numeroCompteSolde(numero),
+                numero,
                 solde: 0,
                 dateOuverture: maintenant(),
                 verrouille: false,
@@ -573,7 +624,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ],
           }
         })
-        return erreur
+        return resultat
       },
 
       deposerCompte(compteId, montant, note) {

@@ -4,10 +4,23 @@ export type Sexe = 'M' | 'F'
 
 export interface Agence {
   id: string
-  code: string // ex. "01", "02"
+  /** Code interne (ex. "A1") — distinct des numéros de zone. */
+  code: string
   nom: string
   adresse?: string
+  telephone?: string
   chefEmployeId?: string
+  actif: boolean
+}
+
+// ---------- Zones (appartenant à une agence) ----------
+
+export interface Zone {
+  id: string
+  agenceId: string
+  /** Numéro de zone : "01", "02"… — préfixe du n° de carnet. */
+  code: string
+  nom?: string
   actif: boolean
 }
 
@@ -24,6 +37,7 @@ export type Droit =
   | 'gerer_employes'
   | 'voir_rapports'
   | 'gerer_agences'
+  | 'gerer_zones'
 
 export interface Employe {
   id: string
@@ -47,9 +61,10 @@ export interface Employe {
 export interface Client {
   id: string
   codeClient: string // ex. 0001
-  agenceId: string // agence de création
-  /** Ordre du client dans son agence d'origine (pour n° carnet xxxx). */
-  ordreAgence: number
+  agenceId: string // dérivé de la zone
+  zoneId: string
+  /** Ordre du client dans sa zone (pour n° carnet xxxx). */
+  ordreZone: number
   nom: string
   prenom: string
   sexe: Sexe
@@ -76,9 +91,11 @@ export const CARREAUX_PAR_CYCLE = 31
 export interface CarnetTontine {
   id: string
   clientId: string
-  /** Format 010001 : code agence + ordre client. */
+  /** Format 010001 : n° zone + ordre client dans la zone. */
   numero: string
-  /** Agence où le carnet a été payé / renouvelé. */
+  /** Zone du carnet (préfixe du numéro). */
+  zoneId: string
+  /** Agence (pour filtres / opérations). */
   agenceId: string
   typeCarnet: TypeCarnet
   mise: number
@@ -208,6 +225,7 @@ export interface Transaction {
 
 export interface AppData {
   agences: Agence[]
+  zones: Zone[]
   employes: Employe[]
   clients: Client[]
   carnets: CarnetTontine[]
@@ -219,7 +237,7 @@ export interface AppData {
   transactions: Transaction[]
   arretsCaisse: ArretCaisse[]
   journalConnexions: JournalConnexion[]
-  /** Ordre client par agence (clé = agenceId). */
-  compteursOrdreAgence: Record<string, number>
+  /** Ordre client par zone (clé = zoneId). */
+  compteursOrdreZone: Record<string, number>
   compteurs: { client: number; compte: number; credit: number }
 }

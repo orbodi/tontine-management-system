@@ -23,7 +23,7 @@ import {
 } from 'recharts'
 import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
-import { TYPES_SORTIE, situationCredit } from '../metier'
+import { TYPES_SORTIE, situationCredit, situationsCycles } from '../metier'
 import { formatDate, formatMontant } from '../utils'
 import { EnTetePage } from '../components/ui'
 
@@ -38,10 +38,8 @@ export default function TableauDeBord() {
     const encoursTontine = data.carnets
       .filter((c) => c.actif)
       .reduce((s, carnet) => {
-        const mises = data.mises
-          .filter((m) => m.carnetId === carnet.id && m.cycle === carnet.cycleActuel)
-          .reduce((x, m) => x + m.nombreMises, 0)
-        return s + mises * carnet.mise
+        const cycles = situationsCycles(carnet, data.mises)
+        return s + cycles.reduce((x, et) => x + et.nets * carnet.mise, 0)
       }, 0)
     const creditsActifs = data.credits.filter((c) => c.statut === 'en_cours' || c.statut === 'en_retard')
     const encoursCredits = creditsActifs.reduce(

@@ -57,12 +57,116 @@ export function eligibiliteRetraitCarnet(
   return { autorise: false, dateDeblocage: deblocage.toISOString() }
 }
 
-/** Carreaux nets du cycle (cotisations − retraits partiels). */
+/** Carreaux nets du cycle (cotisations − retraits). */
 export function carreauxNets(carnet: CarnetTontine, mises: MiseTontine[], cycle?: number): number {
   const c = cycle ?? carnet.cycleActuel
   return mises
     .filter((m) => m.carnetId === carnet.id && m.cycle === c)
     .reduce((s, m) => s + m.nombreMises, 0)
+}
+
+/** Carreaux déposés (cotisations uniquement). */
+export function carreauxDeposes(carnet: CarnetTontine, mises: MiseTontine[], cycle: number): number {
+  return mises
+    .filter((m) => m.carnetId === carnet.id && m.cycle === cycle && m.nombreMises > 0)
+    .reduce((s, m) => s + m.nombreMises, 0)
+}
+
+/** Carreaux déjà retirés sur un cycle. */
+export function carreauxRetires(carnet: CarnetTontine, mises: MiseTontine[], cycle: number): number {
+  return mises
+    .filter((m) => m.carnetId === carnet.id && m.cycle === cycle && m.nombreMises < 0)
+    .reduce((s, m) => s + Math.abs(m.nombreMises), 0)
+}
+
+/**
+ * Carreaux encore retirables (hors P.C = 1re mise).
+ * Un cycle complet à 31 laisse au plus 30 carreaux au client.
+ */
+export function carreauxRetirables(carnet: CarnetTontine, mises: MiseTontine[], cycle: number): number {
+  const nets = carreauxNets(carnet, mises, cycle)
+  if (nets <= 0) return 0
+  return Math.max(0, nets - 1)
+}
+
+export type EtatCycle = {
+  cycle: number
+  /** Ex. « mars 2026 » — un cycle = un mois. */
+  moisLabel: string
+  moisNom: string
+  annee: number
+  deposes: number
+  retires: number
+  nets: number
+  retirables: number
+  complet: boolean
+  /** Cycle passé entièrement retiré (grisé). */
+  grise: boolean
+  montantRetirable: number
+  estActuel: boolean
+}
+
+const NOMS_MOIS = [
+  'janvier',
+  'février',
+  'mars',
+  'avril',
+  'mai',
+  'juin',
+  'juillet',
+  'août',
+  'septembre',
+  'octobre',
+  'novembre',
+  'décembre',
+]
+
+/** Mois calendaire associé à un cycle (cycle 1 = mois d'ouverture du carnet). */
+export function moisDuCycle(
+  carnet: CarnetTontine,
+  cycle: number,
+): { nom: string; annee: number; label: string } {
+  const d = new Date(carnet.dateOuverture)
+  d.setMonth(d.getMonth() + Math.max(0, cycle - 1))
+  const brut = NOMS_MOIS[d.getMonth()]
+  const nom = brut.charAt(0).toUpperCase() + brut.slice(1)
+  const annee = d.getFullYear()
+  return { nom, annee, label: `${nom} ${annee}` }
+}
+
+/** Résumé de tous les cycles connus d'un carnet (1 → cycleActuel). */
+export function situationsCycles(carnet: CarnetTontine, mises: MiseTontine[]): EtatCycle[] {
+  const max = carnet.cycleActuel
+  const cycles = new Set<number>()
+  for (let i = 1; i <= max; i++) cycles.add(i)
+  mises.filter((m) => m.carnetId === carnet.id).forEach((m) => cycles.add(m.cycle))
+
+  return [...cycles]
+    .sort((a, b) => a - b)
+    .map((cycle) => {
+      const deposes = carreauxDeposes(carnet, mises, cycle)
+      const retires = carreauxRetires(carnet, mises, cycle)
+      const nets = carreauxNets(carnet, mises, cycle)
+      const retirables = carreauxRetirables(carnet, mises, cycle)
+      const complet = deposes >= carnet.misesParCycle
+      const estActuel = cycle === carnet.cycleActuel
+      const grise = !estActuel && complet && retirables === 0
+      const mois = moisDuCycle(carnet, cycle)
+      return {
+        cycle,
+        moisLabel: mois.label,
+        moisNom: mois.nom,
+        annee: mois.annee,
+        deposes,
+        retires,
+        nets,
+        retirables,
+        complet,
+        grise,
+        montantRetirable: retirables * carnet.mise,
+        estActuel,
+      }
+    })
 }
 
 /**

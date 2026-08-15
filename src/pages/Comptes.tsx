@@ -47,7 +47,6 @@ export default function Comptes() {
   const [noteOp, setNoteOp] = useState('')
   const [erreur, setErreur] = useState('')
   const { confirmer, alerter } = useConfirmation()
-
   const peutOperer = aDroit('operer_comptes')
   const peutVerrouiller = aDroit('verrouiller_comptes')
 
@@ -267,18 +266,19 @@ export default function Comptes() {
 
       <Modale titre="Ouvrir un compte" ouverte={modaleOuverture} onFermer={() => setModaleOuverture(false)}>
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault()
-            if (clientPourCompte) {
-              const err = ouvrirCompte(clientPourCompte, typeNouveauCompte)
-              if (err) {
-                setErreur(err)
-                return
-              }
-              setModaleOuverture(false)
-              setClientPourCompte('')
-              setErreur('')
+            if (!clientPourCompte) return
+            const resultat = ouvrirCompte(clientPourCompte, typeNouveauCompte)
+            if ('erreur' in resultat) {
+              setErreur(resultat.erreur)
+              await alerter('Ouverture impossible', resultat.erreur)
+              return
             }
+            setModaleOuverture(false)
+            setClientPourCompte('')
+            setErreur('')
+            await alerter('Compte ouvert', `Le compte ${resultat.numero} a été ouvert avec succès.`)
           }}
           className="space-y-4"
         >

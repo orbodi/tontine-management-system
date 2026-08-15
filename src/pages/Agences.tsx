@@ -10,6 +10,7 @@ export default function Agences() {
   const [code, setCode] = useState('')
   const [nom, setNom] = useState('')
   const [adresse, setAdresse] = useState('')
+  const [telephone, setTelephone] = useState('')
   const [chefId, setChefId] = useState('')
   const [erreur, setErreur] = useState('')
 
@@ -18,6 +19,7 @@ export default function Agences() {
     setCode('')
     setNom('')
     setAdresse('')
+    setTelephone('')
     setChefId('')
     setErreur('')
     setModale(true)
@@ -30,6 +32,7 @@ export default function Agences() {
     setCode(a.code)
     setNom(a.nom)
     setAdresse(a.adresse ?? '')
+    setTelephone(a.telephone ?? '')
     setChefId(a.chefEmployeId ?? '')
     setErreur('')
     setModale(true)
@@ -37,22 +40,19 @@ export default function Agences() {
 
   const enregistrer = (e: React.FormEvent) => {
     e.preventDefault()
+    const patch = {
+      code: code.trim(),
+      nom: nom.trim(),
+      adresse: adresse.trim() || undefined,
+      telephone: telephone.trim() || undefined,
+      chefEmployeId: chefId || undefined,
+    }
     if (editionId) {
-      modifierAgence(editionId, {
-        code: code.trim(),
-        nom: nom.trim(),
-        adresse: adresse.trim() || undefined,
-        chefEmployeId: chefId || undefined,
-      })
+      modifierAgence(editionId, patch)
     } else {
-      const ok = ajouterAgence({
-        code: code.trim(),
-        nom: nom.trim(),
-        adresse: adresse.trim() || undefined,
-        chefEmployeId: chefId || undefined,
-      })
+      const ok = ajouterAgence(patch)
       if (!ok) {
-        setErreur('Ce code d\'agence existe déjà.')
+        setErreur("Ce code d'agence existe déjà.")
         return
       }
     }
@@ -82,6 +82,7 @@ export default function Agences() {
             const chef = data.employes.find((u) => u.id === a.chefEmployeId)
             const nbClients = data.clients.filter((c) => c.agenceId === a.id).length
             const nbEmployes = data.employes.filter((u) => u.agenceId === a.id).length
+            const nbZones = data.zones.filter((z) => z.agenceId === a.id).length
             return (
               <div key={a.id} className="card">
                 <div className="flex items-start gap-3">
@@ -92,14 +93,18 @@ export default function Agences() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-sm font-bold text-brand-700">{a.code}</span>
                       <h3 className="font-semibold text-slate-900">{a.nom}</h3>
-                      <span className={`badge ${a.actif ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                      <span
+                        className={`badge ${a.actif ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}
+                      >
                         {a.actif ? 'Active' : 'Inactive'}
                       </span>
                     </div>
                     <p className="mt-1 text-sm text-slate-500">{a.adresse ?? 'Adresse non renseignée'}</p>
+                    <p className="mt-1 text-sm text-slate-500">{a.telephone ?? 'Téléphone non renseigné'}</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      Chef : {chef?.nomComplet ?? '—'} — {nbClients} client{nbClients > 1 ? 's' : ''} —{' '}
-                      {nbEmployes} employé{nbEmployes > 1 ? 's' : ''}
+                      Chef : {chef?.nomComplet ?? '—'} — {nbZones} zone{nbZones > 1 ? 's' : ''} —{' '}
+                      {nbClients} client{nbClients > 1 ? 's' : ''} — {nbEmployes} employé
+                      {nbEmployes > 1 ? 's' : ''}
                     </p>
                   </div>
                 </div>
@@ -118,22 +123,20 @@ export default function Agences() {
       )}
 
       <Modale
-        titre={editionId ? 'Modifier l\'agence' : 'Nouvelle agence'}
+        titre={editionId ? "Modifier l'agence" : 'Nouvelle agence'}
         ouverte={modale}
         onFermer={() => setModale(false)}
       >
         <form onSubmit={enregistrer} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Code (2 chiffres) *</label>
+              <label className="label">Code interne *</label>
               <input
                 className="input font-mono"
                 required
-                maxLength={2}
-                pattern="[0-9]{2}"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="01"
+                placeholder="A1"
               />
             </div>
             <div>
@@ -146,7 +149,16 @@ export default function Agences() {
             <input className="input" value={adresse} onChange={(e) => setAdresse(e.target.value)} />
           </div>
           <div>
-            <label className="label">Chef d'agence</label>
+            <label className="label">Téléphone</label>
+            <input
+              className="input"
+              value={telephone}
+              onChange={(e) => setTelephone(e.target.value)}
+              placeholder="+225 27 20 00 00 00"
+            />
+          </div>
+          <div>
+            <label className="label">Chef d&apos;agence</label>
             <select className="input" value={chefId} onChange={(e) => setChefId(e.target.value)}>
               <option value="">— Aucun —</option>
               {chefs.map((u) => (
