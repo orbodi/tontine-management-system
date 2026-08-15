@@ -41,9 +41,9 @@ export function Modale({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onFermer} />
       <div
-        className={`relative max-h-[90vh] w-full ${large ? 'max-w-2xl' : 'max-w-md'} overflow-y-auto rounded-2xl bg-white p-6 shadow-xl`}
+        className={`relative flex max-h-[90vh] w-full flex-col ${large ? 'max-w-2xl' : 'max-w-md'} overflow-hidden rounded-2xl bg-white shadow-xl`}
       >
-        <div className="mb-5 flex items-center justify-between">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4">
           <h2 className="text-lg font-bold text-slate-900">{titre}</h2>
           <button
             onClick={onFermer}
@@ -53,7 +53,7 @@ export function Modale({
             <X className="h-5 w-5" />
           </button>
         </div>
-        {children}
+        <div className="overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
   )

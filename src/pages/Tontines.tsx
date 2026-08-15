@@ -31,6 +31,15 @@ const STYLES_CARNET: Record<TypeCarnet, string> = {
   carte_bloquee: 'bg-rose-100 text-rose-700',
 }
 
+function normaliser(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export default function Tontines() {
   const { data, aDroit, ouvrirCarnet } = useStore()
   const { alerter } = useConfirmation()
@@ -41,7 +50,6 @@ export default function Tontines() {
   const [zoneChoisie, setZoneChoisie] = useState('')
   const [clientChoisi, setClientChoisi] = useState('')
   const [rechercheClient, setRechercheClient] = useState('')
-  const [listeClientOuverte, setListeClientOuverte] = useState(false)
   const [typeNouveauCarnet, setTypeNouveauCarnet] = useState<TypeCarnet>('tontine')
   const [mise, setMise] = useState('')
   const [frequence, setFrequence] = useState<FrequenceMise>('journaliere')
@@ -57,21 +65,23 @@ export default function Tontines() {
     [data.zones, agenceChoisie],
   )
 
-  /** Suggestions uniquement après saisie (évite de charger toute la liste). */
+  /** Suggestions filtrées à la saisie — max 10, pas de liste complète au chargement. */
   const suggestionsClients = useMemo(() => {
-    const q = rechercheClient.trim().toLowerCase()
-    if (q.length < 2) return []
+    const q = normaliser(rechercheClient)
+    if (q.length < 1) return []
+    const idsAvecCarnet = new Set(
+      data.carnets.filter((k) => k.actif).map((k) => k.clientId),
+    )
     return data.clients
       .filter((c) => {
-        if (!c.actif) return false
-        if (data.carnets.some((k) => k.actif && k.clientId === c.id)) return false
+        if (!c.actif || idsAvecCarnet.has(c.id)) return false
         if (agenceChoisie && c.agenceId !== agenceChoisie) return false
         if (zoneChoisie && c.zoneId !== zoneChoisie) return false
-        const texte = `${c.codeClient} ${c.prenom} ${c.nom} ${c.telephone}`.toLowerCase()
+        const texte = normaliser(`${c.codeClient} ${c.prenom} ${c.nom} ${c.telephone}`)
         return texte.includes(q)
       })
       .sort((a, b) => a.codeClient.localeCompare(b.codeClient))
-      .slice(0, 8)
+      .slice(0, 10)
   }, [data.clients, data.carnets, agenceChoisie, zoneChoisie, rechercheClient])
 
   const clientSelectionne = data.clients.find((c) => c.id === clientChoisi)
@@ -89,9 +99,8 @@ export default function Tontines() {
     if (!c) return
     setClientChoisi(c.id)
     setRechercheClient(libelleClient(c))
-    setListeClientOuverte(false)
-    if (!agenceChoisie) setAgenceChoisie(c.agenceId)
-    if (!zoneChoisie) setZoneChoisie(c.zoneId)
+    setAgenceChoisie(c.agenceId)
+    setZoneChoisie(c.zoneId)
   }
 
   const ouvrirModale = () => {
@@ -99,7 +108,6 @@ export default function Tontines() {
     setZoneChoisie('')
     setClientChoisi('')
     setRechercheClient('')
-    setListeClientOuverte(false)
     setMise('')
     setTypeNouveauCarnet('tontine')
     setFrequence('journaliere')
@@ -351,67 +359,65 @@ export default function Tontines() {
               </select>
             </div>
           </div>
-          <div className="relative">
+          <div>
             <label className="label">Client *</label>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 className="input pl-10"
-                required
-                disabled={!zoneChoisie}
-                placeholder={
-                  zoneChoisie
-                    ? 'Tapez au moins 2 caractères (nom, prénom, n°…)'
-                    : 'Choisissez d’abord une zone'
-                }
+                placeholder="Rechercher : nom, prénom ou n° client…"
                 value={rechercheClient}
                 autoComplete="off"
-                onFocus={() => setListeClientOuverte(true)}
-                onBlur={() => {
-                  // Laisse le clic sur une suggestion s’enregistrer
-                  window.setTimeout(() => setListeClientOuverte(false), 150)
-                }}
                 onChange={(e) => {
                   setRechercheClient(e.target.value)
                   setClientChoisi('')
-                  setListeClientOuverte(true)
                 }}
               />
             </div>
-            {listeClientOuverte && zoneChoisie && rechercheClient.trim().length >= 2 && (
-              <ul className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+            {!clientChoisi && rechercheClient.trim().length > 0 && (
+              <ul className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
                 {suggestionsClients.length === 0 ? (
                   <li className="px-3 py-2.5 text-sm text-slate-500">
                     Aucun client sans carnet trouvé
+                    {zoneChoisie ? ' dans cette zone' : agenceChoisie ? ' dans cette agence' : ''}.
                   </li>
                 ) : (
-                  suggestionsClients.map((c) => (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-brand-50"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => choisirClient(c.id)}
-                      >
-                        <Avatar nom={c.nom} prenom={c.prenom} />
-                        <span>
-                          <span className="font-mono text-xs font-semibold text-brand-700">{c.codeClient}</span>
-                          <span className="ml-2 font-medium text-slate-900">
-                            {c.prenom} {c.nom}
+                  suggestionsClients.map((c) => {
+                    const zone = data.zones.find((z) => z.id === c.zoneId)
+                    return (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition hover:bg-brand-50"
+                          onClick={() => choisirClient(c.id)}
+                        >
+                          <Avatar nom={c.nom} prenom={c.prenom} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-medium text-slate-900">
+                              <span className="font-mono text-xs font-semibold text-brand-700">{c.codeClient}</span>
+                              {' — '}
+                              {c.prenom} {c.nom}
+                            </span>
+                            <span className="block text-xs text-slate-500">
+                              Zone {zone?.code ?? '—'}
+                              {zone?.nom ? ` · ${zone.nom}` : ''}
+                            </span>
                           </span>
-                        </span>
-                      </button>
-                    </li>
-                  ))
+                        </button>
+                      </li>
+                    )
+                  })
                 )}
               </ul>
             )}
-            {zoneChoisie && rechercheClient.trim().length > 0 && rechercheClient.trim().length < 2 && (
-              <p className="mt-1 text-xs text-slate-400">Continuez à saisir pour afficher des suggestions…</p>
-            )}
             {clientChoisi && clientSelectionne && (
-              <p className="mt-1 text-xs text-emerald-700">
-                Client sélectionné : {libelleClient(clientSelectionne)}
+              <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
+                Sélectionné : {libelleClient(clientSelectionne)}
+              </p>
+            )}
+            {!rechercheClient.trim() && !clientChoisi && (
+              <p className="mt-1 text-xs text-slate-400">
+                Commencez à taper pour afficher les suggestions (max. 10).
               </p>
             )}
           </div>
