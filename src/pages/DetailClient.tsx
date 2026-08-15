@@ -22,7 +22,6 @@ import {
   situationsCycles,
 } from '../metier'
 import {
-  MOIS_MIN_RETRAIT_CARTE,
   PRIX_CARNET,
   type FrequenceMise,
   type TypeCarnet,
@@ -489,7 +488,9 @@ export default function DetailClient() {
               <option value="carte_bloquee">Carte bloquée</option>
             </select>
             {CARNETS_RETRAIT_6_MOIS.includes(typeCarnet) && (
-              <p className="mt-1 text-xs text-amber-700">Retrait après {MOIS_MIN_RETRAIT_CARTE} mois min.</p>
+              <p className="mt-1 text-xs text-amber-700">
+                Retraits grisés jusqu’à activation par l’administrateur (délai indicatif 6 mois).
+              </p>
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">

@@ -21,12 +21,12 @@ import {
   type TypeCompte,
   type Zone,
 } from './types'
-import { calculerMisesDepuisMontant, carreauxNets, carreauxRetirables, eligibiliteRetraitCarnet } from './metier'
+import { calculerMisesDepuisMontant, carreauxNets, carreauxRetirables, CARNETS_RETRAIT_6_MOIS, eligibiliteRetraitCarnet } from './metier'
 import { genererDonneesDemo } from './demo-data'
 import { numeroCarnet, numeroClient, numeroCompteSolde, pad4, uid } from './utils'
 
-const STORAGE_KEY = 'microfinance-data-v12'
-const SESSION_KEY = 'microfinance-session-v12'
+const STORAGE_KEY = 'microfinance-data-v13'
+const SESSION_KEY = 'microfinance-session-v13'
 
 export const LIBELLES_ROLE: Record<Role, string> = {
   admin: 'Administrateur',
@@ -83,6 +83,8 @@ interface StoreApi {
   /** Retrait partiel ou total sur un cycle (souvent un cycle passé). */
   retraitCycle: (carnetId: string, cycle: number, nombreCarreaux: number) => string | null
   basculerVerrouCarnet: (id: string) => void
+  /** Admin uniquement — active/désactive les retraits (cartes enfants / bloquée). */
+  basculerRetraitCarnetAdmin: (id: string) => string | null
   // Comptes à solde
   ouvrirCompte: (clientId: string, type: TypeCompte) => { id: string; numero: string } | { erreur: string }
   deposerCompte: (compteId: string, montant: number, note?: string) => string | null
@@ -392,6 +394,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 cycleActuel: 1,
                 dateOuverture: date,
                 verrouille: false,
+                retraitActiveParAdmin: !CARNETS_RETRAIT_6_MOIS.includes(typeCarnet),
                 actif: true,
               },
             ],
@@ -540,10 +543,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           const eligibilite = eligibiliteRetraitCarnet(carnet, d.mises)
           if (!eligibilite.autorise) {
-            erreur = 'Retrait impossible : 6 mois de cotisations minimum requis.'
+            erreur =
+              'Retrait non activé : demandez à l’administrateur d’autoriser le retrait sur cette carte.'
             return d
           }
-          // Retrait sur cycle passé (ou cycle actuel déjà complet avant auto-avance)
+          // Retrait possible sur le cycle actuel (partiel) ou un cycle passé
           if (cycle > carnet.cycleActuel) {
             erreur = 'Cycle invalide.'
             return d
@@ -591,6 +595,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...d,
           carnets: d.carnets.map((c) => (c.id === id ? { ...c, verrouille: !c.verrouille } : c)),
         }))
+      },
+
+      basculerRetraitCarnetAdmin(id) {
+        if (!estAdmin) return 'Seul l’administrateur peut activer ou désactiver les retraits.'
+        let erreur: string | null = null
+        setData((d) => {
+          const carnet = d.carnets.find((c) => c.id === id)
+          if (!carnet) {
+            erreur = 'Carnet introuvable.'
+            return d
+          }
+          if (!CARNETS_RETRAIT_6_MOIS.includes(carnet.typeCarnet)) {
+            erreur = 'Cette action concerne uniquement les cartes enfants et bloquée.'
+            return d
+          }
+          return {
+            ...d,
+            carnets: d.carnets.map((c) =>
+              c.id === id ? { ...c, retraitActiveParAdmin: !c.retraitActiveParAdmin } : c,
+            ),
+          }
+        })
+        return erreur
       },
 
       // ---------- Comptes à solde ----------

@@ -257,7 +257,7 @@ export function genererDonneesDemo(): AppData {
   const parametresCarnets: [number, TypeCarnet, number, number, number, number, boolean][] = [
     [0, 'tontine', 1000, 24, 240, 2, false],
     [1, 'tontine', 500, 12, 40, 1, false],
-    [2, 'carte_tous', 1000, 31, 35, 1, false],
+    [2, 'carte_tous', 1000, 31, 35, 2, false],
     [4, 'tontine', 2000, 18, 60, 1, false],
     [5, 'carte_enfants', 500, 26, 250, 2, false],
     [6, 'carte_enfants', 500, 25, 60, 1, false],
@@ -283,6 +283,7 @@ export function genererDonneesDemo(): AppData {
       cycleActuel,
       dateOuverture: ilYa(joursOuverture),
       verrouille,
+      retraitActiveParAdmin: !['carte_enfants', 'carte_bloquee'].includes(typeCarnet),
       actif: true,
     }
     data.carnets.push(carnet)

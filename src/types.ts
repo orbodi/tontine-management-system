@@ -104,6 +104,11 @@ export interface CarnetTontine {
   cycleActuel: number // 1..12
   dateOuverture: string
   verrouille: boolean
+  /**
+   * Cartes enfants / bloquée : retraits grisés tant que l'admin n'a pas activé.
+   * Pour tontine et carte pour tous : toujours true.
+   */
+  retraitActiveParAdmin: boolean
   actif: boolean
 }
 

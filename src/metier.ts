@@ -45,7 +45,12 @@ export function eligibiliteRetraitCarnet(
   carnet: CarnetTontine,
   mises: MiseTontine[],
 ): EligibiliteRetraitCarnet {
-  if (!CARNETS_RETRAIT_6_MOIS.includes(carnet.typeCarnet)) return { autorise: true }
+  if (!CARNETS_RETRAIT_6_MOIS.includes(carnet.typeCarnet)) {
+    return { autorise: true }
+  }
+  // Cartes enfants / bloquée : seul l'admin peut activer le retrait
+  if (carnet.retraitActiveParAdmin) return { autorise: true }
+
   const datesMises = mises
     .filter((m) => m.carnetId === carnet.id && m.nombreMises > 0)
     .map((m) => m.date)
@@ -53,7 +58,6 @@ export function eligibiliteRetraitCarnet(
   const debut = datesMises[0] ?? carnet.dateOuverture
   const deblocage = new Date(debut)
   deblocage.setMonth(deblocage.getMonth() + MOIS_MIN_RETRAIT_CARTE)
-  if (Date.now() >= deblocage.getTime()) return { autorise: true }
   return { autorise: false, dateDeblocage: deblocage.toISOString() }
 }
 

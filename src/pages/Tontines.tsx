@@ -4,7 +4,6 @@ import { ChevronRight, Lock, Plus, Search } from 'lucide-react'
 import { useStore } from '../store'
 import {
   CYCLES_PAR_CARNET,
-  MOIS_MIN_RETRAIT_CARTE,
   PRIX_CARNET,
   type FrequenceMise,
   type TypeCarnet,
@@ -362,7 +361,9 @@ export default function Tontines() {
               <option value="carte_bloquee">Carte bloquée</option>
             </select>
             {CARNETS_RETRAIT_6_MOIS.includes(typeNouveauCarnet) && (
-              <p className="mt-1 text-xs text-amber-700">Retrait après {MOIS_MIN_RETRAIT_CARTE} mois min.</p>
+              <p className="mt-1 text-xs text-amber-700">
+                Retraits grisés jusqu’à activation par l’administrateur.
+              </p>
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">

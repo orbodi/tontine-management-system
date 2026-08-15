@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
-import { CYCLES_PAR_CARNET, MOIS_MIN_RETRAIT_CARTE } from '../types'
+import { CYCLES_PAR_CARNET } from '../types'
 import {
   CARNETS_RETRAIT_6_MOIS,
   LIBELLES_CARNET,
@@ -29,9 +29,11 @@ export default function DetailTontine() {
   const {
     data,
     aDroit,
+    estAdmin,
     encaisserCotisation,
     retraitCycle,
     basculerVerrouCarnet,
+    basculerRetraitCarnetAdmin,
   } = useStore()
   const { confirmer, alerter } = useConfirmation()
 
@@ -55,6 +57,8 @@ export default function DetailTontine() {
   const payeesActuel = carnet ? carreauxNets(carnet, data.mises) : 0
   const moisActuel = carnet ? moisDuCycle(carnet, carnet.cycleActuel) : null
   const eligibilite = carnet ? eligibiliteRetraitCarnet(carnet, data.mises) : { autorise: true }
+  const carteRestreinte = carnet ? CARNETS_RETRAIT_6_MOIS.includes(carnet.typeCarnet) : false
+  const retraitAutorise = eligibilite.autorise && !carnet?.verrouille
   const calcDepot = carnet
     ? calculerMisesDepuisMontant(Number(montantDepot) || 0, carnet.mise)
     : null
@@ -180,6 +184,34 @@ export default function DetailTontine() {
                 {carnet.verrouille ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
               </button>
             )}
+            {estAdmin && carteRestreinte && (
+              <button
+                className={carnet.retraitActiveParAdmin ? 'btn-secondary' : 'btn-primary'}
+                onClick={async () => {
+                  const activer = !carnet.retraitActiveParAdmin
+                  const ok = await confirmer({
+                    titre: activer ? 'Activer les retraits' : 'Désactiver les retraits',
+                    message: activer
+                      ? `Autoriser les retraits partiels et totaux sur le carnet ${carnet.numero} (${LIBELLES_CARNET[carnet.typeCarnet]}) ?`
+                      : `Désactiver les retraits sur le carnet ${carnet.numero} ? Les boutons resteront visibles mais grisés.`,
+                    labelValider: activer ? 'Activer' : 'Désactiver',
+                    danger: !activer,
+                  })
+                  if (!ok) return
+                  const err = basculerRetraitCarnetAdmin(carnet.id)
+                  if (err) await alerter('Action impossible', err)
+                  else
+                    await alerter(
+                      activer ? 'Retraits activés' : 'Retraits désactivés',
+                      activer
+                        ? 'Les caissiers peuvent maintenant effectuer des retraits sur ce carnet.'
+                        : 'Les retraits sont de nouveau bloqués (boutons grisés).',
+                    )
+                }}
+              >
+                {carnet.retraitActiveParAdmin ? 'Désactiver retraits' : 'Activer retraits'}
+              </button>
+            )}
           </div>
         }
       />
@@ -197,6 +229,17 @@ export default function DetailTontine() {
             <span className="mt-1 inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700">
               <Lock className="mr-1 h-3 w-3" />
               Verrouillé
+            </span>
+          )}
+          {carteRestreinte && (
+            <span
+              className={`mt-1 ml-2 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                carnet.retraitActiveParAdmin
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-slate-200 text-slate-600'
+              }`}
+            >
+              Retraits {carnet.retraitActiveParAdmin ? 'activés (admin)' : 'non activés'}
             </span>
           )}
         </div>
@@ -223,12 +266,16 @@ export default function DetailTontine() {
           />
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          À {carnet.misesParCycle} carreaux, le compte passe automatiquement au mois suivant. Les retraits se font sur les
-          cycles passés.
+          À {carnet.misesParCycle} carreaux, le compte passe automatiquement au mois suivant. Un retrait partiel
+          est possible sur le mois en cours ; le retrait total reste réservé aux mois passés.
         </p>
-        {CARNETS_RETRAIT_6_MOIS.includes(carnet.typeCarnet) && !eligibilite.autorise && eligibilite.dateDeblocage && (
+        {carteRestreinte && !eligibilite.autorise && (
           <p className="mt-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-800">
-            Retrait après {MOIS_MIN_RETRAIT_CARTE} mois : possible à partir du {formatDate(eligibilite.dateDeblocage)}.
+            Retraits grisés : seul l’administrateur peut les activer
+            {eligibilite.dateDeblocage
+              ? ` (délai indicatif 6 mois : ${formatDate(eligibilite.dateDeblocage)})`
+              : ''}
+            .
           </p>
         )}
       </div>
@@ -239,7 +286,7 @@ export default function DetailTontine() {
           <h3 className="font-semibold text-slate-900">Mois (cycles) et état</h3>
           <p className="text-xs text-slate-500">
             Chaque cycle correspond à un mois. Un mois soldé (retrait total hors P.C) apparaît grisé. P.C = 1 carreau
-            pour {NOM_APPLICATION}.
+            pour {NOM_APPLICATION}. Retrait partiel possible aussi sur le mois en cours.
           </p>
         </div>
         <div className="divide-y divide-slate-100">
@@ -272,53 +319,76 @@ export default function DetailTontine() {
                     Cotisé : {et.deposes}/{carnet.misesParCycle} mises
                   </p>
                 </div>
-                {peutOperer &&
-                  !et.estActuel &&
-                  et.retirables > 0 &&
-                  eligibilite.autorise &&
-                  !carnet.verrouille && (
-                    <div className="flex gap-2">
-                      <button
-                        className="btn-secondary !py-1.5 text-xs"
-                        onClick={() => {
-                          setRetraitSur(et)
-                          setNbCarreaux('1')
-                          setErreur('')
-                        }}
-                      >
-                        <ArrowUpFromLine className="h-3.5 w-3.5" />
-                        Retrait partiel
-                      </button>
-                      <button
-                        className="btn-primary !py-1.5 text-xs"
-                        onClick={async () => {
-                          const ok = await confirmer({
-                            titre: `Retrait total — ${et.moisLabel}`,
-                            message:
-                              `Retirer ${formatMontant(et.montantRetirable)} (${et.retirables} mises hors P.C) pour ${client.prenom} ${client.nom} (${et.moisLabel}) ?\n` +
-                              `Mises déjà retirées : ${et.retires}\n` +
-                              `Mises disponibles : ${et.retirables}\n` +
-                              `Montant disponible : ${formatMontant(et.montantRetirable)}\n\n` +
-                              `Le cycle sera ensuite grisé.`,
-                            labelValider: 'Retrait total',
-                          })
-                          if (!ok) return
-                          const n = et.retirables
-                          const montant = et.montantRetirable
-                          const resultat = retraitCycle(carnet.id, et.cycle, n)
-                          if (resultat) await alerter('Retrait échoué', resultat)
-                          else
-                            await alerter(
-                              'Retrait effectué',
-                              `Retrait total de ${formatMontant(montant)} (${n} mise${n > 1 ? 's' : ''}) — ${et.moisLabel}.\n\n` +
-                                `Mises retirées : ${et.retires + n}\n` +
-                                `Mises disponibles : 0\n` +
-                                `Montant disponible : ${formatMontant(0)}`,
-                            )
-                        }}
-                      >
-                        Retrait total
-                      </button>
+                {peutOperer && et.retirables > 0 && (
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className="btn-secondary !py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={!retraitAutorise}
+                          title={
+                            !retraitAutorise
+                              ? carnet.verrouille
+                                ? 'Carnet verrouillé'
+                                : 'Retrait non activé par l’administrateur'
+                              : 'Retrait partiel'
+                          }
+                          onClick={() => {
+                            if (!retraitAutorise) return
+                            setRetraitSur(et)
+                            setNbCarreaux('1')
+                            setErreur('')
+                          }}
+                        >
+                          <ArrowUpFromLine className="h-3.5 w-3.5" />
+                          Retrait partiel
+                        </button>
+                        {!et.estActuel && (
+                          <button
+                            type="button"
+                            className="btn-primary !py-1.5 text-xs disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                            disabled={!retraitAutorise}
+                            title={
+                              !retraitAutorise
+                                ? carnet.verrouille
+                                  ? 'Carnet verrouillé'
+                                  : 'Retrait non activé par l’administrateur'
+                                : 'Retrait total'
+                            }
+                            onClick={async () => {
+                              if (!retraitAutorise) return
+                              const ok = await confirmer({
+                                titre: `Retrait total — ${et.moisLabel}`,
+                                message:
+                                  `Retirer ${formatMontant(et.montantRetirable)} (${et.retirables} mises hors P.C) pour ${client.prenom} ${client.nom} (${et.moisLabel}) ?\n` +
+                                  `Mises déjà retirées : ${et.retires}\n` +
+                                  `Mises disponibles : ${et.retirables}\n` +
+                                  `Montant disponible : ${formatMontant(et.montantRetirable)}\n\n` +
+                                  `Le cycle sera ensuite grisé.`,
+                                labelValider: 'Retrait total',
+                              })
+                              if (!ok) return
+                              const n = et.retirables
+                              const montant = et.montantRetirable
+                              const resultat = retraitCycle(carnet.id, et.cycle, n)
+                              if (resultat) await alerter('Retrait échoué', resultat)
+                              else
+                                await alerter(
+                                  'Retrait effectué',
+                                  `Retrait total de ${formatMontant(montant)} (${n} mise${n > 1 ? 's' : ''}) — ${et.moisLabel}.\n\n` +
+                                    `Mises retirées : ${et.retires + n}\n` +
+                                    `Mises disponibles : 0\n` +
+                                    `Montant disponible : ${formatMontant(0)}`,
+                                )
+                            }}
+                          >
+                            Retrait total
+                          </button>
+                        )}
+                      </div>
+                      {!retraitAutorise && carteRestreinte && (
+                        <span className="text-[10px] text-slate-500">En attente d’activation admin</span>
+                      )}
                     </div>
                   )}
               </div>
