@@ -46,7 +46,7 @@ export interface Employe {
 
 export interface Client {
   id: string
-  codeClient: string // ex. CL-0001
+  codeClient: string // ex. 0001
   agenceId: string // agence de création
   /** Ordre du client dans son agence d'origine (pour n° carnet xxxx). */
   ordreAgence: number
@@ -123,21 +123,6 @@ export interface MouvementCompte {
   type: TypeMouvement
   montant: number
   date: string
-  note?: string
-}
-
-export const DELAI_RETRAIT_EPARGNE_H = 48
-
-export type StatutDemandeRetrait = 'en_attente' | 'executee' | 'annulee'
-
-export interface DemandeRetrait {
-  id: string
-  compteId: string
-  montant: number
-  dateDemande: string
-  dateExecutable: string
-  statut: StatutDemandeRetrait
-  dateExecution?: string
   note?: string
 }
 
@@ -229,7 +214,6 @@ export interface AppData {
   mises: MiseTontine[]
   comptes: Compte[]
   mouvements: MouvementCompte[]
-  demandesRetrait: DemandeRetrait[]
   credits: Credit[]
   remboursements: Remboursement[]
   transactions: Transaction[]

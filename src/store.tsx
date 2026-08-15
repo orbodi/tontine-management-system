@@ -2,7 +2,6 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import {
   CARREAUX_PAR_CYCLE,
   CYCLES_PAR_CARNET,
-  DELAI_RETRAIT_EPARGNE_H,
   PRIX_CARNET,
   type Agence,
   type AppData,
@@ -10,7 +9,6 @@ import {
   type CarnetTontine,
   type Client,
   type Credit,
-  type DemandeRetrait,
   type Droit,
   type Employe,
   type JournalConnexion,
@@ -24,10 +22,10 @@ import {
 } from './types'
 import { calculerMisesDepuisMontant, carreauxNets, eligibiliteRetraitCarnet } from './metier'
 import { genererDonneesDemo } from './demo-data'
-import { numeroCarnet, numeroCompteSolde, pad4, uid } from './utils'
+import { numeroCarnet, numeroClient, numeroCompteSolde, pad4, uid } from './utils'
 
-const STORAGE_KEY = 'microfinance-data-v6'
-const SESSION_KEY = 'microfinance-session-v6'
+const STORAGE_KEY = 'microfinance-data-v10'
+const SESSION_KEY = 'microfinance-session-v10'
 
 export const LIBELLES_ROLE: Record<Role, string> = {
   admin: 'Administrateur',
@@ -83,9 +81,6 @@ interface StoreApi {
   ouvrirCompte: (clientId: string, type: TypeCompte) => string | null
   deposerCompte: (compteId: string, montant: number, note?: string) => string | null
   retirerCompte: (compteId: string, montant: number, note?: string) => string | null
-  demanderRetrait: (compteId: string, montant: number, note?: string) => string | null
-  executerDemandeRetrait: (demandeId: string) => string | null
-  annulerDemandeRetrait: (demandeId: string) => void
   basculerVerrouCompte: (id: string) => void
   // Crédits
   demanderCredit: (c: {
@@ -251,7 +246,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               {
                 ...c,
                 id: uid(),
-                codeClient: `CL-${pad4(numero)}`,
+                codeClient: numeroClient(numero),
                 agenceId,
                 ordreAgence: ordre,
                 dateInscription: maintenant(),
@@ -614,10 +609,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setData((d) => {
           const compte = d.comptes.find((c) => c.id === compteId)
           if (!compte) return d
-          if (compte.type === 'epargne') {
-            erreur = `Retrait direct impossible : préavis de ${DELAI_RETRAIT_EPARGNE_H}h requis.`
-            return d
-          }
           if (compte.verrouille) {
             erreur = 'Ce compte est verrouillé.'
             return d
@@ -645,99 +636,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         })
         return erreur
-      },
-
-      demanderRetrait(compteId, montant, note) {
-        if (montant <= 0) return 'Montant invalide.'
-        let erreur: string | null = null
-        setData((d) => {
-          const compte = d.comptes.find((c) => c.id === compteId)
-          if (!compte) return d
-          if (compte.verrouille) {
-            erreur = 'Ce compte est verrouillé.'
-            return d
-          }
-          if (compte.solde < montant) {
-            erreur = 'Montant supérieur au solde.'
-            return d
-          }
-          const dateDemande = new Date()
-          const dateExecutable = new Date(dateDemande.getTime() + DELAI_RETRAIT_EPARGNE_H * 3600000)
-          const demande: DemandeRetrait = {
-            id: uid(),
-            compteId,
-            montant,
-            dateDemande: dateDemande.toISOString(),
-            dateExecutable: dateExecutable.toISOString(),
-            statut: 'en_attente',
-            note,
-          }
-          return { ...d, demandesRetrait: [demande, ...d.demandesRetrait] }
-        })
-        return erreur
-      },
-
-      executerDemandeRetrait(demandeId) {
-        let erreur: string | null = null
-        setData((d) => {
-          const demande = d.demandesRetrait.find((x) => x.id === demandeId)
-          if (!demande || demande.statut !== 'en_attente') return d
-          const compte = d.comptes.find((c) => c.id === demande.compteId)
-          if (!compte) return d
-          if (Date.now() < new Date(demande.dateExecutable).getTime()) {
-            erreur = `Préavis de ${DELAI_RETRAIT_EPARGNE_H}h non écoulé.`
-            return d
-          }
-          if (compte.verrouille) {
-            erreur = 'Ce compte est verrouillé.'
-            return d
-          }
-          if (compte.solde < demande.montant) {
-            erreur = 'Solde insuffisant.'
-            return d
-          }
-          const date = maintenant()
-          return {
-            ...d,
-            comptes: d.comptes.map((c) =>
-              c.id === compte.id ? { ...c, solde: c.solde - demande.montant } : c,
-            ),
-            mouvements: [
-              ...d.mouvements,
-              {
-                id: uid(),
-                compteId: compte.id,
-                type: 'retrait' as const,
-                montant: demande.montant,
-                date,
-                note: demande.note,
-              },
-            ],
-            demandesRetrait: d.demandesRetrait.map((x) =>
-              x.id === demandeId ? { ...x, statut: 'executee' as const, dateExecution: date } : x,
-            ),
-            transactions: [
-              transaction({
-                type: 'retrait_compte',
-                clientId: compte.clientId,
-                montant: demande.montant,
-                date,
-                description: `Retrait ${compte.numero} — ${nomClient(d, compte.clientId)}`,
-              }),
-              ...d.transactions,
-            ],
-          }
-        })
-        return erreur
-      },
-
-      annulerDemandeRetrait(demandeId) {
-        setData((d) => ({
-          ...d,
-          demandesRetrait: d.demandesRetrait.map((x) =>
-            x.id === demandeId && x.statut === 'en_attente' ? { ...x, statut: 'annulee' as const } : x,
-          ),
-        }))
       },
 
       basculerVerrouCompte(id) {

@@ -12,17 +12,13 @@ import {
   type TypeCompte,
   type TypeTransaction,
 } from './types'
-import { numeroCarnet, numeroCompteSolde, pad4, uid } from './utils'
+import { numeroCarnet, numeroClient, numeroCompteSolde, pad4, uid } from './utils'
 
 function ilYa(jours: number, heure = 10): string {
   const d = new Date()
   d.setDate(d.getDate() - jours)
   d.setHours(heure, (jours * 17) % 60, 0, 0)
   return d.toISOString()
-}
-
-function dansHeures(heures: number): string {
-  return new Date(Date.now() + heures * 3600000).toISOString()
 }
 
 export function genererDonneesDemo(): AppData {
@@ -133,13 +129,17 @@ export function genererDonneesDemo(): AppData {
     [agenceYopougon.id]: 0,
   }
 
+  const codeAg = (agenceId: string) =>
+    agenceId === agencePlateau.id ? agencePlateau.code : agenceYopougon.code
+
   const clients: Client[] = infos.map(([nom, prenom, sexe, profession, adresse, agenceId], i) => {
     compteursOrdreAgence[agenceId]++
+    const ordre = compteursOrdreAgence[agenceId]
     return {
       id: uid(),
-      codeClient: `CL-${pad4(i + 1)}`,
+      codeClient: numeroClient(i + 1),
       agenceId,
-      ordreAgence: compteursOrdreAgence[agenceId],
+      ordreAgence: ordre,
       nom,
       prenom,
       sexe,
@@ -161,7 +161,6 @@ export function genererDonneesDemo(): AppData {
     mises: [],
     comptes: [],
     mouvements: [],
-    demandesRetrait: [],
     credits: [],
     remboursements: [],
     transactions: [],
@@ -197,7 +196,6 @@ export function genererDonneesDemo(): AppData {
   }
 
   const nomComplet = (c: Client) => `${c.prenom} ${c.nom}`
-  const codeAg = (agenceId: string) => data.agences.find((a) => a.id === agenceId)?.code ?? '00'
 
   const tx = (
     type: TypeTransaction,
@@ -352,37 +350,6 @@ export function genererDonneesDemo(): AppData {
   epAminata.solde -= montantExecute
   data.mouvements.push({ id: uid(), compteId: epAminata.id, type: 'retrait', montant: montantExecute, date: ilYa(7, 14) })
   data.transactions.push(tx('retrait_compte', clients[0], montantExecute, ilYa(7, 14), `Retrait ${epAminata.numero} — ${nomComplet(clients[0])}`, affoue))
-  data.demandesRetrait.push({
-    id: uid(),
-    compteId: epAminata.id,
-    montant: montantExecute,
-    dateDemande: ilYa(10),
-    dateExecutable: ilYa(8),
-    statut: 'executee',
-    dateExecution: ilYa(7, 14),
-    note: 'Frais de scolarité',
-  })
-
-  const epFatoumata = comptesParCle.get('2-epargne')!
-  data.demandesRetrait.push({
-    id: uid(),
-    compteId: epFatoumata.id,
-    montant: Math.min(25000, epFatoumata.solde),
-    dateDemande: ilYa(3, 9),
-    dateExecutable: ilYa(1, 9),
-    statut: 'en_attente',
-    note: 'Achat de tissus',
-  })
-
-  const epMariam = comptesParCle.get('4-epargne')!
-  data.demandesRetrait.push({
-    id: uid(),
-    compteId: epMariam.id,
-    montant: Math.min(30000, epMariam.solde),
-    dateDemande: dansHeures(-6),
-    dateExecutable: dansHeures(42),
-    statut: 'en_attente',
-  })
 
   const parametresCredits: [number, number, number, number, string, number][] = MODULE_CREDITS_ACTIF
     ? [

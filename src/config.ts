@@ -9,7 +9,7 @@ export const LOGO_URL = '/logo-don-de-dieu.png'
 
 /**
  * Modules activables de l'application.
- * Le module Crédits est désactivé pour cette version : passer à `true`
- * pour réactiver la page, le menu, les statistiques et les données de démo.
+ * Le module Crédits est désactivé : la gestion des crédits n'est pas proposée.
+ * Passer à `true` pour réactiver page, menu, statistiques et données de démo.
  */
-export const MODULE_CREDITS_ACTIF = true
+export const MODULE_CREDITS_ACTIF = false

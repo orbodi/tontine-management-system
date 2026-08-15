@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUpFromLine, CheckCircle2, HandCoins, Lock, LockOpen, Plus, Search } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpFromLine, CheckCircle2, Lock, LockOpen, Plus, Search } from 'lucide-react'
 import { NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
 import {
@@ -266,8 +266,8 @@ export default function Tontines() {
                         setErreur('')
                       }}
                     >
-                      <HandCoins className="h-4 w-4" />
-                      Cotiser
+                      <ArrowDownToLine className="h-4 w-4" />
+                      Dépôt
                     </button>
                   )}
                   {peutOperer && payees > 1 && (
@@ -281,7 +281,7 @@ export default function Tontines() {
                       }}
                     >
                       <ArrowUpFromLine className="h-4 w-4" />
-                      Retrait partiel
+                      Retrait
                     </button>
                   )}
                   {peutOperer && payees > 0 && (
@@ -377,9 +377,9 @@ export default function Tontines() {
         </form>
       </Modale>
 
-      {/* Cotisation par montant */}
+      {/* Dépôt par montant */}
       <Modale
-        titre={encaissement ? `Cotiser — ${clientDuCarnet(encaissement)?.prenom ?? ''} ${clientDuCarnet(encaissement)?.nom ?? ''}` : ''}
+        titre={encaissement ? `Dépôt — ${clientDuCarnet(encaissement)?.prenom ?? ''} ${clientDuCarnet(encaissement)?.nom ?? ''}` : ''}
         ouverte={encaissement !== null && !recapOuvert}
         onFermer={() => setEncaissement(null)}
       >
@@ -392,7 +392,7 @@ export default function Tontines() {
               </span>
             </div>
             <div>
-              <label className="label">Montant cotisé (FCFA) *</label>
+              <label className="label">Montant du dépôt (FCFA) *</label>
               <input
                 className="input"
                 type="number"
@@ -418,13 +418,13 @@ export default function Tontines() {
         )}
       </Modale>
 
-      {/* Récap cotisation */}
-      <Modale titre="Confirmer la cotisation" ouverte={recapOuvert} onFermer={() => setRecapOuvert(false)}>
+      {/* Récap dépôt */}
+      <Modale titre="Confirmer le dépôt" ouverte={recapOuvert} onFermer={() => setRecapOuvert(false)}>
         {encaissement && calcRecap?.ok && (
           <div className="space-y-4">
             <div className="rounded-xl bg-brand-50 p-4 text-sm text-brand-900">
               <div className="flex justify-between">
-                <span>Montant saisi</span>
+                <span>Montant du dépôt</span>
                 <span className="font-bold">{formatMontant(Number(montantCotise))}</span>
               </div>
               <div className="flex justify-between">
@@ -446,16 +446,16 @@ export default function Tontines() {
                 Modifier
               </button>
               <button type="button" className="btn-primary" onClick={validerEncaissement}>
-                Valider
+                Valider le dépôt
               </button>
             </div>
           </div>
         )}
       </Modale>
 
-      {/* Retrait partiel */}
+      {/* Retrait */}
       <Modale
-        titre={retraitPartiel ? `Retrait partiel — ${retraitPartiel.numero}` : ''}
+        titre={retraitPartiel ? `Retrait — ${retraitPartiel.numero}` : ''}
         ouverte={retraitPartiel !== null}
         onFermer={() => setRetraitPartiel(null)}
       >

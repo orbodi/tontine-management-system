@@ -7,14 +7,13 @@ devise FCFA.
 ## Fonctionnalités
 
 - **Connexion et rôles** : Administrateur, Chef d'agence, Caissier (droits différenciés)
-- **Tableau de bord** : indicateurs clés, alertes (retards, demandes à traiter), graphiques
-- **Clients** : fiche complète avec ID client unique (CL-0001…), vue 360° de l'activité financière
+- **Tableau de bord** : indicateurs clés, graphiques
+- **Clients** : fiche complète avec ID client unique (`0001`, `0002`…), vue 360° de l'activité financière
 - **Tontine individuelle** : carnets à mise fixe, encaissement des mises, clôture de cycle
   avec commission d'une mise
-- **Épargne** : comptes (EP-0001…), dépôts, retraits avec contrôle de solde
-- **Crédits** : demande → approbation (chef d'agence) → remboursements, détection des retards
+- **Épargne** : comptes (`B0001`…), dépôts et retraits directs (sans demande enregistrée)
 - **Transactions** : journal complet filtrable (type, période, recherche), export Excel
-- **Rapports** : état de caisse journalier, portefeuille de crédits, exports Excel, impression PDF
+- **Rapports** : état de caisse journalier, exports Excel, impression PDF
 - **Notifications clients** : messages pré-remplis envoyés via SMS ou WhatsApp, ou copiés
 
 ## Comptes de démonstration

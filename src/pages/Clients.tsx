@@ -141,7 +141,9 @@ export default function Clients() {
             <tbody className="divide-y divide-slate-100">
               {clientsFiltres.map((c) => (
                 <tr key={c.id} className="transition hover:bg-slate-50">
-                  <td className="px-5 py-3 font-mono text-xs font-semibold text-brand-700">{c.codeClient}</td>
+                  <td className="px-5 py-3 font-mono text-xs font-semibold tabular-nums tracking-wide text-brand-700">
+                    {c.codeClient}
+                  </td>
                   <td className="px-5 py-3">
                     <Link to={`/clients/${c.id}`} className="flex items-center gap-3">
                       <Avatar nom={c.nom} prenom={c.prenom} />

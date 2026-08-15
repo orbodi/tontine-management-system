@@ -14,8 +14,8 @@ import {
 
 export const LIBELLES_TYPE: Record<TypeTransaction, string> = {
   vente_carnet: 'Vente de carnet',
-  mise_tontine: 'Cotisation carnet',
-  retrait_tontine: 'Retrait carnet',
+  mise_tontine: 'Dépôt',
+  retrait_tontine: 'Retrait',
   commission_tontine: 'Première cotisation (P.C)',
   depot_compte: 'Dépôt',
   retrait_compte: 'Retrait',

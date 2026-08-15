@@ -50,7 +50,6 @@ export default function TableauDeBord() {
     )
     const creditsEnRetard = data.credits.filter((c) => c.statut === 'en_retard').length
     const demandesEnAttente = data.credits.filter((c) => c.statut === 'en_attente').length
-    const retraitsAPreparer = data.demandesRetrait.filter((dr) => dr.statut === 'en_attente').length
     return {
       clientsActifs,
       totalComptes,
@@ -58,7 +57,6 @@ export default function TableauDeBord() {
       encoursCredits,
       creditsEnRetard,
       demandesEnAttente,
-      retraitsAPreparer,
     }
   }, [data])
 
@@ -142,19 +140,9 @@ export default function TableauDeBord() {
         sousTitre={`Vue d'ensemble au ${formatDate(new Date().toISOString())}`}
       />
 
-      {((MODULE_CREDITS_ACTIF && (stats.creditsEnRetard > 0 || stats.demandesEnAttente > 0)) ||
-        stats.retraitsAPreparer > 0) && (
+      {MODULE_CREDITS_ACTIF && (stats.creditsEnRetard > 0 || stats.demandesEnAttente > 0) && (
         <div className="mb-6 flex flex-wrap gap-3">
-          {stats.retraitsAPreparer > 0 && (
-            <Link
-              to="/comptes"
-              className="flex items-center gap-2 rounded-xl bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700 ring-1 ring-sky-200 transition hover:bg-sky-100"
-            >
-              <PiggyBank className="h-4 w-4" />
-              {stats.retraitsAPreparer} demande{stats.retraitsAPreparer > 1 ? 's' : ''} de retrait épargne en cours
-            </Link>
-          )}
-          {MODULE_CREDITS_ACTIF && stats.creditsEnRetard > 0 && (
+          {stats.creditsEnRetard > 0 && (
             <Link
               to="/credits"
               className="flex items-center gap-2 rounded-xl bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700 ring-1 ring-rose-200 transition hover:bg-rose-100"
@@ -163,7 +151,7 @@ export default function TableauDeBord() {
               {stats.creditsEnRetard} crédit{stats.creditsEnRetard > 1 ? 's' : ''} en retard de paiement
             </Link>
           )}
-          {MODULE_CREDITS_ACTIF && stats.demandesEnAttente > 0 && (
+          {stats.demandesEnAttente > 0 && (
             <Link
               to="/credits"
               className="flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-700 ring-1 ring-amber-200 transition hover:bg-amber-100"

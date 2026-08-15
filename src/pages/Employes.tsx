@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { KeyRound, Pencil, Plus, ShieldCheck, Trash2, UserCheck, UserX } from 'lucide-react'
+import { MODULE_CREDITS_ACTIF } from '../config'
 import { LIBELLES_DROIT, LIBELLES_ROLE, TOUS_DROITS, useStore } from '../store'
 import type { Droit, Employe, Role } from '../types'
 import { formatDate } from '../utils'
@@ -31,6 +32,10 @@ const formulaireVide: FormulaireEmploye = {
   adresse: '',
   pieceIdentite: '',
 }
+
+const DROITS_AFFICHABLES = TOUS_DROITS.filter(
+  (d) => MODULE_CREDITS_ACTIF || d !== 'approuver_credits',
+)
 
 export default function Employes() {
   const {
@@ -186,7 +191,9 @@ export default function Employes() {
                       </span>
                     ) : (
                       <span className="text-xs text-slate-600">
-                        {u.droits.length === 0 ? '—' : `${u.droits.length}/${TOUS_DROITS.length} droits`}
+                        {u.droits.length === 0
+                          ? '—'
+                          : `${u.droits.filter((d) => DROITS_AFFICHABLES.includes(d)).length}/${DROITS_AFFICHABLES.length} droits`}
                       </span>
                     )}
                   </td>
@@ -337,7 +344,7 @@ export default function Employes() {
             <div>
               <label className="label">Droits accordés</label>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {TOUS_DROITS.map((droit) => (
+                {DROITS_AFFICHABLES.map((droit) => (
                   <label
                     key={droit}
                     className={`flex cursor-pointer items-center gap-2 rounded-xl border p-2.5 text-sm transition ${

@@ -41,6 +41,11 @@ export function numeroCarnet(codeAgence: string, ordreClient: number): string {
   return `${pad2(codeAgence)}${pad4(ordreClient)}`
 }
 
+/** Identifiant client : numéro d'ordre global sur 4 chiffres. Ex. 0001 */
+export function numeroClient(ordre: number): string {
+  return pad4(ordre)
+}
+
 /** Numéro de compte courant/épargne : B + ordre. Ex. B0001 */
 export function numeroCompteSolde(ordre: number): string {
   return `B${pad4(ordre)}`
