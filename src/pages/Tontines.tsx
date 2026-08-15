@@ -65,23 +65,23 @@ export default function Tontines() {
     [data.zones, agenceChoisie],
   )
 
-  /** Suggestions filtrées à la saisie — max 10, pas de liste complète au chargement. */
+  /** Clients de la zone (sans carnet) : liste dès qu’agence+zone sont choisies ; la saisie affine. */
   const suggestionsClients = useMemo(() => {
+    if (!agenceChoisie || !zoneChoisie) return []
     const q = normaliser(rechercheClient)
-    if (q.length < 1) return []
     const idsAvecCarnet = new Set(
       data.carnets.filter((k) => k.actif).map((k) => k.clientId),
     )
     return data.clients
       .filter((c) => {
         if (!c.actif || idsAvecCarnet.has(c.id)) return false
-        if (agenceChoisie && c.agenceId !== agenceChoisie) return false
-        if (zoneChoisie && c.zoneId !== zoneChoisie) return false
+        if (c.agenceId !== agenceChoisie || c.zoneId !== zoneChoisie) return false
+        if (!q) return true
         const texte = normaliser(`${c.codeClient} ${c.prenom} ${c.nom} ${c.telephone}`)
         return texte.includes(q)
       })
       .sort((a, b) => a.codeClient.localeCompare(b.codeClient))
-      .slice(0, 10)
+      .slice(0, q ? 15 : 30)
   }, [data.clients, data.carnets, agenceChoisie, zoneChoisie, rechercheClient])
 
   const clientSelectionne = data.clients.find((c) => c.id === clientChoisi)
@@ -365,7 +365,12 @@ export default function Tontines() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 className="input pl-10"
-                placeholder="Rechercher : nom, prénom ou n° client…"
+                disabled={!agenceChoisie || !zoneChoisie}
+                placeholder={
+                  agenceChoisie && zoneChoisie
+                    ? 'Filtrer la liste (nom, prénom, n°…) — optionnel'
+                    : 'Choisissez d’abord une agence et une zone'
+                }
                 value={rechercheClient}
                 autoComplete="off"
                 onChange={(e) => {
@@ -374,51 +379,54 @@ export default function Tontines() {
                 }}
               />
             </div>
-            {!clientChoisi && rechercheClient.trim().length > 0 && (
-              <ul className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
+            {!agenceChoisie || !zoneChoisie ? (
+              <p className="mt-1 text-xs text-slate-400">
+                Sélectionnez l’agence et la zone pour afficher les clients de la zone.
+              </p>
+            ) : !clientChoisi ? (
+              <ul className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
                 {suggestionsClients.length === 0 ? (
                   <li className="px-3 py-2.5 text-sm text-slate-500">
-                    Aucun client sans carnet trouvé
-                    {zoneChoisie ? ' dans cette zone' : agenceChoisie ? ' dans cette agence' : ''}.
+                    Aucun client sans carnet dans cette zone
+                    {rechercheClient.trim() ? ' pour cette recherche' : ''}.
                   </li>
                 ) : (
-                  suggestionsClients.map((c) => {
-                    const zone = data.zones.find((z) => z.id === c.zoneId)
-                    return (
-                      <li key={c.id}>
-                        <button
-                          type="button"
-                          className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition hover:bg-brand-50"
-                          onClick={() => choisirClient(c.id)}
-                        >
-                          <Avatar nom={c.nom} prenom={c.prenom} />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-medium text-slate-900">
-                              <span className="font-mono text-xs font-semibold text-brand-700">{c.codeClient}</span>
-                              {' — '}
-                              {c.prenom} {c.nom}
-                            </span>
-                            <span className="block text-xs text-slate-500">
-                              Zone {zone?.code ?? '—'}
-                              {zone?.nom ? ` · ${zone.nom}` : ''}
-                            </span>
+                  suggestionsClients.map((c) => (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition hover:bg-brand-50"
+                        onClick={() => choisirClient(c.id)}
+                      >
+                        <Avatar nom={c.nom} prenom={c.prenom} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium text-slate-900">
+                            <span className="font-mono text-xs font-semibold text-brand-700">{c.codeClient}</span>
+                            {' — '}
+                            {c.prenom} {c.nom}
                           </span>
-                        </button>
-                      </li>
-                    )
-                  })
+                        </span>
+                      </button>
+                    </li>
+                  ))
                 )}
               </ul>
-            )}
-            {clientChoisi && clientSelectionne && (
-              <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
-                Sélectionné : {libelleClient(clientSelectionne)}
-              </p>
-            )}
-            {!rechercheClient.trim() && !clientChoisi && (
-              <p className="mt-1 text-xs text-slate-400">
-                Commencez à taper pour afficher les suggestions (max. 10).
-              </p>
+            ) : (
+              clientSelectionne && (
+                <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
+                  Sélectionné : {libelleClient(clientSelectionne)}{' '}
+                  <button
+                    type="button"
+                    className="ml-2 underline"
+                    onClick={() => {
+                      setClientChoisi('')
+                      setRechercheClient('')
+                    }}
+                  >
+                    Changer
+                  </button>
+                </p>
+              )
             )}
           </div>
           {apercuNumero && (
