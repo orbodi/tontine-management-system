@@ -24,7 +24,8 @@ import {
 } from 'recharts'
 import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
-import { TYPES_SORTIE, situationCredit, situationsCycles } from '../metier'
+import { TYPES_SORTIE, LIBELLES_CARNET, situationCredit, situationsCycles } from '../metier'
+import type { TypeCarnet } from '../types'
 import { formatDate, formatMontant } from '../utils'
 import { EnTetePage } from '../components/ui'
 
@@ -80,6 +81,36 @@ export default function TableauDeBord() {
       encoursCredits,
       creditsEnRetard,
       demandesEnAttente,
+      comptesParType: [
+        {
+          cle: 'courant',
+          label: 'Compte courant',
+          nombre: comptes.filter((c) => c.type === 'courant').length,
+          lien: '/comptes',
+          couleur: 'bg-emerald-50 text-emerald-800 ring-emerald-100',
+        },
+        {
+          cle: 'epargne',
+          label: 'Compte épargne',
+          nombre: comptes.filter((c) => c.type === 'epargne').length,
+          lien: '/comptes',
+          couleur: 'bg-teal-50 text-teal-800 ring-teal-100',
+        },
+        ...(Object.keys(LIBELLES_CARNET) as TypeCarnet[]).map((type) => ({
+          cle: type,
+          label: LIBELLES_CARNET[type],
+          nombre: carnets.filter((c) => c.actif && c.typeCarnet === type).length,
+          lien: '/tontines',
+          couleur:
+            type === 'tontine'
+              ? 'bg-amber-50 text-amber-900 ring-amber-100'
+              : type === 'carte_tous'
+                ? 'bg-sky-50 text-sky-900 ring-sky-100'
+                : type === 'carte_enfants'
+                  ? 'bg-violet-50 text-violet-900 ring-violet-100'
+                  : 'bg-slate-100 text-slate-800 ring-slate-200',
+        })),
+      ],
     }
   }, [data, agenceFiltreOperations])
 
@@ -229,6 +260,22 @@ export default function TableauDeBord() {
             </div>
           </Link>
         ))}
+      </div>
+
+      <div className="card mt-6">
+        <h3 className="mb-4 font-semibold text-slate-900">Nombre de comptes par type</h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          {stats.comptesParType.map((t) => (
+            <Link
+              key={t.cle}
+              to={t.lien}
+              className={`rounded-xl px-4 py-3 ring-1 transition hover:shadow-sm ${t.couleur}`}
+            >
+              <div className="text-2xl font-bold tabular-nums">{t.nombre}</div>
+              <div className="mt-0.5 text-xs font-medium leading-snug opacity-80">{t.label}</div>
+            </Link>
+          ))}
+        </div>
       </div>
 
       <div className="card mt-6">

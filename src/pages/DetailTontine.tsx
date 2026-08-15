@@ -115,6 +115,10 @@ export default function DetailTontine() {
     const n = total ? retraitSur.retirables : Number(nbCarreaux)
     const montant = carnet.mise * n
     const cycle = retraitSur.cycle
+    const moisLabel = retraitSur.moisLabel
+    const retiresApres = retraitSur.retires + n
+    const disponiblesApres = Math.max(0, retraitSur.retirables - n)
+    const montantDispoApres = disponiblesApres * carnet.mise
     const resultat = retraitCycle(carnet.id, cycle, n)
     setRetraitSur(null)
     setNbCarreaux('1')
@@ -125,7 +129,10 @@ export default function DetailTontine() {
     }
     await alerter(
       'Retrait effectué',
-      `Retrait ${total ? 'total' : 'partiel'} de ${formatMontant(montant)} (${n} carreau${n > 1 ? 'x' : ''}) — ${retraitSur.moisLabel} — ${client.prenom} ${client.nom} (carnet ${carnet.numero}).`,
+      `Retrait ${total ? 'total' : 'partiel'} de ${formatMontant(montant)} (${n} mise${n > 1 ? 's' : ''}) — ${moisLabel}.\n\n` +
+        `Mises retirées : ${retiresApres}\n` +
+        `Mises disponibles : ${disponiblesApres}\n` +
+        `Montant disponible : ${formatMontant(montantDispoApres)}`,
     )
   }
 
@@ -239,71 +246,122 @@ export default function DetailTontine() {
           {[...cycles].reverse().map((et) => (
             <div
               key={et.cycle}
-              className={`flex flex-wrap items-center justify-between gap-3 px-5 py-4 ${
+              className={`px-5 py-4 ${
                 et.grise ? 'bg-slate-100/80' : et.estActuel ? 'bg-brand-50/40' : 'bg-white'
               } ${et.grise ? 'text-slate-500' : ''}`}
             >
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`text-base font-bold ${et.grise ? 'text-slate-500' : 'text-slate-900'}`}>
-                    {et.moisLabel}
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    (cycle {et.cycle}/{CYCLES_PAR_CARNET})
-                  </span>
-                  {et.estActuel && <span className="badge bg-brand-100 text-brand-700">En cours</span>}
-                  {!et.estActuel && et.complet && !et.grise && (
-                    <span className="badge bg-amber-100 text-amber-800">Mois passé — à retirer</span>
-                  )}
-                  {et.grise && <span className="badge bg-slate-200 text-slate-600">Mois soldé</span>}
-                  {!et.estActuel && !et.complet && (
-                    <span className="badge bg-slate-100 text-slate-600">Mois passé</span>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  Déposé {et.deposes}/{carnet.misesParCycle} · retiré {et.retires} · reste{' '}
-                  {et.retirables} carreau{et.retirables > 1 ? 'x' : ''} ({formatMontant(et.montantRetirable)})
-                </p>
-              </div>
-              {peutOperer &&
-                !et.estActuel &&
-                et.retirables > 0 &&
-                eligibilite.autorise &&
-                !carnet.verrouille && (
-                  <div className="flex gap-2">
-                    <button
-                      className="btn-secondary !py-1.5 text-xs"
-                      onClick={() => {
-                        setRetraitSur(et)
-                        setNbCarreaux('1')
-                        setErreur('')
-                      }}
-                    >
-                      <ArrowUpFromLine className="h-3.5 w-3.5" />
-                      Retrait partiel
-                    </button>
-                    <button
-                      className="btn-primary !py-1.5 text-xs"
-                      onClick={async () => {
-                        const ok = await confirmer({
-                          titre: `Retrait total — ${et.moisLabel}`,
-                          message: `Retirer ${formatMontant(et.montantRetirable)} (${et.retirables} carreaux hors P.C) pour ${client.prenom} ${client.nom} (${et.moisLabel}) ?\nLe cycle sera ensuite grisé.`,
-                          labelValider: 'Retrait total',
-                        })
-                        if (!ok) return
-                        const resultat = retraitCycle(carnet.id, et.cycle, et.retirables)
-                        if (resultat) await alerter('Retrait échoué', resultat)
-                        else
-                          await alerter(
-                            'Retrait effectué',
-                            `Retrait total de ${formatMontant(et.montantRetirable)} sur ${et.moisLabel} — carnet ${carnet.numero}.`,
-                          )
-                      }}
-                    >
-                      Retrait total
-                    </button>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`text-base font-bold ${et.grise ? 'text-slate-500' : 'text-slate-900'}`}>
+                      {et.moisLabel}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      (cycle {et.cycle}/{CYCLES_PAR_CARNET})
+                    </span>
+                    {et.estActuel && <span className="badge bg-brand-100 text-brand-700">En cours</span>}
+                    {!et.estActuel && et.complet && !et.grise && (
+                      <span className="badge bg-amber-100 text-amber-800">Mois passé — à retirer</span>
+                    )}
+                    {et.grise && <span className="badge bg-slate-200 text-slate-600">Mois soldé</span>}
+                    {!et.estActuel && !et.complet && (
+                      <span className="badge bg-slate-100 text-slate-600">Mois passé</span>
+                    )}
                   </div>
-                )}
+                  <p className="mt-1 text-xs text-slate-500">
+                    Cotisé : {et.deposes}/{carnet.misesParCycle} mises
+                  </p>
+                </div>
+                {peutOperer &&
+                  !et.estActuel &&
+                  et.retirables > 0 &&
+                  eligibilite.autorise &&
+                  !carnet.verrouille && (
+                    <div className="flex gap-2">
+                      <button
+                        className="btn-secondary !py-1.5 text-xs"
+                        onClick={() => {
+                          setRetraitSur(et)
+                          setNbCarreaux('1')
+                          setErreur('')
+                        }}
+                      >
+                        <ArrowUpFromLine className="h-3.5 w-3.5" />
+                        Retrait partiel
+                      </button>
+                      <button
+                        className="btn-primary !py-1.5 text-xs"
+                        onClick={async () => {
+                          const ok = await confirmer({
+                            titre: `Retrait total — ${et.moisLabel}`,
+                            message:
+                              `Retirer ${formatMontant(et.montantRetirable)} (${et.retirables} mises hors P.C) pour ${client.prenom} ${client.nom} (${et.moisLabel}) ?\n` +
+                              `Mises déjà retirées : ${et.retires}\n` +
+                              `Mises disponibles : ${et.retirables}\n` +
+                              `Montant disponible : ${formatMontant(et.montantRetirable)}\n\n` +
+                              `Le cycle sera ensuite grisé.`,
+                            labelValider: 'Retrait total',
+                          })
+                          if (!ok) return
+                          const n = et.retirables
+                          const montant = et.montantRetirable
+                          const resultat = retraitCycle(carnet.id, et.cycle, n)
+                          if (resultat) await alerter('Retrait échoué', resultat)
+                          else
+                            await alerter(
+                              'Retrait effectué',
+                              `Retrait total de ${formatMontant(montant)} (${n} mise${n > 1 ? 's' : ''}) — ${et.moisLabel}.\n\n` +
+                                `Mises retirées : ${et.retires + n}\n` +
+                                `Mises disponibles : 0\n` +
+                                `Montant disponible : ${formatMontant(0)}`,
+                            )
+                        }}
+                      >
+                        Retrait total
+                      </button>
+                    </div>
+                  )}
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div
+                  className={`rounded-lg px-3 py-2 ring-1 ${
+                    et.grise ? 'bg-slate-50 ring-slate-200' : 'bg-rose-50/80 ring-rose-100'
+                  }`}
+                >
+                  <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Mises retirées
+                  </div>
+                  <div className={`text-lg font-bold tabular-nums ${et.grise ? 'text-slate-500' : 'text-rose-800'}`}>
+                    {et.retires}
+                  </div>
+                </div>
+                <div
+                  className={`rounded-lg px-3 py-2 ring-1 ${
+                    et.grise ? 'bg-slate-50 ring-slate-200' : 'bg-amber-50/80 ring-amber-100'
+                  }`}
+                >
+                  <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Mises disponibles
+                  </div>
+                  <div className={`text-lg font-bold tabular-nums ${et.grise ? 'text-slate-500' : 'text-amber-900'}`}>
+                    {et.retirables}
+                  </div>
+                  <div className="text-[10px] text-slate-500">hors P.C</div>
+                </div>
+                <div
+                  className={`rounded-lg px-3 py-2 ring-1 ${
+                    et.grise ? 'bg-slate-50 ring-slate-200' : 'bg-emerald-50/80 ring-emerald-100'
+                  }`}
+                >
+                  <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                    Montant disponible
+                  </div>
+                  <div className={`text-lg font-bold tabular-nums ${et.grise ? 'text-slate-500' : 'text-emerald-800'}`}>
+                    {formatMontant(et.montantRetirable)}
+                  </div>
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -397,12 +455,24 @@ export default function DetailTontine() {
             }}
             className="space-y-4"
           >
-            <div className="rounded-xl bg-slate-50 p-3 text-sm">
-              Disponibles (hors P.C) : <span className="font-bold">{retraitSur.retirables}</span> — max{' '}
-              {formatMontant(retraitSur.montantRetirable)}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl bg-rose-50 px-2 py-2.5 ring-1 ring-rose-100">
+                <div className="text-[10px] font-medium uppercase text-slate-500">Retirées</div>
+                <div className="text-base font-bold text-rose-800">{retraitSur.retires}</div>
+              </div>
+              <div className="rounded-xl bg-amber-50 px-2 py-2.5 ring-1 ring-amber-100">
+                <div className="text-[10px] font-medium uppercase text-slate-500">Disponibles</div>
+                <div className="text-base font-bold text-amber-900">{retraitSur.retirables}</div>
+              </div>
+              <div className="rounded-xl bg-emerald-50 px-2 py-2.5 ring-1 ring-emerald-100">
+                <div className="text-[10px] font-medium uppercase text-slate-500">Montant dispo.</div>
+                <div className="text-sm font-bold text-emerald-800">
+                  {formatMontant(retraitSur.montantRetirable)}
+                </div>
+              </div>
             </div>
             <div>
-              <label className="label">Nombre de carreaux *</label>
+              <label className="label">Nombre de mises à retirer *</label>
               <input
                 className="input"
                 type="number"
@@ -413,9 +483,30 @@ export default function DetailTontine() {
                 onChange={(e) => setNbCarreaux(e.target.value)}
               />
             </div>
-            <div className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-800">
-              Montant : {formatMontant(carnet.mise * (Number(nbCarreaux) || 0))}
-            </div>
+            {(() => {
+              const n = Number(nbCarreaux) || 0
+              const dispoApres = Math.max(0, retraitSur.retirables - n)
+              return (
+                <div className="rounded-xl bg-slate-50 p-3 text-sm space-y-1.5">
+                  <div className="flex justify-between font-semibold text-rose-800">
+                    <span>Montant du retrait</span>
+                    <span>{formatMontant(carnet.mise * n)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600 border-t border-slate-200 pt-1.5">
+                    <span>Mises retirées après</span>
+                    <span className="font-bold text-slate-900">{retraitSur.retires + n}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Mises disponibles après</span>
+                    <span className="font-bold text-slate-900">{dispoApres}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Montant disponible après</span>
+                    <span className="font-bold text-emerald-700">{formatMontant(dispoApres * carnet.mise)}</span>
+                  </div>
+                </div>
+              )
+            })()}
             {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
             <div className="flex justify-end gap-2">
               <button type="button" className="btn-secondary" onClick={() => setRetraitSur(null)}>
