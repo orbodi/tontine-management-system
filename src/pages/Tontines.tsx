@@ -126,16 +126,28 @@ export default function Tontines() {
 
   const validerEncaissement = async () => {
     if (!encaissement) return
-    const resultat = encaisserCotisation(encaissement.id, Number(montantCotise))
-    if (resultat) {
-      setErreur(resultat)
-      setRecapOuvert(false)
-      return
-    }
+    const carnet = encaissement
+    const montant = Number(montantCotise)
+    const client = clientDuCarnet(carnet)
+    const calc = calculerMisesDepuisMontant(montant, carnet.mise)
+    const resultat = encaisserCotisation(carnet.id, montant)
     setRecapOuvert(false)
     setEncaissement(null)
     setMontantCotise('')
     setErreur('')
+    if (resultat) {
+      await alerter('Dépôt échoué', resultat)
+      return
+    }
+    const nb = calc.ok ? calc.nombreMises : 0
+    await alerter(
+      'Dépôt effectué',
+      `Le dépôt de ${formatMontant(montant)} a été enregistré avec succès` +
+        (client ? ` pour ${client.prenom} ${client.nom}` : '') +
+        ` (carnet ${carnet.numero}` +
+        (nb > 0 ? `, ${nb} carreau${nb > 1 ? 'x' : ''}` : '') +
+        ').',
+    )
   }
 
   const filtres: { valeur: 'tous' | TypeCarnet; label: string }[] = [
@@ -463,14 +475,23 @@ export default function Tontines() {
           <form
             onSubmit={async (e) => {
               e.preventDefault()
+              const carnet = retraitPartiel
               const n = Number(nbCarreauxRetrait)
-              const resultat = retraitPartielCarnet(retraitPartiel.id, n)
-              if (resultat) {
-                setErreur(resultat)
-                return
-              }
+              const montant = carnet.mise * n
+              const client = clientDuCarnet(carnet)
+              const resultat = retraitPartielCarnet(carnet.id, n)
               setRetraitPartiel(null)
               setErreur('')
+              if (resultat) {
+                await alerter('Retrait échoué', resultat)
+                return
+              }
+              await alerter(
+                'Retrait effectué',
+                `Le retrait de ${formatMontant(montant)} (${n} carreau${n > 1 ? 'x' : ''}) a été enregistré avec succès` +
+                  (client ? ` pour ${client.prenom} ${client.nom}` : '') +
+                  ` (carnet ${carnet.numero}).`,
+              )
             }}
             className="space-y-4"
           >

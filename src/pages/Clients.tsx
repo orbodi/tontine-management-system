@@ -5,6 +5,7 @@ import { useStore } from '../store'
 import type { Client, Sexe } from '../types'
 import { formatDate } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
+import { useConfirmation } from '../components/Confirmation'
 
 interface FormulaireClient {
   nom: string
@@ -30,6 +31,7 @@ const formulaireVide: FormulaireClient = {
 
 export default function Clients() {
   const { data, estCaissier, ajouterClient, modifierClient } = useStore()
+  const { alerter } = useConfirmation()
   const [recherche, setRecherche] = useState('')
   const [modaleOuverte, setModaleOuverte] = useState(false)
   const [clientEnEdition, setClientEnEdition] = useState<Client | null>(null)
@@ -72,7 +74,7 @@ export default function Clients() {
     setModaleOuverte(true)
   }
 
-  const enregistrer = (e: React.FormEvent) => {
+  const enregistrer = async (e: React.FormEvent) => {
     e.preventDefault()
     const patch = {
       nom: form.nom.trim(),
@@ -90,8 +92,23 @@ export default function Clients() {
         setErreur(err)
         return
       }
-    } else ajouterClient(patch)
+      setModaleOuverte(false)
+      setErreur('')
+      await alerter(
+        'Client modifié',
+        `Les informations de ${patch.prenom} ${patch.nom} (${clientEnEdition.codeClient}) ont été mises à jour avec succès.`,
+      )
+      return
+    }
+    const cree = ajouterClient(patch)
     setModaleOuverte(false)
+    setErreur('')
+    if (cree) {
+      await alerter(
+        'Client ajouté',
+        `Le client ${cree.prenom} ${cree.nom} a été ajouté avec succès.\nNuméro client : ${cree.codeClient}`,
+      )
+    }
   }
 
   const champ =

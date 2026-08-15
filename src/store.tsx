@@ -63,7 +63,7 @@ interface StoreApi {
   // Clients
   ajouterClient: (
     c: Omit<Client, 'id' | 'codeClient' | 'dateInscription' | 'actif' | 'agenceId' | 'ordreAgence'>,
-  ) => void
+  ) => { codeClient: string; prenom: string; nom: string } | null
   modifierClient: (id: string, patch: Partial<Client>) => string | null
   basculerActifClient: (id: string) => void
   // Carnets
@@ -232,11 +232,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // ---------- Clients ----------
 
       ajouterClient(c) {
-        if (!employeConnecte) return
+        if (!employeConnecte) return null
+        const agenceId = employeConnecte.agenceId
+        let cree: { codeClient: string; prenom: string; nom: string } | null = null
         setData((d) => {
-          const agenceId = employeConnecte.agenceId
           const numero = d.compteurs.client + 1
           const ordre = (d.compteursOrdreAgence[agenceId] ?? 0) + 1
+          const codeClient = numeroClient(numero)
+          cree = { codeClient, prenom: c.prenom, nom: c.nom }
           return {
             ...d,
             compteurs: { ...d.compteurs, client: numero },
@@ -246,7 +249,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               {
                 ...c,
                 id: uid(),
-                codeClient: numeroClient(numero),
+                codeClient,
                 agenceId,
                 ordreAgence: ordre,
                 dateInscription: maintenant(),
@@ -255,6 +258,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ],
           }
         })
+        return cree
       },
 
       modifierClient(id, patch) {
