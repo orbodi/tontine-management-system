@@ -19,12 +19,12 @@ export default function Connexion() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-900 p-4">
       <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-2 inline-flex rounded-2xl bg-white p-5 shadow-lg">
+        <div className="mb-6 text-center">
+          <div className="mx-auto max-w-[200px] overflow-hidden rounded-2xl bg-white p-3 shadow-lg">
             <img
               src={LOGO_URL}
               alt={`${SOUS_TITRE_APPLICATION} ${NOM_APPLICATION}`}
-              className="h-36 w-auto object-contain"
+              className="mx-auto h-auto max-h-28 w-full object-contain"
             />
           </div>
         </div>

@@ -66,12 +66,12 @@ export default function Layout() {
   )
 
   const entete = (
-    <div className="px-5 py-5">
-      <div className="rounded-2xl bg-white p-3 shadow-sm">
+    <div className="shrink-0 px-4 py-4">
+      <div className="overflow-hidden rounded-2xl bg-white p-2 shadow-sm">
         <img
           src={LOGO_URL}
           alt={`${SOUS_TITRE_APPLICATION} ${NOM_APPLICATION}`}
-          className="mx-auto h-auto w-full max-w-[180px] object-contain"
+          className="mx-auto h-20 w-auto max-w-full object-contain"
         />
       </div>
     </div>
@@ -125,11 +125,13 @@ export default function Layout() {
       {/* Barre mobile */}
       <div className="sticky top-0 z-30 flex items-center justify-between bg-slate-900 px-4 py-3 lg:hidden print:hidden">
         <div className="flex items-center gap-2.5 text-white">
-          <img
-            src={LOGO_URL}
-            alt={NOM_APPLICATION}
-            className="h-9 w-9 rounded-lg bg-white object-contain p-0.5"
-          />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white">
+            <img
+              src={LOGO_URL}
+              alt={NOM_APPLICATION}
+              className="h-8 w-8 object-contain"
+            />
+          </div>
           <span className="font-bold">{NOM_APPLICATION}</span>
         </div>
         <button
