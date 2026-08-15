@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
-import { MapPinned, Plus } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ArrowLeft, MapPinned, Plus } from 'lucide-react'
 import { useStore } from '../store'
 import { EnTetePage, EtatVide, Modale } from '../components/ui'
 import { pad2 } from '../utils'
 
 export default function Zones() {
+  const [searchParams] = useSearchParams()
+  const filtreAgenceId = searchParams.get('agence') ?? ''
   const { data, ajouterZone, modifierZone, basculerActifZone } = useStore()
   const [modale, setModale] = useState(false)
   const [editionId, setEditionId] = useState<string | null>(null)
@@ -12,6 +15,8 @@ export default function Zones() {
   const [code, setCode] = useState('')
   const [nom, setNom] = useState('')
   const [erreur, setErreur] = useState('')
+
+  const agenceFiltre = data.agences.find((a) => a.id === filtreAgenceId)
 
   const prochainCode = useMemo(() => {
     const nums = data.zones.map((z) => parseInt(z.code, 10)).filter((n) => !Number.isNaN(n))
@@ -21,7 +26,11 @@ export default function Zones() {
 
   const ouvrirCreation = () => {
     setEditionId(null)
-    setAgenceId(data.agences.find((a) => a.actif)?.id ?? '')
+    setAgenceId(
+      filtreAgenceId ||
+        data.agences.find((a) => a.actif)?.id ||
+        '',
+    )
     setCode(prochainCode)
     setNom('')
     setErreur('')
@@ -65,16 +74,32 @@ export default function Zones() {
     setModale(false)
   }
 
-  const zonesTriees = useMemo(
-    () => [...data.zones].sort((a, b) => a.code.localeCompare(b.code)),
-    [data.zones],
-  )
+  const zonesTriees = useMemo(() => {
+    const liste = filtreAgenceId
+      ? data.zones.filter((z) => z.agenceId === filtreAgenceId)
+      : data.zones
+    return [...liste].sort((a, b) => a.code.localeCompare(b.code))
+  }, [data.zones, filtreAgenceId])
 
   return (
     <div>
+      {agenceFiltre && (
+        <Link
+          to="/agences"
+          className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Retour aux agences
+        </Link>
+      )}
+
       <EnTetePage
-        titre="Zones"
-        sousTitre={`${data.zones.length} zone${data.zones.length > 1 ? 's' : ''} — le n° de carnet hérite du n° de zone (ex. 010001)`}
+        titre={agenceFiltre ? `Zones — ${agenceFiltre.nom}` : 'Zones'}
+        sousTitre={
+          agenceFiltre
+            ? `${zonesTriees.length} zone${zonesTriees.length > 1 ? 's' : ''} — carnets préfixés par le n° de zone`
+            : `${data.zones.length} zone${data.zones.length > 1 ? 's' : ''} — le n° de carnet hérite du n° de zone (ex. 010001)`
+        }
         action={
           <button className="btn-primary" onClick={ouvrirCreation}>
             <Plus className="h-4 w-4" />
@@ -84,7 +109,14 @@ export default function Zones() {
       />
 
       {zonesTriees.length === 0 ? (
-        <EtatVide titre="Aucune zone" description="Créez une zone rattachée à une agence." />
+        <EtatVide
+          titre="Aucune zone"
+          description={
+            agenceFiltre
+              ? `Ajoutez une zone pour ${agenceFiltre.nom}.`
+              : 'Créez une zone rattachée à une agence.'
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {zonesTriees.map((z) => {
@@ -106,9 +138,11 @@ export default function Zones() {
                         {z.actif ? 'Active' : 'Inactive'}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {agence ? `${agence.nom}` : 'Agence introuvable'}
-                    </p>
+                    {!agenceFiltre && (
+                      <p className="mt-1 text-sm text-slate-500">
+                        {agence ? `${agence.nom}` : 'Agence introuvable'}
+                      </p>
+                    )}
                     <p className="mt-1 text-xs text-slate-500">
                       {nbClients} client{nbClients > 1 ? 's' : ''} — carnets {z.code}xxxx
                     </p>
@@ -141,6 +175,7 @@ export default function Zones() {
               required
               value={agenceId}
               onChange={(e) => setAgenceId(e.target.value)}
+              disabled={!!filtreAgenceId && !editionId}
             >
               <option value="">— Choisir —</option>
               {data.agences

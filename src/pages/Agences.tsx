@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { Building2, Plus } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Building2, ChevronRight, Plus } from 'lucide-react'
 import { useStore } from '../store'
 import { EnTetePage, EtatVide, Modale } from '../components/ui'
 
 export default function Agences() {
+  const navigate = useNavigate()
   const { data, ajouterAgence, modifierAgence, basculerActifAgence } = useStore()
   const [modale, setModale] = useState(false)
   const [editionId, setEditionId] = useState<string | null>(null)
@@ -84,7 +86,19 @@ export default function Agences() {
             const nbEmployes = data.employes.filter((u) => u.agenceId === a.id).length
             const nbZones = data.zones.filter((z) => z.agenceId === a.id).length
             return (
-              <div key={a.id} className="card">
+              <div
+                key={a.id}
+                role="button"
+                tabIndex={0}
+                className="card cursor-pointer transition hover:border-brand-300 hover:shadow-md"
+                onClick={() => navigate(`/zones?agence=${a.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    navigate(`/zones?agence=${a.id}`)
+                  }
+                }}
+              >
                 <div className="flex items-start gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-100 text-brand-700">
                     <Building2 className="h-6 w-6" />
@@ -106,9 +120,13 @@ export default function Agences() {
                       {nbClients} client{nbClients > 1 ? 's' : ''} — {nbEmployes} employé
                       {nbEmployes > 1 ? 's' : ''}
                     </p>
+                    <p className="mt-2 flex items-center gap-1 text-xs font-medium text-brand-600">
+                      Voir les zones
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </p>
                   </div>
                 </div>
-                <div className="mt-4 flex gap-2">
+                <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
                   <button className="btn-secondary !py-2 text-xs" onClick={() => ouvrirEdition(a.id)}>
                     Modifier
                   </button>

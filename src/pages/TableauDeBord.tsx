@@ -6,6 +6,7 @@ import {
   Banknote,
   HandCoins,
   PiggyBank,
+  Scale,
   TriangleAlert,
   Users,
 } from 'lucide-react'
@@ -30,12 +31,36 @@ import { EnTetePage } from '../components/ui'
 const MOIS_COURTS = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'août', 'sep', 'oct', 'nov', 'déc']
 
 export default function TableauDeBord() {
-  const { data, employeConnecte } = useStore()
+  const { data, employeConnecte, estCaissier, agenceFiltreOperations } = useStore()
+
+  const txVisibles = useMemo(() => {
+    let tx = data.transactions
+    if (agenceFiltreOperations) tx = tx.filter((t) => t.agenceId === agenceFiltreOperations)
+    else if (estCaissier && employeConnecte) tx = tx.filter((t) => t.operateurId === employeConnecte.id)
+    return tx
+  }, [data.transactions, agenceFiltreOperations, estCaissier, employeConnecte])
+
+  const arretsVisibles = useMemo(() => {
+    let arrets = data.arretsCaisse
+    if (agenceFiltreOperations) arrets = arrets.filter((a) => a.agenceId === agenceFiltreOperations)
+    else if (estCaissier && employeConnecte) arrets = arrets.filter((a) => a.employeId === employeConnecte.id)
+    return arrets
+  }, [data.arretsCaisse, agenceFiltreOperations, estCaissier, employeConnecte])
 
   const stats = useMemo(() => {
-    const clientsActifs = data.clients.filter((c) => c.actif).length
-    const totalComptes = data.comptes.reduce((s, c) => s + c.solde, 0)
-    const encoursTontine = data.carnets
+    const clients = agenceFiltreOperations
+      ? data.clients.filter((c) => c.agenceId === agenceFiltreOperations)
+      : data.clients
+    const clientsActifs = clients.filter((c) => c.actif).length
+    const clientIds = new Set(clients.map((c) => c.id))
+    const comptes = agenceFiltreOperations
+      ? data.comptes.filter((c) => clientIds.has(c.clientId))
+      : data.comptes
+    const totalComptes = comptes.reduce((s, c) => s + c.solde, 0)
+    const carnets = agenceFiltreOperations
+      ? data.carnets.filter((c) => c.agenceId === agenceFiltreOperations)
+      : data.carnets
+    const encoursTontine = carnets
       .filter((c) => c.actif)
       .reduce((s, carnet) => {
         const cycles = situationsCycles(carnet, data.mises)
@@ -56,7 +81,36 @@ export default function TableauDeBord() {
       creditsEnRetard,
       demandesEnAttente,
     }
-  }, [data])
+  }, [data, agenceFiltreOperations])
+
+  const infoCaisseMois = useMemo(() => {
+    const maintenant = new Date()
+    const annee = maintenant.getFullYear()
+    const mois = maintenant.getMonth()
+    let depots = 0
+    let retraits = 0
+    txVisibles.forEach((t) => {
+      const dt = new Date(t.date)
+      if (dt.getFullYear() !== annee || dt.getMonth() !== mois) return
+      if (TYPES_SORTIE.includes(t.type)) retraits += t.montant
+      else depots += t.montant
+    })
+    let manquant = 0
+    let surplus = 0
+    arretsVisibles.forEach((a) => {
+      const dt = new Date(a.date)
+      if (dt.getFullYear() !== annee || dt.getMonth() !== mois) return
+      if (a.ecart < 0) manquant += Math.abs(a.ecart)
+      else if (a.ecart > 0) surplus += a.ecart
+    })
+    return {
+      depots,
+      retraits,
+      manquant,
+      surplus,
+      labelMois: `${MOIS_COURTS[mois]} ${annee}`,
+    }
+  }, [txVisibles, arretsVisibles])
 
   const fluxMensuels = useMemo(() => {
     const mois: { cle: string; label: string; entrees: number; sorties: number }[] = []
@@ -70,7 +124,7 @@ export default function TableauDeBord() {
         sorties: 0,
       })
     }
-    data.transactions.forEach((t) => {
+    txVisibles.forEach((t) => {
       const dt = new Date(t.date)
       const ligne = mois.find((m) => m.cle === `${dt.getFullYear()}-${dt.getMonth()}`)
       if (!ligne) return
@@ -78,7 +132,7 @@ export default function TableauDeBord() {
       else ligne.entrees += t.montant
     })
     return mois
-  }, [data.transactions])
+  }, [txVisibles])
 
   const repartitionCredits = useMemo(() => {
     const compte = { en_cours: 0, en_retard: 0, rembourse: 0, en_attente: 0, rejete: 0 }
@@ -94,7 +148,7 @@ export default function TableauDeBord() {
     ].filter((x) => x.valeur > 0)
   }, [data.credits])
 
-  const dernieresTransactions = data.transactions.slice(0, 7)
+  const dernieresTransactions = txVisibles.slice(0, 7)
 
   const cartes = [
     {
@@ -175,6 +229,40 @@ export default function TableauDeBord() {
             </div>
           </Link>
         ))}
+      </div>
+
+      <div className="card mt-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Scale className="h-5 w-5 text-brand-600" />
+            <h3 className="font-semibold text-slate-900">
+              Caisse — {infoCaisseMois.labelMois}
+            </h3>
+          </div>
+          <Link to="/caisse" className="text-sm font-medium text-brand-600 hover:text-brand-700">
+            Voir la caisse
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl bg-emerald-50 px-4 py-3 ring-1 ring-emerald-100">
+            <div className="text-xs font-medium uppercase tracking-wide text-emerald-700">Dépôts du mois</div>
+            <div className="mt-1 text-lg font-bold text-emerald-800">{formatMontant(infoCaisseMois.depots)}</div>
+          </div>
+          <div className="rounded-xl bg-rose-50 px-4 py-3 ring-1 ring-rose-100">
+            <div className="text-xs font-medium uppercase tracking-wide text-rose-700">Retraits du mois</div>
+            <div className="mt-1 text-lg font-bold text-rose-800">{formatMontant(infoCaisseMois.retraits)}</div>
+          </div>
+          <div className="rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-amber-100">
+            <div className="text-xs font-medium uppercase tracking-wide text-amber-700">Manquant</div>
+            <div className="mt-1 text-lg font-bold text-amber-900">{formatMontant(infoCaisseMois.manquant)}</div>
+            <div className="mt-0.5 text-xs text-amber-700/80">Écarts négatifs (arrêts)</div>
+          </div>
+          <div className="rounded-xl bg-sky-50 px-4 py-3 ring-1 ring-sky-100">
+            <div className="text-xs font-medium uppercase tracking-wide text-sky-700">Surplus</div>
+            <div className="mt-1 text-lg font-bold text-sky-900">{formatMontant(infoCaisseMois.surplus)}</div>
+            <div className="mt-0.5 text-xs text-sky-700/80">Écarts positifs (arrêts)</div>
+          </div>
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
