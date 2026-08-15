@@ -16,7 +16,7 @@ import {
   moisDuCycle,
   situationsCycles,
 } from '../metier'
-import { formatMontant } from '../utils'
+import { formatMontant, numeroCarnet } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
 
@@ -38,6 +38,8 @@ export default function Tontines() {
   const [recherche, setRecherche] = useState('')
   const [typeFiltre, setTypeFiltre] = useState<'tous' | TypeCarnet>('tous')
   const [modaleOuverture, setModaleOuverture] = useState(false)
+  const [agenceChoisie, setAgenceChoisie] = useState('')
+  const [zoneChoisie, setZoneChoisie] = useState('')
   const [clientChoisi, setClientChoisi] = useState('')
   const [typeNouveauCarnet, setTypeNouveauCarnet] = useState<TypeCarnet>('tontine')
   const [mise, setMise] = useState('')
@@ -46,10 +48,43 @@ export default function Tontines() {
 
   const peutOperer = aDroit('operer_comptes')
 
-  const clientsSansCarnet = useMemo(
-    () => data.clients.filter((c) => c.actif && !data.carnets.some((k) => k.actif && k.clientId === c.id)),
-    [data.clients, data.carnets],
+  const zonesAgence = useMemo(
+    () =>
+      data.zones
+        .filter((z) => z.actif && (!agenceChoisie || z.agenceId === agenceChoisie))
+        .sort((a, b) => a.code.localeCompare(b.code)),
+    [data.zones, agenceChoisie],
   )
+
+  const clientsSansCarnet = useMemo(
+    () =>
+      data.clients.filter(
+        (c) =>
+          c.actif &&
+          !data.carnets.some((k) => k.actif && k.clientId === c.id) &&
+          (!zoneChoisie || c.zoneId === zoneChoisie) &&
+          (!agenceChoisie || c.agenceId === agenceChoisie),
+      ),
+    [data.clients, data.carnets, zoneChoisie, agenceChoisie],
+  )
+
+  const clientSelectionne = data.clients.find((c) => c.id === clientChoisi)
+  const zoneSelectionnee = data.zones.find((z) => z.id === zoneChoisie)
+  const apercuNumero =
+    clientSelectionne && zoneSelectionnee
+      ? numeroCarnet(zoneSelectionnee.code, clientSelectionne.ordreZone)
+      : null
+
+  const ouvrirModale = () => {
+    setAgenceChoisie(data.agences.find((a) => a.actif)?.id ?? '')
+    setZoneChoisie('')
+    setClientChoisi('')
+    setMise('')
+    setTypeNouveauCarnet('tontine')
+    setFrequence('journaliere')
+    setErreur('')
+    setModaleOuverture(true)
+  }
 
   const carnetsFiltres = useMemo(() => {
     const q = recherche.trim().toLowerCase()
@@ -58,14 +93,18 @@ export default function Tontines() {
       .filter((c) => typeFiltre === 'tous' || c.typeCarnet === typeFiltre)
       .filter((c) => {
         const client = data.clients.find((x) => x.id === c.clientId)
+        const zone = data.zones.find((z) => z.id === c.zoneId)
+        const agence = data.agences.find((a) => a.id === c.agenceId)
         return (
           !q ||
           c.numero.toLowerCase().includes(q) ||
+          (zone && zone.code.includes(q)) ||
+          (agence && agence.nom.toLowerCase().includes(q)) ||
           (client && `${client.prenom} ${client.nom} ${client.codeClient}`.toLowerCase().includes(q))
         )
       })
       .sort((a, b) => a.numero.localeCompare(b.numero))
-  }, [data.carnets, data.clients, recherche, typeFiltre])
+  }, [data.carnets, data.clients, data.zones, data.agences, recherche, typeFiltre])
 
   const encoursTotal = data.carnets
     .filter((c) => c.actif)
@@ -76,17 +115,40 @@ export default function Tontines() {
 
   const creerCarnet = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!agenceChoisie) {
+      setErreur('Choisissez une agence.')
+      return
+    }
+    if (!zoneChoisie) {
+      setErreur('Choisissez une zone.')
+      return
+    }
+    if (!clientChoisi) {
+      setErreur('Choisissez un client.')
+      return
+    }
+    const client = data.clients.find((c) => c.id === clientChoisi)
+    if (!client || client.zoneId !== zoneChoisie || client.agenceId !== agenceChoisie) {
+      setErreur('Le client doit appartenir à l’agence et à la zone sélectionnées.')
+      return
+    }
     const resultat = ouvrirCarnet(clientChoisi, typeNouveauCarnet, Number(mise), frequence)
     if ('erreur' in resultat) {
       setErreur(resultat.erreur)
       await alerter('Ouverture impossible', resultat.erreur)
       return
     }
+    const agence = data.agences.find((a) => a.id === agenceChoisie)
+    const zone = data.zones.find((z) => z.id === zoneChoisie)
     setModaleOuverture(false)
     setClientChoisi('')
+    setZoneChoisie('')
     setMise('')
     setErreur('')
-    await alerter('Carnet ouvert', `Le carnet ${resultat.numero} a été ouvert avec succès.`)
+    await alerter(
+      'Carnet ouvert',
+      `Le carnet ${resultat.numero} a été ouvert.\nAgence : ${agence?.nom ?? '—'}\nZone : ${zone?.code ?? '—'}`,
+    )
   }
 
   const filtres: { valeur: 'tous' | TypeCarnet; label: string }[] = [
@@ -104,7 +166,11 @@ export default function Tontines() {
         sousTitre={`${data.carnets.filter((c) => c.actif).length} carnets — encours : ${formatMontant(encoursTotal)} — cliquez pour ouvrir un compte`}
         action={
           peutOperer && (
-            <button className="btn-primary" onClick={() => setModaleOuverture(true)} disabled={clientsSansCarnet.length === 0}>
+            <button
+              className="btn-primary"
+              onClick={ouvrirModale}
+              disabled={data.clients.every((c) => !c.actif || data.carnets.some((k) => k.actif && k.clientId === c.id))}
+            >
               <Plus className="h-4 w-4" />
               Ouvrir un carnet
             </button>
@@ -176,6 +242,10 @@ export default function Tontines() {
                     )}
                   </div>
                   <p className="mt-0.5 font-mono text-xs font-semibold text-brand-700">{carnet.numero}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {data.agences.find((a) => a.id === carnet.agenceId)?.nom ?? 'Agence'} · Zone{' '}
+                    {data.zones.find((z) => z.id === carnet.zoneId)?.code ?? '—'}
+                  </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {mois.label} ({carnet.cycleActuel}/{CYCLES_PAR_CARNET}) —{' '}
                     <span className="font-medium text-slate-700">
@@ -212,6 +282,77 @@ export default function Tontines() {
 
       <Modale titre="Ouvrir un carnet" ouverte={modaleOuverture} onFermer={() => setModaleOuverture(false)}>
         <form onSubmit={creerCarnet} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Agence *</label>
+              <select
+                className="input"
+                required
+                value={agenceChoisie}
+                onChange={(e) => {
+                  setAgenceChoisie(e.target.value)
+                  setZoneChoisie('')
+                  setClientChoisi('')
+                }}
+              >
+                <option value="">— Choisir —</option>
+                {data.agences
+                  .filter((a) => a.actif)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.nom}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Zone *</label>
+              <select
+                className="input"
+                required
+                value={zoneChoisie}
+                disabled={!agenceChoisie}
+                onChange={(e) => {
+                  setZoneChoisie(e.target.value)
+                  setClientChoisi('')
+                }}
+              >
+                <option value="">— Choisir —</option>
+                {zonesAgence.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.code}
+                    {z.nom ? ` — ${z.nom}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Client *</label>
+            <select
+              className="input"
+              required
+              value={clientChoisi}
+              disabled={!zoneChoisie}
+              onChange={(e) => setClientChoisi(e.target.value)}
+            >
+              <option value="">— Choisir —</option>
+              {clientsSansCarnet.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.codeClient} — {c.prenom} {c.nom}
+                </option>
+              ))}
+            </select>
+            {zoneChoisie && clientsSansCarnet.length === 0 && (
+              <p className="mt-1 text-xs text-amber-700">Aucun client sans carnet dans cette zone.</p>
+            )}
+          </div>
+          {apercuNumero && (
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              N° carnet prévu : <span className="font-mono font-bold text-brand-700">{apercuNumero}</span>{' '}
+              (zone {zoneSelectionnee?.code} + ordre client)
+            </p>
+          )}
           <div>
             <label className="label">Type *</label>
             <select className="input" value={typeNouveauCarnet} onChange={(e) => setTypeNouveauCarnet(e.target.value as TypeCarnet)}>
@@ -223,17 +364,6 @@ export default function Tontines() {
             {CARNETS_RETRAIT_6_MOIS.includes(typeNouveauCarnet) && (
               <p className="mt-1 text-xs text-amber-700">Retrait après {MOIS_MIN_RETRAIT_CARTE} mois min.</p>
             )}
-          </div>
-          <div>
-            <label className="label">Client *</label>
-            <select className="input" required value={clientChoisi} onChange={(e) => setClientChoisi(e.target.value)}>
-              <option value="">— Choisir —</option>
-              {clientsSansCarnet.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.codeClient} — {c.prenom} {c.nom}
-                </option>
-              ))}
-            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

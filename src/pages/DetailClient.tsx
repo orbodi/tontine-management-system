@@ -28,7 +28,7 @@ import {
   type TypeCarnet,
   type TypeCompte,
 } from '../types'
-import { formatDate, formatDateHeure, formatMontant } from '../utils'
+import { formatDate, formatDateHeure, formatMontant, numeroCarnet } from '../utils'
 import { Avatar, BadgeStatutCredit, BoutonsMessage, EnTetePage, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
 
@@ -110,18 +110,24 @@ export default function DetailClient() {
 
   const creerCarnet = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!client.agenceId || !client.zoneId) {
+      setErreur('Le client doit être rattaché à une agence et une zone.')
+      return
+    }
     const resultat = ouvrirCarnet(client.id, typeCarnet, Number(mise), frequence)
     if ('erreur' in resultat) {
       setErreur(resultat.erreur)
       await alerter('Ouverture impossible', resultat.erreur)
       return
     }
+    const agence = data.agences.find((a) => a.id === client.agenceId)
+    const zone = data.zones.find((z) => z.id === client.zoneId)
     setModaleCarnet(false)
     setMise('')
     setErreur('')
     await alerter(
       'Carnet ouvert',
-      `Le carnet ${resultat.numero} (${LIBELLES_CARNET[typeCarnet]}) a été ouvert pour ${client.prenom} ${client.nom}.`,
+      `Le carnet ${resultat.numero} (${LIBELLES_CARNET[typeCarnet]}) a été ouvert pour ${client.prenom} ${client.nom}.\nAgence : ${agence?.nom ?? '—'}\nZone : ${zone?.code ?? '—'}`,
     )
     navigate(`/tontines/${resultat.id}`)
   }
@@ -436,6 +442,44 @@ export default function DetailClient() {
         onFermer={() => setModaleCarnet(false)}
       >
         <form onSubmit={creerCarnet} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Agence *</label>
+              <input
+                className="input bg-slate-50"
+                readOnly
+                required
+                value={
+                  data.agences.find((a) => a.id === client.agenceId)
+                    ? `${data.agences.find((a) => a.id === client.agenceId)!.nom}`
+                    : ''
+                }
+              />
+            </div>
+            <div>
+              <label className="label">Zone *</label>
+              <input
+                className="input bg-slate-50 font-mono"
+                readOnly
+                required
+                value={
+                  (() => {
+                    const z = data.zones.find((x) => x.id === client.zoneId)
+                    return z ? `${z.code}${z.nom ? ` — ${z.nom}` : ''}` : ''
+                  })()
+                }
+              />
+            </div>
+          </div>
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            N° carnet prévu :{' '}
+            <span className="font-mono font-bold text-brand-700">
+              {(() => {
+                const z = data.zones.find((x) => x.id === client.zoneId)
+                return z ? numeroCarnet(z.code, client.ordreZone) : '—'
+              })()}
+            </span>
+          </p>
           <div>
             <label className="label">Type *</label>
             <select className="input" value={typeCarnet} onChange={(e) => setTypeCarnet(e.target.value as TypeCarnet)}>

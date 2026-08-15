@@ -145,7 +145,7 @@ export default function DetailTontine() {
 
       <EnTetePage
         titre={`Carnet ${carnet.numero}`}
-        sousTitre={`${LIBELLES_CARNET[carnet.typeCarnet]} — ${client.prenom} ${client.nom} (${client.codeClient})`}
+        sousTitre={`${LIBELLES_CARNET[carnet.typeCarnet]} — ${client.prenom} ${client.nom} (${client.codeClient}) — ${data.agences.find((a) => a.id === carnet.agenceId)?.nom ?? 'Agence'} · Zone ${data.zones.find((z) => z.id === carnet.zoneId)?.code ?? '—'}`}
         action={
           <div className="flex flex-wrap gap-2">
             {peutOperer && payeesActuel < carnet.misesParCycle && (
