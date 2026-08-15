@@ -8,10 +8,12 @@ import {
   type ArretCaisse,
   type CarnetTontine,
   type Client,
+  type CompteZoneTontine,
   type Credit,
   type Droit,
   type Employe,
   type JournalConnexion,
+  type JourneeCompteZone,
   type MiseTontine,
   type MouvementCompte,
   type Remboursement,
@@ -21,12 +23,21 @@ import {
   type TypeCompte,
   type Zone,
 } from './types'
-import { calculerMisesDepuisMontant, carreauxNets, carreauxRetirables, CARNETS_RETRAIT_6_MOIS, eligibiliteRetraitCarnet } from './metier'
+import {
+  calculerMisesDepuisMontant,
+  carreauxNets,
+  carreauxRetirables,
+  CARNETS_RETRAIT_6_MOIS,
+  compteZoneDe,
+  depotsTontineZoneJour,
+  eligibiliteRetraitCarnet,
+  statutDepuisEcart,
+} from './metier'
 import { genererDonneesDemo } from './demo-data'
 import { numeroCarnet, numeroClient, numeroCompteSolde, pad4, uid } from './utils'
 
-const STORAGE_KEY = 'microfinance-data-v13'
-const SESSION_KEY = 'microfinance-session-v13'
+const STORAGE_KEY = 'microfinance-data-v14'
+const SESSION_KEY = 'microfinance-session-v14'
 
 export const LIBELLES_ROLE: Record<Role, string> = {
   admin: 'Administrateur',
@@ -66,6 +77,15 @@ interface StoreApi {
   ajouterZone: (z: Omit<Zone, 'id' | 'actif'>) => string | null
   modifierZone: (id: string, patch: Partial<Zone>) => string | null
   basculerActifZone: (id: string) => void
+  // Compte zone tontine
+  saisirMontantReelZone: (zoneId: string, montantReel: number, dateIso?: string, note?: string) => string | null
+  cloturerJourneeZone: (zoneId: string, dateIso?: string) => string | null
+  ajusterCumulCompteZone: (
+    zoneId: string,
+    type: 'manquant' | 'surplus',
+    montant: number,
+    motif: string,
+  ) => string | null
   // Clients
   ajouterClient: (
     c: Omit<Client, 'id' | 'codeClient' | 'dateInscription' | 'actif' | 'agenceId' | 'ordreZone'>,
@@ -113,10 +133,30 @@ interface StoreApi {
 
 const StoreContext = createContext<StoreApi | null>(null)
 
+function normaliserAppData(brut: AppData): AppData {
+  const d = {
+    ...brut,
+    comptesZoneTontine: brut.comptesZoneTontine ?? [],
+    journeesCompteZone: brut.journeesCompteZone ?? [],
+    ajustementsCompteZone: brut.ajustementsCompteZone ?? [],
+  }
+  const manquants: CompteZoneTontine[] = d.zones
+    .filter((z) => !d.comptesZoneTontine.some((c) => c.zoneId === z.id))
+    .map((z) => ({
+      id: uid(),
+      zoneId: z.id,
+      cumulManquant: 0,
+      cumulSurplus: 0,
+      actif: true,
+    }))
+  if (manquants.length === 0) return d
+  return { ...d, comptesZoneTontine: [...d.comptesZoneTontine, ...manquants] }
+}
+
 function chargerDonnees(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw) as AppData
+    if (raw) return normaliserAppData(JSON.parse(raw) as AppData)
   } catch {
     // données corrompues
   }
@@ -162,6 +202,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return c ? `${c.prenom} ${c.nom}` : 'Inconnu'
     }
 
+    const aLeDroit = (droit: Droit) => {
+      if (!employeConnecte) return false
+      if (employeConnecte.role === 'admin') return true
+      return employeConnecte.droits.includes(droit)
+    }
+
     return {
       data,
       employeConnecte,
@@ -171,9 +217,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       agenceFiltreOperations: estChefAgence && employeConnecte ? employeConnecte.agenceId : null,
 
       aDroit(droit) {
-        if (!employeConnecte) return false
-        if (employeConnecte.role === 'admin') return true
-        return employeConnecte.droits.includes(droit)
+        return aLeDroit(droit)
       },
 
       connexion(identifiant, motDePasse) {
@@ -245,6 +289,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         if (!data.agences.some((a) => a.id === z.agenceId)) return 'Agence introuvable.'
         const id = uid()
+        const compteZoneId = uid()
         setData((d) => ({
           ...d,
           zones: [
@@ -254,6 +299,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               code,
               nom: z.nom?.trim() || undefined,
               id,
+              actif: true,
+            },
+          ],
+          comptesZoneTontine: [
+            ...d.comptesZoneTontine,
+            {
+              id: compteZoneId,
+              zoneId: id,
+              cumulManquant: 0,
+              cumulSurplus: 0,
               actif: true,
             },
           ],
@@ -301,6 +356,178 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...d,
           zones: d.zones.map((z) => (z.id === id ? { ...z, actif: !z.actif } : z)),
         }))
+      },
+
+      // ---------- Compte zone tontine ----------
+
+      saisirMontantReelZone(zoneId, montantReel, dateIso, note) {
+        if (!employeConnecte) return 'Non connecté.'
+        if (!aLeDroit('operer_comptes') && !estAdmin) return 'Droit insuffisant.'
+        if (montantReel < 0) return 'Montant invalide.'
+        const jour = dateIso ?? new Date().toISOString().slice(0, 10)
+        let erreur: string | null = null
+        setData((d) => {
+          const zone = d.zones.find((z) => z.id === zoneId)
+          if (!zone) {
+            erreur = 'Zone introuvable.'
+            return d
+          }
+          let compte = compteZoneDe(d.comptesZoneTontine, zoneId)
+          let comptes = d.comptesZoneTontine
+          if (!compte) {
+            compte = {
+              id: uid(),
+              zoneId,
+              cumulManquant: 0,
+              cumulSurplus: 0,
+              actif: true,
+            }
+            comptes = [...comptes, compte]
+          }
+          const existante = d.journeesCompteZone.find((j) => j.zoneId === zoneId && j.date === jour)
+          if (existante?.cloturee) {
+            erreur = 'Cette journée est déjà clôturée. Seul un admin peut ajuster les cumuls.'
+            return d
+          }
+          const maintenantIso = maintenant()
+          if (existante) {
+            return {
+              ...d,
+              comptesZoneTontine: comptes,
+              journeesCompteZone: d.journeesCompteZone.map((j) =>
+                j.id === existante.id
+                  ? {
+                      ...j,
+                      montantReel,
+                      note: note?.trim() || j.note,
+                      dateSaisieReel: maintenantIso,
+                      operateurId: employeConnecte.id,
+                      operateurNom: employeConnecte.nomComplet,
+                    }
+                  : j,
+              ),
+            }
+          }
+          const journee: JourneeCompteZone = {
+            id: uid(),
+            compteZoneId: compte.id,
+            zoneId,
+            date: jour,
+            montantReel,
+            montantTheorique: 0,
+            ecart: 0,
+            statut: 'en_cours',
+            cloturee: false,
+            dateSaisieReel: maintenantIso,
+            operateurId: employeConnecte.id,
+            operateurNom: employeConnecte.nomComplet,
+            note: note?.trim() || undefined,
+          }
+          return {
+            ...d,
+            comptesZoneTontine: comptes,
+            journeesCompteZone: [journee, ...d.journeesCompteZone],
+          }
+        })
+        return erreur
+      },
+
+      cloturerJourneeZone(zoneId, dateIso) {
+        if (!employeConnecte) return 'Non connecté.'
+        if (!aLeDroit('operer_comptes') && !estAdmin) return 'Droit insuffisant.'
+        const jour = dateIso ?? new Date().toISOString().slice(0, 10)
+        let erreur: string | null = null
+        setData((d) => {
+          const journee = d.journeesCompteZone.find((j) => j.zoneId === zoneId && j.date === jour)
+          if (!journee) {
+            erreur = 'Saisissez d’abord le montant réel collecté pour ce jour.'
+            return d
+          }
+          if (journee.cloturee) {
+            erreur = 'Journée déjà clôturée.'
+            return d
+          }
+          const compte = compteZoneDe(d.comptesZoneTontine, zoneId)
+          if (!compte) {
+            erreur = 'Compte zone introuvable.'
+            return d
+          }
+          const theorique = depotsTontineZoneJour(zoneId, jour, d.clients, d.transactions)
+          const ecart = journee.montantReel - theorique
+          const statut = statutDepuisEcart(ecart)
+          let cumulManquant = compte.cumulManquant
+          let cumulSurplus = compte.cumulSurplus
+          if (ecart < 0) cumulManquant += Math.abs(ecart)
+          if (ecart > 0) cumulSurplus += ecart
+          return {
+            ...d,
+            comptesZoneTontine: d.comptesZoneTontine.map((c) =>
+              c.id === compte.id ? { ...c, cumulManquant, cumulSurplus } : c,
+            ),
+            journeesCompteZone: d.journeesCompteZone.map((j) =>
+              j.id === journee.id
+                ? {
+                    ...j,
+                    montantTheorique: theorique,
+                    ecart,
+                    statut,
+                    cloturee: true,
+                    dateCloture: maintenant(),
+                  }
+                : j,
+            ),
+          }
+        })
+        return erreur
+      },
+
+      ajusterCumulCompteZone(zoneId, type, montant, motif) {
+        if (!estAdmin) return 'Seul l’administrateur peut ajuster les cumuls.'
+        if (montant <= 0) return 'Montant invalide.'
+        if (!motif.trim()) return 'Le motif est obligatoire.'
+        let erreur: string | null = null
+        setData((d) => {
+          const compte = compteZoneDe(d.comptesZoneTontine, zoneId)
+          if (!compte) {
+            erreur = 'Compte zone introuvable.'
+            return d
+          }
+          const cumulAvant = type === 'manquant' ? compte.cumulManquant : compte.cumulSurplus
+          if (montant > cumulAvant) {
+            erreur = `Le montant dépasse le cumul ${type} (${cumulAvant}).`
+            return d
+          }
+          const cumulApres = cumulAvant - montant
+          return {
+            ...d,
+            comptesZoneTontine: d.comptesZoneTontine.map((c) =>
+              c.id === compte.id
+                ? {
+                    ...c,
+                    cumulManquant: type === 'manquant' ? cumulApres : c.cumulManquant,
+                    cumulSurplus: type === 'surplus' ? cumulApres : c.cumulSurplus,
+                  }
+                : c,
+            ),
+            ajustementsCompteZone: [
+              {
+                id: uid(),
+                compteZoneId: compte.id,
+                zoneId,
+                date: maintenant(),
+                type,
+                montant,
+                motif: motif.trim(),
+                adminId: employeConnecte!.id,
+                adminNom: employeConnecte!.nomComplet,
+                cumulAvant,
+                cumulApres,
+              },
+              ...d.ajustementsCompteZone,
+            ],
+          }
+        })
+        return erreur
       },
 
       // ---------- Clients ----------

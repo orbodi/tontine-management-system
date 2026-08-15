@@ -5,6 +5,7 @@ import {
   type Agence,
   type AppData,
   type Client,
+  type CompteZoneTontine,
   type Employe,
   type StatutCredit,
   type Transaction,
@@ -69,6 +70,13 @@ export function genererDonneesDemo(): AppData {
     actif: true,
   }
   const zones = [zonePlateauNord, zonePlateauSud, zoneYopCentre, zoneYopSideci]
+  const comptesZoneTontine: CompteZoneTontine[] = zones.map((z) => ({
+    id: uid(),
+    zoneId: z.id,
+    cumulManquant: 0,
+    cumulSurplus: 0,
+    actif: true,
+  }))
 
   const adminId = uid()
   const chefId = uid()
@@ -192,6 +200,9 @@ export function genererDonneesDemo(): AppData {
   const data: AppData = {
     agences: [agencePlateau, agenceYopougon],
     zones,
+    comptesZoneTontine,
+    journeesCompteZone: [],
+    ajustementsCompteZone: [],
     employes,
     clients,
     carnets: [],

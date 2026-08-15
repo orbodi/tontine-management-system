@@ -7,17 +7,27 @@ import {
   PRIX_CARNET,
   type FrequenceMise,
   type TypeCarnet,
+  type TypeTransaction,
 } from '../types'
 import {
   CARNETS_RETRAIT_6_MOIS,
   LIBELLES_CARNET,
+  LIBELLES_TYPE,
+  TYPES_SORTIE,
   carreauxNets,
   moisDuCycle,
   situationsCycles,
 } from '../metier'
-import { formatMontant, numeroCarnet } from '../utils'
+import { formatDateHeure, formatMontant, numeroCarnet } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
+
+const TYPES_TX_CARNET: TypeTransaction[] = [
+  'vente_carnet',
+  'mise_tontine',
+  'retrait_tontine',
+  'commission_tontine',
+]
 
 const LIBELLES_FREQUENCE: Record<FrequenceMise, string> = {
   journaliere: 'Journalière',
@@ -45,6 +55,7 @@ export default function Tontines() {
   const { alerter } = useConfirmation()
   const [recherche, setRecherche] = useState('')
   const [typeFiltre, setTypeFiltre] = useState<'tous' | TypeCarnet>('tous')
+  const [carnetSelectionneId, setCarnetSelectionneId] = useState<string | null>(null)
   const [modaleOuverture, setModaleOuverture] = useState(false)
   const [agenceChoisie, setAgenceChoisie] = useState('')
   const [zoneChoisie, setZoneChoisie] = useState('')
@@ -131,6 +142,32 @@ export default function Tontines() {
       })
       .sort((a, b) => a.numero.localeCompare(b.numero))
   }, [data.carnets, data.clients, data.zones, data.agences, recherche, typeFiltre])
+
+  const carnetSelectionne = carnetSelectionneId
+    ? data.carnets.find((c) => c.id === carnetSelectionneId)
+    : undefined
+  const clientSelectionneCarnet = carnetSelectionne
+    ? data.clients.find((c) => c.id === carnetSelectionne.clientId)
+    : undefined
+
+  const historiqueSelectionne = useMemo(() => {
+    if (!carnetSelectionne) return []
+    const numero = carnetSelectionne.numero
+    const datesMises = new Set(
+      data.mises.filter((m) => m.carnetId === carnetSelectionne.id).map((m) => m.date),
+    )
+    return [...data.transactions]
+      .filter((t) => {
+        if (t.clientId !== carnetSelectionne.clientId) return false
+        if (!TYPES_TX_CARNET.includes(t.type)) return false
+        if (t.type === 'vente_carnet' || t.type === 'retrait_tontine') {
+          return t.description.includes(numero)
+        }
+        // Dépôts / P.C : liés au carnet via la date des mises
+        return datesMises.has(t.date)
+      })
+      .sort((a, b) => b.date.localeCompare(a.date))
+  }, [carnetSelectionne, data.transactions, data.mises])
 
   const encoursTotal = data.carnets
     .filter((c) => c.actif)
@@ -244,13 +281,24 @@ export default function Tontines() {
             const mois = moisDuCycle(carnet, carnet.cycleActuel)
             const passés = cycles.filter((c) => !c.estActuel)
             const dispo = cycles.reduce((s, c) => s + c.montantRetirable, 0)
+            const selectionne = carnetSelectionneId === carnet.id
             return (
-              <Link
+              <div
                 key={carnet.id}
-                to={`/tontines/${carnet.id}`}
-                className={`card group flex items-center gap-3 transition hover:shadow-md hover:ring-2 hover:ring-brand-200 ${
+                role="button"
+                tabIndex={0}
+                onClick={() =>
+                  setCarnetSelectionneId((id) => (id === carnet.id ? null : carnet.id))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setCarnetSelectionneId((id) => (id === carnet.id ? null : carnet.id))
+                  }
+                }}
+                className={`card group flex cursor-pointer items-center gap-3 transition hover:shadow-md hover:ring-2 hover:ring-brand-200 ${
                   carnet.verrouille ? 'opacity-90 ring-2 ring-rose-200' : ''
-                }`}
+                } ${selectionne ? 'ring-2 ring-brand-500 shadow-md' : ''}`}
               >
                 <Avatar nom={client.nom} prenom={client.prenom} taille="lg" />
                 <div className="min-w-0 flex-1">
@@ -300,10 +348,65 @@ export default function Tontines() {
                     </p>
                   )}
                 </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-slate-300 transition group-hover:text-brand-600" />
-              </Link>
+                <Link
+                  to={`/tontines/${carnet.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="shrink-0 rounded-lg p-1.5 text-slate-300 transition hover:bg-brand-50 hover:text-brand-600"
+                  title="Ouvrir le détail"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </Link>
+              </div>
             )
           })}
+        </div>
+      )}
+
+      {carnetSelectionne && clientSelectionneCarnet && (
+        <div className="card mt-6 !p-0 overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+            <div>
+              <h3 className="font-semibold text-slate-900">Historique des transactions</h3>
+              <p className="text-xs text-slate-500">
+                {clientSelectionneCarnet.prenom} {clientSelectionneCarnet.nom} — carnet{' '}
+                <span className="font-mono font-semibold text-brand-700">{carnetSelectionne.numero}</span>
+              </p>
+            </div>
+            <Link
+              to={`/tontines/${carnetSelectionne.id}`}
+              className="btn-secondary !py-2 text-xs"
+            >
+              Ouvrir le détail
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          {historiqueSelectionne.length === 0 ? (
+            <div className="p-5">
+              <EtatVide titre="Aucune transaction" description="Pas encore d’opération sur ce carnet." />
+            </div>
+          ) : (
+            <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
+              {historiqueSelectionne.map((t) => {
+                const sortie = TYPES_SORTIE.includes(t.type)
+                return (
+                  <div key={t.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-800">{t.description}</p>
+                      <p className="text-xs text-slate-500">
+                        {LIBELLES_TYPE[t.type]} — {formatDateHeure(t.date)} — par {t.operateur}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 font-bold ${sortie ? 'text-rose-600' : 'text-emerald-600'}`}
+                    >
+                      {sortie ? '−' : '+'}
+                      {formatMontant(t.montant)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 

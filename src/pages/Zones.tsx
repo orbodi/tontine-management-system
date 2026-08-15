@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, MapPinned, Plus } from 'lucide-react'
+import { ArrowLeft, MapPinned, Plus, Scale, Users } from 'lucide-react'
 import { useStore } from '../store'
-import { EnTetePage, EtatVide, Modale } from '../components/ui'
-import { pad2 } from '../utils'
+import { compteZoneDe } from '../metier'
+import { EnTetePage, EtatVide, Modale, Avatar } from '../components/ui'
+import { formatMontant, numeroCarnet, pad2 } from '../utils'
+import type { Zone } from '../types'
 
 export default function Zones() {
   const [searchParams] = useSearchParams()
@@ -15,6 +17,7 @@ export default function Zones() {
   const [code, setCode] = useState('')
   const [nom, setNom] = useState('')
   const [erreur, setErreur] = useState('')
+  const [zoneClients, setZoneClients] = useState<Zone | null>(null)
 
   const agenceFiltre = data.agences.find((a) => a.id === filtreAgenceId)
 
@@ -81,6 +84,13 @@ export default function Zones() {
     return [...liste].sort((a, b) => a.code.localeCompare(b.code))
   }, [data.zones, filtreAgenceId])
 
+  const clientsDeLaZone = useMemo(() => {
+    if (!zoneClients) return []
+    return data.clients
+      .filter((c) => c.zoneId === zoneClients.id)
+      .sort((a, b) => a.ordreZone - b.ordreZone)
+  }, [data.clients, zoneClients])
+
   return (
     <div>
       {agenceFiltre && (
@@ -122,6 +132,7 @@ export default function Zones() {
           {zonesTriees.map((z) => {
             const agence = data.agences.find((a) => a.id === z.agenceId)
             const nbClients = data.clients.filter((c) => c.zoneId === z.id).length
+            const compte = compteZoneDe(data.comptesZoneTontine, z.id)
             return (
               <div key={z.id} className="card">
                 <div className="flex items-start gap-3">
@@ -146,9 +157,26 @@ export default function Zones() {
                     <p className="mt-1 text-xs text-slate-500">
                       {nbClients} client{nbClients > 1 ? 's' : ''} — carnets {z.code}xxxx
                     </p>
+                    {compte && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        Compte zone — M {formatMontant(compte.cumulManquant)} · S{' '}
+                        {formatMontant(compte.cumulSurplus)}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <div className="mt-4 flex gap-2">
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link to={`/zones/${z.id}/compte`} className="btn-primary !py-2 text-xs">
+                    <Scale className="h-3.5 w-3.5" />
+                    Compte zone tontine
+                  </Link>
+                  <button
+                    className="btn-secondary !py-2 text-xs"
+                    onClick={() => setZoneClients(z)}
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    Clients ({nbClients})
+                  </button>
                   <button className="btn-secondary !py-2 text-xs" onClick={() => ouvrirEdition(z.id)}>
                     Modifier
                   </button>
@@ -161,6 +189,43 @@ export default function Zones() {
           })}
         </div>
       )}
+
+      <Modale
+        titre={
+          zoneClients
+            ? `Clients — zone ${zoneClients.code}${zoneClients.nom ? ` (${zoneClients.nom})` : ''}`
+            : 'Clients de la zone'
+        }
+        ouverte={!!zoneClients}
+        onFermer={() => setZoneClients(null)}
+      >
+        {clientsDeLaZone.length === 0 ? (
+          <EtatVide titre="Aucun client" description="Cette zone n’a pas encore de client." />
+        ) : (
+          <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
+            {clientsDeLaZone.map((c) => (
+              <Link
+                key={c.id}
+                to={`/clients/${c.id}`}
+                onClick={() => setZoneClients(null)}
+                className="flex items-center gap-3 py-3 transition hover:bg-slate-50"
+              >
+                <Avatar nom={c.nom} prenom={c.prenom} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-slate-900">
+                    {c.prenom} {c.nom}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {c.codeClient} · carnet {numeroCarnet(zoneClients!.code, c.ordreZone)}
+                    {!c.actif ? ' · inactif' : ''}
+                  </p>
+                </div>
+                <span className="text-xs text-brand-600">Voir</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </Modale>
 
       <Modale
         titre={editionId ? 'Modifier la zone' : 'Nouvelle zone'}

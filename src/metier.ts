@@ -2,9 +2,13 @@ import {
   MOIS_MIN_RETRAIT_CARTE,
   type ArretCaisse,
   type CarnetTontine,
+  type Client,
+  type CompteZoneTontine,
   type Credit,
+  type JourneeCompteZone,
   type MiseTontine,
   type Remboursement,
+  type StatutJourneeZone,
   type Transaction,
   type TypeCarnet,
   type TypeTransaction,
@@ -270,6 +274,47 @@ export function etatJournalierCaisse(
     parType.set(t.type, ligne)
   })
   return { duJour, entrees, sorties, parType }
+}
+
+// ---------- Compte zone tontine ----------
+
+/** Dépôts tontine (mises + P.C) d'une zone pour un jour YYYY-MM-DD. */
+export function depotsTontineZoneJour(
+  zoneId: string,
+  dateIso: string,
+  clients: Client[],
+  transactions: Transaction[],
+): number {
+  const clientIds = new Set(clients.filter((c) => c.zoneId === zoneId).map((c) => c.id))
+  return transactions
+    .filter(
+      (t) =>
+        (t.type === 'mise_tontine' || t.type === 'commission_tontine') &&
+        clientIds.has(t.clientId) &&
+        t.date.slice(0, 10) === dateIso,
+    )
+    .reduce((s, t) => s + t.montant, 0)
+}
+
+export function statutDepuisEcart(ecart: number): StatutJourneeZone {
+  if (ecart === 0) return 'ok'
+  if (ecart < 0) return 'manquant'
+  return 'surplus'
+}
+
+export function journeeZoneDuJour(
+  journees: JourneeCompteZone[],
+  zoneId: string,
+  dateIso: string,
+): JourneeCompteZone | undefined {
+  return journees.find((j) => j.zoneId === zoneId && j.date === dateIso)
+}
+
+export function compteZoneDe(
+  comptes: CompteZoneTontine[],
+  zoneId: string,
+): CompteZoneTontine | undefined {
+  return comptes.find((c) => c.zoneId === zoneId)
 }
 
 // ---------- Crédits ----------

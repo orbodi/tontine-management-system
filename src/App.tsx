@@ -16,6 +16,7 @@ import Rapports from './pages/Rapports'
 import Employes from './pages/Employes'
 import Agences from './pages/Agences'
 import Zones from './pages/Zones'
+import CompteZoneTontinePage from './pages/CompteZoneTontine'
 import Audit from './pages/Audit'
 
 export default function App() {
@@ -38,6 +39,9 @@ export default function App() {
         {aDroit('voir_rapports') && <Route path="/rapports" element={<Rapports />} />}
         {estAdmin && <Route path="/agences" element={<Agences />} />}
         {aDroit('gerer_zones') && <Route path="/zones" element={<Zones />} />}
+        {(aDroit('gerer_zones') || aDroit('operer_comptes')) && (
+          <Route path="/zones/:zoneId/compte" element={<CompteZoneTontinePage />} />
+        )}
         {estAdmin && <Route path="/employes" element={<Employes />} />}
         {estAdmin && <Route path="/audit" element={<Audit />} />}
         <Route path="*" element={<Navigate to="/" replace />} />

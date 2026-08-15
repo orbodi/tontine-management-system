@@ -24,6 +24,63 @@ export interface Zone {
   actif: boolean
 }
 
+/**
+ * Compte zone lié uniquement aux dépôts tontine de la zone.
+ * Les cumuls manquant / surplus sont uniques (toutes dates confondues).
+ */
+export interface CompteZoneTontine {
+  id: string
+  zoneId: string
+  /** Cumul unique toutes dates — alimenté à chaque clôture journalière. */
+  cumulManquant: number
+  /** Cumul unique toutes dates — alimenté à chaque clôture journalière. */
+  cumulSurplus: number
+  actif: boolean
+}
+
+export type StatutJourneeZone = 'en_cours' | 'ok' | 'manquant' | 'surplus'
+
+/**
+ * État journalier du compte zone.
+ * Flux : 1) saisie montant réel 2) dépôts tontine clients 3) clôture / calcul écart.
+ */
+export interface JourneeCompteZone {
+  id: string
+  compteZoneId: string
+  zoneId: string
+  /** Jour calendaire YYYY-MM-DD */
+  date: string
+  /** Montant réel collecté (saisi en premier par le caissier). */
+  montantReel: number
+  /** Σ dépôts tontine saisis ce jour (calculé à la clôture). */
+  montantTheorique: number
+  /** réel − théorique */
+  ecart: number
+  statut: StatutJourneeZone
+  cloturee: boolean
+  dateSaisieReel: string
+  dateCloture?: string
+  operateurId: string
+  operateurNom: string
+  note?: string
+}
+
+/** Correction admin des cumuls (manquant ou surplus). */
+export interface AjustementCompteZone {
+  id: string
+  compteZoneId: string
+  zoneId: string
+  date: string
+  type: 'manquant' | 'surplus'
+  /** Montant retiré du cumul (positif). */
+  montant: number
+  motif: string
+  adminId: string
+  adminNom: string
+  cumulAvant: number
+  cumulApres: number
+}
+
 // ---------- Employés, rôles et droits ----------
 
 export type Role = 'admin' | 'chef_agence' | 'caissier'
@@ -231,6 +288,9 @@ export interface Transaction {
 export interface AppData {
   agences: Agence[]
   zones: Zone[]
+  comptesZoneTontine: CompteZoneTontine[]
+  journeesCompteZone: JourneeCompteZone[]
+  ajustementsCompteZone: AjustementCompteZone[]
   employes: Employe[]
   clients: Client[]
   carnets: CarnetTontine[]
