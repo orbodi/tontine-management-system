@@ -46,7 +46,7 @@ export default function Comptes() {
   const [montantOp, setMontantOp] = useState('')
   const [noteOp, setNoteOp] = useState('')
   const [erreur, setErreur] = useState('')
-  const { confirmer } = useConfirmation()
+  const { confirmer, alerter } = useConfirmation()
 
   const peutOperer = aDroit('operer_comptes')
   const peutVerrouiller = aDroit('verrouiller_comptes')
@@ -74,23 +74,33 @@ export default function Comptes() {
   const totalCourant = data.comptes.filter((c) => c.type === 'courant').reduce((s, c) => s + c.solde, 0)
   const totalEpargne = data.comptes.filter((c) => c.type === 'epargne').reduce((s, c) => s + c.solde, 0)
 
-  const validerOperation = (e: React.FormEvent) => {
+  const validerOperation = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!operation) return
+    const { compte, type } = operation
     const montant = Number(montantOp)
     const note = noteOp.trim() || undefined
+    const client = clientDuCompte(compte)
     const resultat =
-      operation.type === 'depot'
-        ? deposerCompte(operation.compte.id, montant, note)
-        : retirerCompte(operation.compte.id, montant, note)
-    if (resultat) {
-      setErreur(resultat)
-      return
-    }
+      type === 'depot' ? deposerCompte(compte.id, montant, note) : retirerCompte(compte.id, montant, note)
+
     setOperation(null)
     setMontantOp('')
     setNoteOp('')
     setErreur('')
+
+    if (resultat) {
+      await alerter(type === 'depot' ? 'Dépôt échoué' : 'Retrait échoué', resultat)
+      return
+    }
+
+    const typeCompte = LIBELLES_COMPTE[compte.type].toLowerCase()
+    await alerter(
+      type === 'depot' ? 'Dépôt effectué' : 'Retrait effectué',
+      `Le ${type === 'depot' ? 'dépôt' : 'retrait'} de ${formatMontant(montant)} a été enregistré avec succès` +
+        (client ? ` pour ${client.prenom} ${client.nom}` : '') +
+        ` (${typeCompte} ${compte.numero}).`,
+    )
   }
 
   const derniersMouvements = (compteId: string) =>
