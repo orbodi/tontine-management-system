@@ -8,6 +8,7 @@ import {
   type ArretCaisse,
   type CarnetTontine,
   type Client,
+  type CompteCaisse,
   type CompteZoneTontine,
   type Credit,
   type Droit,
@@ -16,6 +17,7 @@ import {
   type JourneeCompteZone,
   type MiseTontine,
   type MouvementCompte,
+  type MouvementCompteCaisse,
   type Remboursement,
   type Role,
   type Transaction,
@@ -28,9 +30,12 @@ import {
   carreauxNets,
   carreauxRetirables,
   CARNETS_RETRAIT_6_MOIS,
+  compteCaisseDe,
   compteZoneDe,
+  deltaSoldeOperationCaisse,
   depotsTontineZoneJour,
   eligibiliteRetraitCarnet,
+  estOperationCaisse,
   journeesCaisseEnRetard,
   messageBlocageCaisseJournaliere,
   arretCaisseDuJour,
@@ -39,10 +44,10 @@ import {
   statutDepuisEcart,
 } from './metier'
 import { genererDonneesDemo } from './demo-data'
-import { numeroCarnet, numeroClient, numeroCompteSolde, pad4, uid } from './utils'
+import { numeroCarnet, numeroClient, numeroCompteCaisse, numeroCompteSolde, pad4, uid } from './utils'
 
-const STORAGE_KEY = 'microfinance-data-v15'
-const SESSION_KEY = 'microfinance-session-v15'
+const STORAGE_KEY = 'microfinance-data-v18'
+const SESSION_KEY = 'microfinance-session-v18'
 
 export const LIBELLES_ROLE: Record<Role, string> = {
   admin: 'Administrateur',
@@ -139,23 +144,100 @@ interface StoreApi {
     /** Caisse du caissier à arrêter (obligatoire pour admin/chef). */
     cibleEmployeId?: string,
   ) => string | null
+  /** Alimentation du compte caisse (admin / chef d'agence). */
+  alimenterCompteCaisse: (employeId: string, montant: number, note?: string) => string | null
   reinitialiserDemo: () => void
 }
 
 const StoreContext = createContext<StoreApi | null>(null)
 
+function employeACompteCaisse(role: Role): boolean {
+  return role === 'caissier' || role === 'chef_agence'
+}
+
+function ouvrirCompteCaisseSiBesoin(d: AppData, employeId: string): AppData {
+  if (compteCaisseDe(d.comptesCaisse, employeId)) return d
+  const emp = d.employes.find((e) => e.id === employeId)
+  if (!emp || !employeACompteCaisse(emp.role)) return d
+  const ordre = (d.compteurs.compteCaisse ?? 0) + 1
+  const compte: CompteCaisse = {
+    id: uid(),
+    employeId,
+    agenceId: emp.agenceId,
+    numero: numeroCompteCaisse(ordre),
+    solde: 0,
+    dateOuverture: new Date().toISOString(),
+    actif: true,
+  }
+  return {
+    ...d,
+    comptesCaisse: [...d.comptesCaisse, compte],
+    compteurs: { ...d.compteurs, compteCaisse: ordre },
+  }
+}
+
+/** Applique une opération caisse au solde du compte de l'opérateur. */
+function appliquerTxCompteCaisse(d: AppData, tx: Transaction): AppData {
+  if (!estOperationCaisse(tx.type) || !tx.operateurId) return d
+  const next = ouvrirCompteCaisseSiBesoin(d, tx.operateurId)
+  const compte = compteCaisseDe(next.comptesCaisse, tx.operateurId)
+  if (!compte) return next
+  const delta = deltaSoldeOperationCaisse(tx.type, tx.montant)
+  if (delta === 0) return next
+  const soldeApres = compte.solde + delta
+  const mouvement: MouvementCompteCaisse = {
+    id: uid(),
+    compteCaisseId: compte.id,
+    employeId: tx.operateurId,
+    type: delta > 0 ? 'entree_operation' : 'sortie_operation',
+    montant: Math.abs(delta),
+    sens: delta > 0 ? 'credit' : 'debit',
+    soldeApres,
+    date: tx.date,
+    description: tx.description,
+    transactionId: tx.id,
+    operateurId: tx.operateurId,
+    operateurNom: tx.operateur,
+  }
+  return {
+    ...next,
+    comptesCaisse: next.comptesCaisse.map((c) =>
+      c.id === compte.id ? { ...c, solde: soldeApres } : c,
+    ),
+    mouvementsCompteCaisse: [mouvement, ...next.mouvementsCompteCaisse],
+  }
+}
+
+function enregistrerTransactions(d: AppData, nouvelles: Transaction[]): AppData {
+  const apres = nouvelles.reduce((acc, tx) => appliquerTxCompteCaisse(acc, tx), d)
+  return { ...apres, transactions: [...nouvelles, ...d.transactions] }
+}
+
 function normaliserAppData(brut: AppData): AppData {
-  const d = {
+  let d: AppData = {
     ...brut,
     comptesZoneTontine: brut.comptesZoneTontine ?? [],
     journeesCompteZone: brut.journeesCompteZone ?? [],
     ajustementsCompteZone: brut.ajustementsCompteZone ?? [],
-    arretsCaisse: (brut.arretsCaisse ?? []).map((a) => ({
-      ...a,
-      journee: a.journee ?? a.date.slice(0, 10),
-    })),
+    comptesCaisse: brut.comptesCaisse ?? [],
+    mouvementsCompteCaisse: brut.mouvementsCompteCaisse ?? [],
+    compteurs: {
+      client: brut.compteurs?.client ?? 0,
+      compte: brut.compteurs?.compte ?? 0,
+      credit: brut.compteurs?.credit ?? 0,
+      compteCaisse: brut.compteurs?.compteCaisse ?? 0,
+    },
+    arretsCaisse: (brut.arretsCaisse ?? []).map((a) => {
+      const dateCloture = a.dateCloture ?? a.date ?? new Date().toISOString()
+      return {
+        ...a,
+        journee: a.journee ?? dateCloture.slice(0, 10),
+        dateCloture,
+        date: dateCloture,
+      }
+    }),
   }
-  const manquants: CompteZoneTontine[] = d.zones
+  const manquantsZone: CompteZoneTontine[] = d.zones
     .filter((z) => !d.comptesZoneTontine.some((c) => c.zoneId === z.id))
     .map((z) => ({
       id: uid(),
@@ -164,8 +246,15 @@ function normaliserAppData(brut: AppData): AppData {
       cumulSurplus: 0,
       actif: true,
     }))
-  if (manquants.length === 0) return d
-  return { ...d, comptesZoneTontine: [...d.comptesZoneTontine, ...manquants] }
+  if (manquantsZone.length > 0) {
+    d = { ...d, comptesZoneTontine: [...d.comptesZoneTontine, ...manquantsZone] }
+  }
+  for (const emp of d.employes) {
+    if (emp.actif && employeACompteCaisse(emp.role)) {
+      d = ouvrirCompteCaisseSiBesoin(d, emp.id)
+    }
+  }
+  return d
 }
 
 function chargerDonnees(): AppData {
@@ -637,38 +726,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           const id = uid()
           resultat = { id, numero }
-          return {
-            ...d,
-            carnets: [
-              ...d.carnets,
-              {
-                id,
-                clientId,
-                numero,
-                zoneId: zone.id,
-                agenceId: zone.agenceId,
-                typeCarnet,
-                mise,
-                frequence,
-                misesParCycle: CARREAUX_PAR_CYCLE,
-                cycleActuel: 1,
-                dateOuverture: date,
-                verrouille: false,
-                retraitActiveParAdmin: !CARNETS_RETRAIT_6_MOIS.includes(typeCarnet),
-                actif: true,
-              },
-            ],
-            transactions: [
-              transaction({
-                type: 'vente_carnet',
-                clientId,
-                montant: PRIX_CARNET,
-                date,
-                description: `Vente du carnet ${numero} — ${nomClient(d, clientId)} (cycle 1/12)`,
-              }),
-              ...d.transactions,
-            ],
-          }
+          const txVente = transaction({
+            type: 'vente_carnet',
+            clientId,
+            montant: PRIX_CARNET,
+            date,
+            description: `Vente du carnet ${numero} — ${nomClient(d, clientId)} (cycle 1/12)`,
+          })
+          return enregistrerTransactions(
+            {
+              ...d,
+              carnets: [
+                ...d.carnets,
+                {
+                  id,
+                  clientId,
+                  numero,
+                  zoneId: zone.id,
+                  agenceId: zone.agenceId,
+                  typeCarnet,
+                  mise,
+                  frequence,
+                  misesParCycle: CARREAUX_PAR_CYCLE,
+                  cycleActuel: 1,
+                  dateOuverture: date,
+                  verrouille: false,
+                  retraitActiveParAdmin: !CARNETS_RETRAIT_6_MOIS.includes(typeCarnet),
+                  actif: true,
+                },
+              ],
+            },
+            [txVente],
+          )
         })
         return resultat
       },
@@ -783,12 +872,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          return {
-            ...d,
-            carnets,
-            mises: [...d.mises, miseEntree],
-            transactions: [...nouvelles, ...d.transactions],
-          }
+          return enregistrerTransactions(
+            {
+              ...d,
+              carnets,
+              mises: [...d.mises, miseEntree],
+            },
+            nouvelles,
+          )
         })
         return erreur
       },
@@ -836,20 +927,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             date,
           }
           const total = nombreCarreaux === disponibles
-          return {
-            ...d,
-            mises: [...d.mises, retrait],
-            transactions: [
-              transaction({
-                type: 'retrait_tontine',
-                clientId: carnet.clientId,
-                montant,
-                date,
-                description: `Retrait ${total ? 'total' : 'partiel'} ×${nombreCarreaux} — cycle ${cycle} — ${nomClient(d, carnet.clientId)} (carnet ${carnet.numero})`,
-              }),
-              ...d.transactions,
-            ],
-          }
+          const txRetrait = transaction({
+            type: 'retrait_tontine',
+            clientId: carnet.clientId,
+            montant,
+            date,
+            description: `Retrait ${total ? 'total' : 'partiel'} ×${nombreCarreaux} — cycle ${cycle} — ${nomClient(d, carnet.clientId)} (carnet ${carnet.numero})`,
+          })
+          return enregistrerTransactions(
+            {
+              ...d,
+              mises: [...d.mises, retrait],
+            },
+            [txRetrait],
+          )
         })
         return erreur
       },
@@ -933,21 +1024,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           const date = maintenant()
           const mouvement: MouvementCompte = { id: uid(), compteId, type: 'depot', montant, date, note }
-          return {
-            ...d,
-            comptes: d.comptes.map((c) => (c.id === compteId ? { ...c, solde: c.solde + montant } : c)),
-            mouvements: [...d.mouvements, mouvement],
-            transactions: [
-              transaction({
-                type: 'depot_compte',
-                clientId: compte.clientId,
-                montant,
-                date,
-                description: `Dépôt ${compte.numero} — ${nomClient(d, compte.clientId)}${note ? ` (${note})` : ''}`,
-              }),
-              ...d.transactions,
-            ],
-          }
+          const txDepot = transaction({
+            type: 'depot_compte',
+            clientId: compte.clientId,
+            montant,
+            date,
+            description: `Dépôt ${compte.numero} — ${nomClient(d, compte.clientId)}${note ? ` (${note})` : ''}`,
+          })
+          return enregistrerTransactions(
+            {
+              ...d,
+              comptes: d.comptes.map((c) => (c.id === compteId ? { ...c, solde: c.solde + montant } : c)),
+              mouvements: [...d.mouvements, mouvement],
+            },
+            [txDepot],
+          )
         })
         return erreur
       },
@@ -970,21 +1061,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           const date = maintenant()
           const mouvement: MouvementCompte = { id: uid(), compteId, type: 'retrait', montant, date, note }
-          return {
-            ...d,
-            comptes: d.comptes.map((c) => (c.id === compteId ? { ...c, solde: c.solde - montant } : c)),
-            mouvements: [...d.mouvements, mouvement],
-            transactions: [
-              transaction({
-                type: 'retrait_compte',
-                clientId: compte.clientId,
-                montant,
-                date,
-                description: `Retrait ${compte.numero} — ${nomClient(d, compte.clientId)}${note ? ` (${note})` : ''}`,
-              }),
-              ...d.transactions,
-            ],
-          }
+          const txRetrait = transaction({
+            type: 'retrait_compte',
+            clientId: compte.clientId,
+            montant,
+            date,
+            description: `Retrait ${compte.numero} — ${nomClient(d, compte.clientId)}${note ? ` (${note})` : ''}`,
+          })
+          return enregistrerTransactions(
+            {
+              ...d,
+              comptes: d.comptes.map((c) => (c.id === compteId ? { ...c, solde: c.solde - montant } : c)),
+              mouvements: [...d.mouvements, mouvement],
+            },
+            [txRetrait],
+          )
         })
         return erreur
       },
@@ -1021,22 +1112,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const credit = d.credits.find((c) => c.id === creditId)
           if (!credit || credit.statut !== 'en_attente') return d
           const date = maintenant()
-          return {
-            ...d,
-            credits: d.credits.map((c) =>
-              c.id === creditId ? { ...c, statut: 'en_cours' as const, dateOctroi: date } : c,
-            ),
-            transactions: [
-              transaction({
-                type: 'octroi_credit',
-                clientId: credit.clientId,
-                montant: credit.montant,
-                date,
-                description: `Octroi crédit ${credit.numero} — ${nomClient(d, credit.clientId)}`,
-              }),
-              ...d.transactions,
-            ],
-          }
+          const txOctroi = transaction({
+            type: 'octroi_credit',
+            clientId: credit.clientId,
+            montant: credit.montant,
+            date,
+            description: `Octroi crédit ${credit.numero} — ${nomClient(d, credit.clientId)}`,
+          })
+          return enregistrerTransactions(
+            {
+              ...d,
+              credits: d.credits.map((c) =>
+                c.id === creditId ? { ...c, statut: 'en_cours' as const, dateOctroi: date } : c,
+              ),
+            },
+            [txOctroi],
+          )
         })
       },
 
@@ -1061,23 +1152,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             .filter((r) => r.creditId === creditId)
             .reduce((s, r) => s + r.montant, 0)
           const soldeApres = totalDu - dejaPaye - montant
-          return {
-            ...d,
-            remboursements: [...d.remboursements, remboursement],
-            credits: d.credits.map((c) =>
-              c.id === creditId && soldeApres <= 0.5 ? { ...c, statut: 'rembourse' as const } : c,
-            ),
-            transactions: [
-              transaction({
-                type: 'remboursement_credit',
-                clientId: credit.clientId,
-                montant,
-                date,
-                description: `Remboursement ${credit.numero} — ${nomClient(d, credit.clientId)}`,
-              }),
-              ...d.transactions,
-            ],
-          }
+          const txRemb = transaction({
+            type: 'remboursement_credit',
+            clientId: credit.clientId,
+            montant,
+            date,
+            description: `Remboursement ${credit.numero} — ${nomClient(d, credit.clientId)}`,
+          })
+          return enregistrerTransactions(
+            {
+              ...d,
+              remboursements: [...d.remboursements, remboursement],
+              credits: d.credits.map((c) =>
+                c.id === creditId && soldeApres <= 0.5 ? { ...c, statut: 'rembourse' as const } : c,
+              ),
+            },
+            [txRemb],
+          )
         })
       },
 
@@ -1085,10 +1176,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       ajouterEmploye(e) {
         if (data.employes.some((x) => x.identifiant === e.identifiant)) return false
-        setData((d) => ({
-          ...d,
-          employes: [...d.employes, { ...e, id: uid(), actif: true, dateEmbauche: maintenant() }],
-        }))
+        setData((d) => {
+          const nouvel: Employe = { ...e, id: uid(), actif: true, dateEmbauche: maintenant() }
+          let next = { ...d, employes: [...d.employes, nouvel] }
+          if (employeACompteCaisse(nouvel.role)) {
+            next = ouvrirCompteCaisseSiBesoin(next, nouvel.id)
+          }
+          return next
+        })
         return true
       },
 
@@ -1112,6 +1207,61 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...d,
           employes: d.employes.map((u) => (u.id === id ? { ...u, actif: !u.actif } : u)),
         }))
+      },
+
+      alimenterCompteCaisse(employeId, montant, note) {
+        if (!employeConnecte) return 'Non connecté.'
+        if (!estAdmin && !estChefAgence) {
+          return 'Seul l’administrateur ou le chef d’agence peut alimenter un compte caisse.'
+        }
+        if (montant <= 0) return 'Montant invalide.'
+        let erreur: string | null = null
+        setData((d) => {
+          const cible = d.employes.find((e) => e.id === employeId && e.actif)
+          if (!cible) {
+            erreur = 'Employé introuvable.'
+            return d
+          }
+          if (!employeACompteCaisse(cible.role)) {
+            erreur = 'Cet employé n’a pas de compte caisse.'
+            return d
+          }
+          if (estChefAgence && cible.agenceId !== employeConnecte.agenceId) {
+            erreur = 'Vous ne pouvez alimenter que les caisses de votre agence.'
+            return d
+          }
+          let next = ouvrirCompteCaisseSiBesoin(d, cible.id)
+          const compte = compteCaisseDe(next.comptesCaisse, cible.id)
+          if (!compte) {
+            erreur = 'Compte caisse introuvable.'
+            return d
+          }
+          const date = maintenant()
+          const soldeApres = compte.solde + montant
+          const mouvement: MouvementCompteCaisse = {
+            id: uid(),
+            compteCaisseId: compte.id,
+            employeId: cible.id,
+            type: 'alimentation',
+            montant,
+            sens: 'credit',
+            soldeApres,
+            date,
+            description: note?.trim()
+              ? `Alimentation — ${note.trim()}`
+              : `Alimentation du compte caisse ${compte.numero}`,
+            operateurId: employeConnecte.id,
+            operateurNom: employeConnecte.nomComplet,
+          }
+          return {
+            ...next,
+            comptesCaisse: next.comptesCaisse.map((c) =>
+              c.id === compte.id ? { ...c, solde: soldeApres } : c,
+            ),
+            mouvementsCompteCaisse: [mouvement, ...next.mouvementsCompteCaisse],
+          }
+        })
+        return erreur
       },
 
       arreterCaisse(montantCompte, note, journee, cibleEmployeId) {
@@ -1153,13 +1303,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
           const sit = situationCaisse(cible.id, d.transactions, d.arretsCaisse, jour)
           const dates = sit.transactions.map((t) => t.date).sort()
+          const maintenantIso = maintenant()
           const arret: ArretCaisse = {
             id: uid(),
             employeId: cible.id,
             employeNom: cible.nomComplet,
             agenceId: cible.agenceId,
             journee: jour,
-            date: maintenant(),
+            dateCloture: maintenantIso,
+            date: maintenantIso,
             debutPeriode: dates[0] ?? `${jour}T00:00:00.000Z`,
             nombreOperations: sit.nombreOperations,
             totalEntrees: sit.totalEntrees,

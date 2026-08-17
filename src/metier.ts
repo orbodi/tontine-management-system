@@ -3,6 +3,7 @@ import {
   type ArretCaisse,
   type CarnetTontine,
   type Client,
+  type CompteCaisse,
   type CompteZoneTontine,
   type Credit,
   type JourneeCompteZone,
@@ -43,6 +44,19 @@ export const TYPES_OPERATION_CAISSE: TypeTransaction[] = [
 
 export function estOperationCaisse(type: TypeTransaction): boolean {
   return TYPES_OPERATION_CAISSE.includes(type)
+}
+
+export function compteCaisseDe(
+  comptes: CompteCaisse[],
+  employeId: string,
+): CompteCaisse | undefined {
+  return comptes.find((c) => c.employeId === employeId && c.actif)
+}
+
+/** Variation de solde pour une opération caisse (+ entrée, − sortie). */
+export function deltaSoldeOperationCaisse(type: TypeTransaction, montant: number): number {
+  if (!estOperationCaisse(type)) return 0
+  return TYPES_SORTIE.includes(type) ? -montant : montant
 }
 
 // ---------- Carnets ----------
@@ -246,8 +260,19 @@ export function arretCaisseDuJour(
   journee: string,
 ): ArretCaisse | undefined {
   return arretsCaisse.find(
-    (a) => a.employeId === employeId && (a.journee ?? jourIsoDepuisDate(a.date)) === journee,
+    (a) => a.employeId === employeId && (a.journee ?? jourIsoDepuisDate(dateClotureArret(a))) === journee,
   )
+}
+
+/** Horodatage de clôture d'un arrêt (compat anciennes données). */
+export function dateClotureArret(a: ArretCaisse): string {
+  return a.dateCloture ?? a.date ?? a.journee
+}
+
+/** True si la clôture a eu lieu un jour calendaire après la journée arrêtée. */
+export function arretClotureEnRetard(a: ArretCaisse): boolean {
+  const journee = a.journee ?? jourIsoDepuisDate(dateClotureArret(a))
+  return jourIsoDepuisDate(dateClotureArret(a)) > journee
 }
 
 /** Jours (strictement avant `avantJour`) avec ops et sans arrêt, triés du plus ancien. */
@@ -270,7 +295,7 @@ export function journeesCaisseEnRetard(
   const joursArretes = new Set(
     arretsCaisse
       .filter((a) => a.employeId === employeId)
-      .map((a) => a.journee ?? jourIsoDepuisDate(a.date)),
+      .map((a) => a.journee ?? jourIsoDepuisDate(dateClotureArret(a))),
   )
   return [...joursAvecOps].filter((j) => !joursArretes.has(j)).sort()
 }
@@ -300,7 +325,7 @@ export function situationCaisse(
   const dernierArret =
     arretsCaisse
       .filter((a) => a.employeId === employeId)
-      .sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
+      .sort((a, b) => dateClotureArret(b).localeCompare(dateClotureArret(a)))[0] ?? null
 
   const arretDuJour = arretCaisseDuJour(arretsCaisse, employeId, journee) ?? null
 

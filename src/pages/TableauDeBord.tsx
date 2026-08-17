@@ -24,7 +24,7 @@ import {
 } from 'recharts'
 import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
-import { TYPES_SORTIE, LIBELLES_CARNET, situationCredit, situationsCycles } from '../metier'
+import { TYPES_SORTIE, LIBELLES_CARNET, compteCaisseDe, situationCredit, situationsCycles } from '../metier'
 import type { TypeCarnet } from '../types'
 import { formatDate, formatMontant } from '../utils'
 import { EnTetePage } from '../components/ui'
@@ -32,7 +32,28 @@ import { EnTetePage } from '../components/ui'
 const MOIS_COURTS = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'août', 'sep', 'oct', 'nov', 'déc']
 
 export default function TableauDeBord() {
-  const { data, employeConnecte, estCaissier, agenceFiltreOperations } = useStore()
+  const { data, employeConnecte, estCaissier, estAdmin, estChefAgence, agenceFiltreOperations } =
+    useStore()
+
+  const comptesCaisseVisibles = useMemo(() => {
+    let comptes = data.comptesCaisse.filter((c) => c.actif)
+    if (estCaissier && employeConnecte) {
+      comptes = comptes.filter((c) => c.employeId === employeConnecte.id)
+    } else if (agenceFiltreOperations) {
+      comptes = comptes.filter((c) => c.agenceId === agenceFiltreOperations)
+    }
+    return comptes
+  }, [data.comptesCaisse, estCaissier, employeConnecte, agenceFiltreOperations])
+
+  const soldeCompteCaissePerso = useMemo(() => {
+    if (!employeConnecte) return null
+    return compteCaisseDe(data.comptesCaisse, employeConnecte.id)?.solde ?? null
+  }, [data.comptesCaisse, employeConnecte])
+
+  const totalSoldesCaisses = useMemo(
+    () => comptesCaisseVisibles.reduce((s, c) => s + c.solde, 0),
+    [comptesCaisseVisibles],
+  )
 
   const txVisibles = useMemo(() => {
     let tx = data.transactions
@@ -129,7 +150,7 @@ export default function TableauDeBord() {
     let manquant = 0
     let surplus = 0
     arretsVisibles.forEach((a) => {
-      const dt = new Date(a.date)
+      const dt = new Date(a.dateCloture ?? a.date ?? a.journee)
       if (dt.getFullYear() !== annee || dt.getMonth() !== mois) return
       if (a.ecart < 0) manquant += Math.abs(a.ecart)
       else if (a.ecart > 0) surplus += a.ecart
@@ -182,6 +203,27 @@ export default function TableauDeBord() {
   const dernieresTransactions = txVisibles.slice(0, 7)
 
   const cartes = [
+    ...(estCaissier
+      ? [
+          {
+            label: 'Solde de ma caisse',
+            valeur: formatMontant(soldeCompteCaissePerso ?? 0),
+            icone: Scale,
+            couleur: 'bg-brand-100 text-brand-700',
+            lien: '/caisse',
+          },
+        ]
+      : estAdmin || estChefAgence
+        ? [
+            {
+              label: estChefAgence ? 'Soldes caisses (agence)' : 'Soldes caisses',
+              valeur: formatMontant(totalSoldesCaisses),
+              icone: Scale,
+              couleur: 'bg-brand-100 text-brand-700',
+              lien: '/caisse',
+            },
+          ]
+        : []),
     {
       label: 'Clients actifs',
       valeur: String(stats.clientsActifs),
@@ -246,7 +288,11 @@ export default function TableauDeBord() {
         </div>
       )}
 
-      <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${MODULE_CREDITS_ACTIF ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
+      <div
+        className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${
+          cartes.length >= 4 ? 'xl:grid-cols-4' : 'xl:grid-cols-3'
+        }`}
+      >
         {cartes.map((c) => (
           <Link key={c.label} to={c.lien} className="card transition hover:shadow-md">
             <div className="flex items-center gap-4">

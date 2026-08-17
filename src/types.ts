@@ -231,16 +231,52 @@ export interface Remboursement {
 
 // ---------- Caisse ----------
 
+/** Compte de caisse physique d'un caissier (ou chef opérant). */
+export interface CompteCaisse {
+  id: string
+  employeId: string
+  agenceId: string
+  numero: string
+  /** Solde courant (mis à jour automatiquement). */
+  solde: number
+  dateOuverture: string
+  actif: boolean
+}
+
+export type TypeMouvementCaisse = 'alimentation' | 'entree_operation' | 'sortie_operation'
+
+export interface MouvementCompteCaisse {
+  id: string
+  compteCaisseId: string
+  employeId: string
+  type: TypeMouvementCaisse
+  /** Montant toujours positif. */
+  montant: number
+  /** credit = augmente le solde, debit = diminue. */
+  sens: 'credit' | 'debit'
+  soldeApres: number
+  date: string
+  description: string
+  transactionId?: string
+  operateurId: string
+  operateurNom: string
+}
+
 export interface ArretCaisse {
   id: string
   /** Caissier dont la caisse est arrêtée. */
   employeId: string
   employeNom: string
   agenceId: string
-  /** Jour calendaire clôturé YYYY-MM-DD */
+  /** Jour calendaire des opérations clôturées (YYYY-MM-DD). */
   journee: string
-  /** Horodatage de validation de l'arrêt */
-  date: string
+  /**
+   * Date/heure réelle de la clôture.
+   * Peut être postérieure à `journee` en cas d’arrêt en retard.
+   */
+  dateCloture: string
+  /** @deprecated Utiliser dateCloture — conservé pour compatibilité des anciennes données. */
+  date?: string
   debutPeriode: string
   nombreOperations: number
   totalEntrees: number
@@ -307,9 +343,11 @@ export interface AppData {
   credits: Credit[]
   remboursements: Remboursement[]
   transactions: Transaction[]
+  comptesCaisse: CompteCaisse[]
+  mouvementsCompteCaisse: MouvementCompteCaisse[]
   arretsCaisse: ArretCaisse[]
   journalConnexions: JournalConnexion[]
   /** Ordre client par zone (clé = zoneId). */
   compteursOrdreZone: Record<string, number>
-  compteurs: { client: number; compte: number; credit: number }
+  compteurs: { client: number; compte: number; credit: number; compteCaisse: number }
 }

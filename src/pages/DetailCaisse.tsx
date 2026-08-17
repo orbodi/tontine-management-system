@@ -14,6 +14,8 @@ import {
   LIBELLES_TYPE,
   TYPES_SORTIE,
   aujourdHuiIso,
+  compteCaisseDe,
+  dateClotureArret,
   situationCaisse,
   type SituationCaisse,
 } from '../metier'
@@ -53,16 +55,30 @@ export default function DetailCaisse() {
     employeConnecte,
     agenceFiltreOperations,
     arreterCaisse,
+    alimenterCompteCaisse,
   } = useStore()
   const { alerter } = useConfirmation()
   const [dateChoisie, setDateChoisie] = useState(aujourdHuiIso())
   const [modaleArret, setModaleArret] = useState(false)
+  const [modaleAlim, setModaleAlim] = useState(false)
   const [montantCompte, setMontantCompte] = useState('')
+  const [montantAlim, setMontantAlim] = useState('')
+  const [noteAlim, setNoteAlim] = useState('')
   const [noteArret, setNoteArret] = useState('')
 
   const employe = data.employes.find((e) => e.id === employeId)
   const agence = employe ? data.agences.find((a) => a.id === employe.agenceId) : undefined
   const peutArreter = estAdmin || estChefAgence
+  const peutAlimenter = estAdmin || estChefAgence
+
+  const compteCaisse = employe ? compteCaisseDe(data.comptesCaisse, employe.id) : undefined
+
+  const mouvementsCompte = useMemo(() => {
+    if (!compteCaisse) return []
+    return data.mouvementsCompteCaisse
+      .filter((m) => m.compteCaisseId === compteCaisse.id)
+      .slice(0, 12)
+  }, [compteCaisse, data.mouvementsCompteCaisse])
 
   const accesOk =
     !!employe &&
@@ -126,6 +142,24 @@ export default function DetailCaisse() {
     )
   }
 
+  const validerAlimentation = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!employe) return
+    const montant = Number(montantAlim)
+    const err = alimenterCompteCaisse(employe.id, montant, noteAlim.trim() || undefined)
+    if (err) {
+      await alerter('Alimentation impossible', err)
+      return
+    }
+    setModaleAlim(false)
+    setMontantAlim('')
+    setNoteAlim('')
+    await alerter(
+      'Alimentation enregistrée',
+      `Le compte caisse de ${employe.nomComplet} a été crédité de ${formatMontant(montant)}.`,
+    )
+  }
+
   if (!employeConnecte) return null
 
   if (!estAdmin && !estChefAgence && employeConnecte.id !== employeId) {
@@ -163,32 +197,90 @@ export default function DetailCaisse() {
         titre={`Caisse — ${employe.nomComplet}`}
         sousTitre={`${LIBELLES_ROLE[employe.role]}${agence ? ` · ${agence.nom}` : ''}`}
         action={
-          peutArreter ? (
-            <button
-              className="btn-primary"
-              disabled={arretDejaFait}
-              onClick={() => {
-                setMontantCompte('')
-                setNoteArret('')
-                setModaleArret(true)
-              }}
-              title={
-                arretDejaFait
-                  ? 'Caisse du jour déjà arrêtée'
-                  : `Arrêter la caisse du ${jourAArreter}`
-              }
-            >
-              <Scale className="h-4 w-4" />
-              {enRetard
-                ? `Arrêter le ${formatDate(jourAArreter + 'T12:00:00')}`
-                : arretDejaFait
-                  ? 'Caisse du jour arrêtée'
-                  : 'Arrêt de caisse du jour'}
-            </button>
+          peutArreter || peutAlimenter ? (
+            <div className="flex flex-wrap gap-2">
+              {peutAlimenter && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setMontantAlim('')
+                    setNoteAlim('')
+                    setModaleAlim(true)
+                  }}
+                >
+                  <Banknote className="h-4 w-4" />
+                  Alimenter
+                </button>
+              )}
+              {peutArreter && (
+                <button
+                  className="btn-primary"
+                  disabled={arretDejaFait}
+                  onClick={() => {
+                    setMontantCompte('')
+                    setNoteArret('')
+                    setModaleArret(true)
+                  }}
+                  title={
+                    arretDejaFait
+                      ? 'Caisse du jour déjà arrêtée'
+                      : `Arrêter la caisse du ${jourAArreter}`
+                  }
+                >
+                  <Scale className="h-4 w-4" />
+                  {enRetard
+                    ? `Arrêter le ${formatDate(jourAArreter + 'T12:00:00')}`
+                    : arretDejaFait
+                      ? 'Caisse du jour arrêtée'
+                      : 'Arrêt de caisse du jour'}
+                </button>
+              )}
+            </div>
           ) : undefined
         }
       />
 
+      <div className="card mb-6 border-brand-200 bg-brand-50/40">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wide text-brand-700">
+              Solde du compte caisse
+            </div>
+            <div className="mt-1 text-3xl font-bold text-brand-800">
+              {formatMontant(compteCaisse?.solde ?? 0)}
+            </div>
+            {compteCaisse && (
+              <p className="mt-1 text-xs text-slate-500">
+                Compte {compteCaisse.numero} — mis à jour automatiquement
+              </p>
+            )}
+          </div>
+        </div>
+        {mouvementsCompte.length > 0 && (
+          <div className="mt-4 border-t border-brand-100 pt-3">
+            <p className="mb-2 text-xs font-medium text-slate-600">Derniers mouvements</p>
+            <div className="max-h-40 space-y-1.5 overflow-y-auto text-sm">
+              {mouvementsCompte.map((m) => (
+                <div key={m.id} className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-slate-700">{m.description}</p>
+                    <p className="text-xs text-slate-400">{formatDateHeure(m.date)}</p>
+                  </div>
+                  <span
+                    className={`shrink-0 font-semibold ${
+                      m.sens === 'credit' ? 'text-emerald-600' : 'text-rose-600'
+                    }`}
+                  >
+                    {m.sens === 'credit' ? '+' : '−'}
+                    {formatMontant(m.montant)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
       <div className="card mb-6 flex flex-wrap items-center gap-4">
         <Avatar nom={nom} prenom={prenom} taille="lg" />
         <div className="min-w-0 flex-1">
@@ -311,7 +403,7 @@ export default function DetailCaisse() {
 
         {situationFiltre.arretDuJour && (
           <div className="mb-4 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700">
-            Arrêt enregistré le {formatDateHeure(situationFiltre.arretDuJour.date)} — compté{' '}
+            Arrêt enregistré le {formatDateHeure(dateClotureArret(situationFiltre.arretDuJour))} — compté{' '}
             {formatMontant(situationFiltre.arretDuJour.montantCompte)} — écart{' '}
             <BadgeEcart ecart={situationFiltre.arretDuJour.ecart} />
             {situationFiltre.arretDuJour.valideParNom && (
@@ -452,6 +544,64 @@ export default function DetailCaisse() {
               </button>
               <button type="submit" className="btn-primary">
                 Valider l&apos;arrêt
+              </button>
+            </div>
+          </form>
+        </Modale>
+      )}
+
+      {peutAlimenter && (
+        <Modale
+          titre={`Alimenter — ${employe.nomComplet}`}
+          ouverte={modaleAlim}
+          onFermer={() => setModaleAlim(false)}
+        >
+          <form onSubmit={validerAlimentation} className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Créditez le compte caisse (espèces remises au caissier). Le solde est mis à jour
+              immédiatement.
+            </p>
+            <div className="rounded-xl bg-slate-50 p-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Solde actuel</span>
+                <span className="font-bold text-brand-700">
+                  {formatMontant(compteCaisse?.solde ?? 0)}
+                </span>
+              </div>
+              {compteCaisse && (
+                <div className="mt-1 flex justify-between text-xs text-slate-500">
+                  <span>N° compte</span>
+                  <span>{compteCaisse.numero}</span>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="label">Montant (FCFA) *</label>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                required
+                autoFocus
+                value={montantAlim}
+                onChange={(e) => setMontantAlim(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label">Note (optionnel)</label>
+              <input
+                className="input"
+                value={noteAlim}
+                onChange={(e) => setNoteAlim(e.target.value)}
+                placeholder="Ex. Fond de caisse du matin"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-secondary" onClick={() => setModaleAlim(false)}>
+                Annuler
+              </button>
+              <button type="submit" className="btn-primary">
+                Valider l&apos;alimentation
               </button>
             </div>
           </form>

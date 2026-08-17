@@ -51,6 +51,10 @@ export function numeroCompteSolde(ordre: number): string {
   return `B${pad4(ordre)}`
 }
 
+export function numeroCompteCaisse(ordre: number): string {
+  return `CAI-${pad4(ordre)}`
+}
+
 /** Numéro au format international sans espaces ni signes, pour wa.me */
 export function telPourWhatsApp(tel: string): string {
   return tel.replace(/[^0-9]/g, '')

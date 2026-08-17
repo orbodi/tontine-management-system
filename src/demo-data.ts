@@ -1,12 +1,18 @@
 import { MODULE_CREDITS_ACTIF } from './config'
 import {
+  deltaSoldeOperationCaisse,
+  estOperationCaisse,
+} from './metier'
+import {
   CARREAUX_PAR_CYCLE,
   PRIX_CARNET,
   type Agence,
   type AppData,
   type Client,
+  type CompteCaisse,
   type CompteZoneTontine,
   type Employe,
+  type MouvementCompteCaisse,
   type StatutCredit,
   type Transaction,
   type TypeCarnet,
@@ -14,7 +20,7 @@ import {
   type TypeTransaction,
   type Zone,
 } from './types'
-import { numeroCarnet, numeroClient, numeroCompteSolde, pad4, uid } from './utils'
+import { numeroCarnet, numeroClient, numeroCompteCaisse, numeroCompteSolde, pad4, uid } from './utils'
 
 function ilYa(jours: number, heure = 10): string {
   const d = new Date()
@@ -212,6 +218,8 @@ export function genererDonneesDemo(): AppData {
     credits: [],
     remboursements: [],
     transactions: [],
+    comptesCaisse: [],
+    mouvementsCompteCaisse: [],
     arretsCaisse: [],
     journalConnexions: [
       {
@@ -240,7 +248,7 @@ export function genererDonneesDemo(): AppData {
       },
     ],
     compteursOrdreZone,
-    compteurs: { client: clients.length, compte: 0, credit: 0 },
+    compteurs: { client: clients.length, compte: 0, credit: 0, compteCaisse: 0 },
   }
 
   const nomComplet = (c: Client) => `${c.prenom} ${c.nom}`
@@ -487,18 +495,20 @@ export function genererDonneesDemo(): AppData {
   const arretsParametres: [Employe, number, number, number, number, number, string?][] = [
     [affoue, 8, 14, 86500, 30000, 56500],
     [brice, 8, 11, 64000, 45000, 18500, 'Billet de 500 abîmé remplacé'],
-    [affoue, 1, 17, 103000, 20000, 82500, 'Écart de 500 FCFA à vérifier'],
-    [brice, 1, 12, 71500, 25000, 46500],
+    // Pas d'arrêt hier pour Affoué (scénario « en retard ») — arrêt antérieur à J-2
+    [affoue, 2, 17, 103000, 20000, 82500, 'Écart de 500 FCFA à vérifier'],
+    [brice, 2, 12, 71500, 25000, 46500],
   ]
   arretsParametres.forEach(([employe, jours, nb, entrees, sorties, compte, note]) => {
-    const date = ilYa(jours, 17)
+    const dateCloture = ilYa(jours, 17)
     data.arretsCaisse.push({
       id: uid(),
       employeId: employe.id,
       employeNom: employe.nomComplet,
       agenceId: employe.agenceId,
-      journee: date.slice(0, 10),
-      date,
+      journee: dateCloture.slice(0, 10),
+      dateCloture,
+      date: dateCloture,
       debutPeriode: ilYa(jours, 8),
       nombreOperations: nb,
       totalEntrees: entrees,
@@ -507,11 +517,55 @@ export function genererDonneesDemo(): AppData {
       montantCompte: compte,
       ecart: compte - (entrees - sorties),
       note,
+      valideParId: chef.id,
+      valideParNom: chef.nomComplet,
     })
   })
 
-  // Clôturer automatiquement les journées passées encore ouvertes (évite un blocage au 1er login démo)
+  // ----- Scénarios de test suivi caisse -----
+  // Affoué : opérations HIER non arrêtées → « En retard » (+ ops aujourd'hui)
+  // Brice : opérations AUJOURD'HUI seulement → « À arrêter »
+  const dateHierMatin = ilYa(1, 10)
+  const dateHierAprem = ilYa(1, 15)
+  const jourHier = dateHierMatin.slice(0, 10)
+  data.transactions.push(
+    tx(
+      'mise_tontine',
+      clients[0],
+      5000,
+      dateHierMatin,
+      `Dépôt ×5 — ${nomComplet(clients[0])} (test caisse en retard)`,
+      affoue,
+    ),
+    tx(
+      'commission_tontine',
+      clients[1],
+      500,
+      dateHierAprem,
+      `Première cotisation (P.C) — ${nomComplet(clients[1])} (test caisse en retard)`,
+      affoue,
+    ),
+    tx(
+      'depot_compte',
+      clients[4],
+      15000,
+      ilYa(0, 10),
+      `Dépôt test jour — ${nomComplet(clients[4])} (caisse à arrêter)`,
+      brice,
+    ),
+    tx(
+      'mise_tontine',
+      clients[4],
+      4000,
+      ilYa(0, 11),
+      `Dépôt ×4 — ${nomComplet(clients[4])} (caisse à arrêter)`,
+      brice,
+    ),
+  )
+
+  // Clôturer les journées passées encore ouvertes, SAUF les jours volontairement ouverts pour les tests
   const auj = new Date().toISOString().slice(0, 10)
+  const joursOuvertsPourTest = new Set<string>([`${affoue.id}:${jourHier}`])
   const typesSortie = new Set(['retrait_tontine', 'retrait_compte', 'octroi_credit'])
   for (const employe of data.employes) {
     const joursOps = new Set(
@@ -522,9 +576,10 @@ export function genererDonneesDemo(): AppData {
     const joursArretes = new Set(
       data.arretsCaisse
         .filter((a) => a.employeId === employe.id)
-        .map((a) => a.journee ?? a.date.slice(0, 10)),
-    )
+        .map((a) => a.journee ?? a.dateCloture?.slice(0, 10) ?? a.date?.slice(0, 10)),
+      )
     for (const jour of [...joursOps].filter((j) => !joursArretes.has(j)).sort()) {
+      if (joursOuvertsPourTest.has(`${employe.id}:${jour}`)) continue
       const ops = data.transactions.filter(
         (t) => t.operateurId === employe.id && t.date.slice(0, 10) === jour,
       )
@@ -535,13 +590,15 @@ export function genererDonneesDemo(): AppData {
         else entrees += t.montant
       })
       const solde = entrees - sorties
+      const dateCloture = `${jour}T17:30:00.000Z`
       data.arretsCaisse.push({
         id: uid(),
         employeId: employe.id,
         employeNom: employe.nomComplet,
         agenceId: employe.agenceId,
         journee: jour,
-        date: `${jour}T17:30:00.000Z`,
+        dateCloture,
+        date: dateCloture,
         debutPeriode: ops.map((t) => t.date).sort()[0] ?? `${jour}T08:00:00.000Z`,
         nombreOperations: ops.length,
         totalEntrees: entrees,
@@ -549,11 +606,81 @@ export function genererDonneesDemo(): AppData {
         soldeTheorique: solde,
         montantCompte: solde,
         ecart: 0,
+        valideParId: chef.id,
+        valideParNom: chef.nomComplet,
       })
     }
   }
 
   data.transactions.sort((a, b) => b.date.localeCompare(a.date))
-  data.arretsCaisse.sort((a, b) => b.date.localeCompare(a.date))
+  data.arretsCaisse.sort((a, b) =>
+    (b.dateCloture ?? b.date ?? '').localeCompare(a.dateCloture ?? a.date ?? ''),
+  )
+
+  // Comptes caisse : float initial + application chronologique des opérations
+  const floatInitial = 200_000
+  const ouvrirCompteCaisseDemo = (employe: Employe): CompteCaisse => {
+    data.compteurs.compteCaisse++
+    const compte: CompteCaisse = {
+      id: uid(),
+      employeId: employe.id,
+      agenceId: employe.agenceId,
+      numero: numeroCompteCaisse(data.compteurs.compteCaisse),
+      solde: 0,
+      dateOuverture: ilYa(60, 8),
+      actif: true,
+    }
+    data.comptesCaisse.push(compte)
+    return compte
+  }
+
+  for (const employe of [affoue, brice, chef]) {
+    const compte = ouvrirCompteCaisseDemo(employe)
+    compte.solde = floatInitial
+    const mvt: MouvementCompteCaisse = {
+      id: uid(),
+      compteCaisseId: compte.id,
+      employeId: employe.id,
+      type: 'alimentation',
+      montant: floatInitial,
+      sens: 'credit',
+      soldeApres: floatInitial,
+      date: ilYa(45, 7),
+      description: `Alimentation initiale — ${compte.numero}`,
+      operateurId: chef.id,
+      operateurNom: chef.nomComplet,
+    }
+    data.mouvementsCompteCaisse.push(mvt)
+  }
+
+  const chronos = [...data.transactions].sort((a, b) => a.date.localeCompare(b.date))
+  for (const t of chronos) {
+    if (!estOperationCaisse(t.type) || !t.operateurId) continue
+    let compte = data.comptesCaisse.find((c) => c.employeId === t.operateurId && c.actif)
+    if (!compte) {
+      const emp = data.employes.find((e) => e.id === t.operateurId)
+      if (!emp) continue
+      compte = ouvrirCompteCaisseDemo(emp)
+    }
+    const delta = deltaSoldeOperationCaisse(t.type, t.montant)
+    if (delta === 0) continue
+    compte.solde += delta
+    data.mouvementsCompteCaisse.push({
+      id: uid(),
+      compteCaisseId: compte.id,
+      employeId: t.operateurId,
+      type: delta > 0 ? 'entree_operation' : 'sortie_operation',
+      montant: Math.abs(delta),
+      sens: delta > 0 ? 'credit' : 'debit',
+      soldeApres: compte.solde,
+      date: t.date,
+      description: t.description,
+      transactionId: t.id,
+      operateurId: t.operateurId,
+      operateurNom: t.operateur,
+    })
+  }
+  data.mouvementsCompteCaisse.sort((a, b) => b.date.localeCompare(a.date))
+
   return data
 }

@@ -6,6 +6,9 @@ import {
   LIBELLES_TYPE,
   TYPES_SORTIE,
   aujourdHuiIso,
+  arretClotureEnRetard,
+  compteCaisseDe,
+  dateClotureArret,
   situationCaisse,
   type SituationCaisse,
 } from '../metier'
@@ -160,7 +163,7 @@ function VueGlobaleCaisses() {
       arrets = arrets.filter((a) => a.agenceId === agenceFiltreOperations)
     }
     arrets = arrets.filter((a) => {
-      const jour = a.journee ?? a.date.slice(0, 10)
+      const jour = a.journee ?? dateClotureArret(a).slice(0, 10)
       if (filtreArretsMode === 'mois') {
         const mois = filtreArretsMois || moisEnCoursLocal()
         return jour.startsWith(mois)
@@ -171,7 +174,7 @@ function VueGlobaleCaisses() {
       if (jour > fin) return false
       return true
     })
-    return [...arrets].sort((a, b) => b.date.localeCompare(a.date))
+    return [...arrets].sort((a, b) => dateClotureArret(b).localeCompare(dateClotureArret(a)))
   }, [
     data.arretsCaisse,
     agenceFiltreOperations,
@@ -225,10 +228,21 @@ function VueGlobaleCaisses() {
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-6">
         <div className="card">
           <div className="text-xs text-slate-500">Caisses</div>
           <div className="mt-1 text-xl font-bold text-slate-900">{caisses.length}</div>
+        </div>
+        <div className="card">
+          <div className="text-xs text-slate-500">Soldes comptes</div>
+          <div className="mt-1 text-lg font-bold text-brand-700">
+            {formatMontant(
+              caisses.reduce((s, { employe }) => {
+                const c = compteCaisseDe(data.comptesCaisse, employe.id)
+                return s + (c?.solde ?? 0)
+              }, 0),
+            )}
+          </div>
         </div>
         <div className="card">
           <div className="text-xs text-slate-500">À arrêter</div>
@@ -272,7 +286,13 @@ function VueGlobaleCaisses() {
                     {LIBELLES_ROLE[employe.role]}
                     {agence ? ` · ${agence.nom}` : ''}
                   </p>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                    <div>
+                      <div className="text-slate-500">Compte caisse</div>
+                      <div className="font-bold text-brand-700">
+                        {formatMontant(compteCaisseDe(data.comptesCaisse, employe.id)?.solde ?? 0)}
+                      </div>
+                    </div>
                     <div>
                       <div className="text-slate-500">Entrées</div>
                       <div className="font-semibold text-emerald-600">
@@ -286,8 +306,8 @@ function VueGlobaleCaisses() {
                       </div>
                     </div>
                     <div>
-                      <div className="text-slate-500">Solde</div>
-                      <div className="font-bold text-brand-700">
+                      <div className="text-slate-500">Solde jour</div>
+                      <div className="font-bold text-slate-800">
                         {formatMontant(situation.soldeTheorique)}
                       </div>
                     </div>
@@ -437,6 +457,7 @@ function VueGlobaleCaisses() {
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-3">Journée</th>
+                  <th className="px-5 py-3">Clôture</th>
                   <th className="px-5 py-3">Caissier</th>
                   <th className="px-5 py-3 text-right">Solde th.</th>
                   <th className="px-5 py-3 text-right">Compté</th>
@@ -448,9 +469,17 @@ function VueGlobaleCaisses() {
                   <tr key={a.id} className="hover:bg-slate-50">
                     <td className="px-5 py-3">
                       <div className="font-medium">
-                        {formatDate((a.journee ?? a.date.slice(0, 10)) + 'T12:00:00')}
+                        {formatDate((a.journee ?? dateClotureArret(a).slice(0, 10)) + 'T12:00:00')}
                       </div>
-                      <div className="text-xs text-slate-400">{formatDateHeure(a.date)}</div>
+                      {arretClotureEnRetard(a) && (
+                        <span className="badge mt-1 bg-amber-100 text-amber-800">Clôturé en retard</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600">
+                      <div className="text-sm">{formatDateHeure(dateClotureArret(a))}</div>
+                      {a.valideParNom && (
+                        <div className="text-xs text-slate-400">par {a.valideParNom}</div>
+                      )}
                     </td>
                     <td className="px-5 py-3">{a.employeNom}</td>
                     <td className="px-5 py-3 text-right font-semibold">
@@ -481,11 +510,16 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
     [employe.id, data.transactions, data.arretsCaisse],
   )
 
+  const monCompte = useMemo(
+    () => compteCaisseDe(data.comptesCaisse, employe.id),
+    [data.comptesCaisse, employe.id],
+  )
+
   const arretsPerso = useMemo(
     () =>
       [...data.arretsCaisse]
         .filter((a) => a.employeId === employe.id)
-        .sort((a, b) => b.date.localeCompare(a.date)),
+        .sort((a, b) => dateClotureArret(b).localeCompare(dateClotureArret(a))),
     [data.arretsCaisse, employe.id],
   )
 
@@ -498,6 +532,19 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
         sousTitre={`Consultation — opérations de votre caisse uniquement — ${employe.nomComplet}`}
       />
 
+      <div className="card mb-6 border-brand-200 bg-brand-50/40">
+        <div className="text-xs font-medium uppercase tracking-wide text-brand-700">
+          Solde de mon compte caisse
+        </div>
+        <div className="mt-1 text-3xl font-bold text-brand-800">
+          {formatMontant(monCompte?.solde ?? 0)}
+        </div>
+        {monCompte && (
+          <p className="mt-1 text-xs text-slate-500">
+            Compte {monCompte.numero} — mis à jour automatiquement à chaque opération
+          </p>
+        )}
+      </div>
       {enRetard && (
         <div className="mb-6 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-800 ring-1 ring-rose-200">
           <p className="font-semibold">Arrêt de caisse en retard</p>
@@ -583,6 +630,7 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-3">Journée</th>
+                  <th className="px-5 py-3">Clôture</th>
                   <th className="px-5 py-3 text-right">Ops</th>
                   <th className="px-5 py-3 text-right">Solde th.</th>
                   <th className="px-5 py-3 text-right">Compté</th>
@@ -594,12 +642,17 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
                   <tr key={a.id} className="hover:bg-slate-50">
                     <td className="px-5 py-3">
                       <div className="font-medium">
-                        {formatDate((a.journee ?? a.date.slice(0, 10)) + 'T12:00:00')}
+                        {formatDate((a.journee ?? dateClotureArret(a).slice(0, 10)) + 'T12:00:00')}
                       </div>
-                      <div className="text-xs text-slate-400">
-                        {formatDateHeure(a.date)}
-                        {a.valideParNom ? ` · par ${a.valideParNom}` : ''}
-                      </div>
+                      {arretClotureEnRetard(a) && (
+                        <span className="badge mt-1 bg-amber-100 text-amber-800">En retard</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600">
+                      <div className="text-sm">{formatDateHeure(dateClotureArret(a))}</div>
+                      {a.valideParNom && (
+                        <div className="text-xs text-slate-400">par {a.valideParNom}</div>
+                      )}
                     </td>
                     <td className="px-5 py-3 text-right">{a.nombreOperations}</td>
                     <td className="px-5 py-3 text-right font-semibold">
