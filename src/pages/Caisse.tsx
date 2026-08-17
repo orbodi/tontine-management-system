@@ -41,6 +41,28 @@ function prenomNom(nomComplet: string) {
   return { prenom, nom: reste.join(' ') || prenom }
 }
 
+/** Date / mois locaux (évite le décalage UTC de toISOString). */
+function aujourdhuiLocalIso(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function moisEnCoursLocal(): string {
+  return aujourdhuiLocalIso().slice(0, 7)
+}
+
+function bornesMois(mois: string): { debut: string; fin: string } {
+  const [y, m] = mois.split('-').map(Number)
+  const dernierJour = new Date(y, m, 0).getDate()
+  return {
+    debut: `${mois}-01`,
+    fin: `${mois}-${String(dernierJour).padStart(2, '0')}`,
+  }
+}
+
 function ListeTransactions({
   transactions,
 }: {
@@ -84,6 +106,11 @@ function VueGlobaleCaisses() {
   const { data, estAdmin, agenceFiltreOperations } = useStore()
   const [dateJournal, setDateJournal] = useState(aujourdHuiIso())
   const [filtreStatut, setFiltreStatut] = useState<'tous' | 'a_arreter' | 'retard' | 'arretee'>('tous')
+  const [filtreArretsMode, setFiltreArretsMode] = useState<'mois' | 'intervalle'>('mois')
+  const [filtreArretsMois, setFiltreArretsMois] = useState(moisEnCoursLocal)
+  const bornesMoisCourant = bornesMois(moisEnCoursLocal())
+  const [filtreArretsDebut, setFiltreArretsDebut] = useState(bornesMoisCourant.debut)
+  const [filtreArretsFin, setFiltreArretsFin] = useState(bornesMoisCourant.fin)
 
   const caisses = useMemo(() => {
     return data.employes
@@ -132,8 +159,27 @@ function VueGlobaleCaisses() {
     if (agenceFiltreOperations) {
       arrets = arrets.filter((a) => a.agenceId === agenceFiltreOperations)
     }
-    return [...arrets].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 40)
-  }, [data.arretsCaisse, agenceFiltreOperations])
+    arrets = arrets.filter((a) => {
+      const jour = a.journee ?? a.date.slice(0, 10)
+      if (filtreArretsMode === 'mois') {
+        const mois = filtreArretsMois || moisEnCoursLocal()
+        return jour.startsWith(mois)
+      }
+      const debut = filtreArretsDebut || bornesMois(moisEnCoursLocal()).debut
+      const fin = filtreArretsFin || bornesMois(moisEnCoursLocal()).fin
+      if (jour < debut) return false
+      if (jour > fin) return false
+      return true
+    })
+    return [...arrets].sort((a, b) => b.date.localeCompare(a.date))
+  }, [
+    data.arretsCaisse,
+    agenceFiltreOperations,
+    filtreArretsMode,
+    filtreArretsMois,
+    filtreArretsDebut,
+    filtreArretsFin,
+  ])
 
   return (
     <div>
@@ -288,12 +334,102 @@ function VueGlobaleCaisses() {
       </div>
 
       <div className="card !p-0">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <h3 className="font-semibold text-slate-900">Derniers arrêts de caisse</h3>
+        <div className="space-y-3 border-b border-slate-200 px-5 py-4">
+          <h3 className="font-semibold text-slate-900">
+            Arrêts de caisse ({arretsAffiches.length})
+          </h3>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setFiltreArretsMode('mois')
+                  setFiltreArretsMois(moisEnCoursLocal())
+                }}
+                className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
+                  filtreArretsMode === 'mois'
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                Par mois
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFiltreArretsMode('intervalle')
+                  const { debut, fin } = bornesMois(filtreArretsMois || moisEnCoursLocal())
+                  setFiltreArretsDebut(debut)
+                  setFiltreArretsFin(fin)
+                }}
+                className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
+                  filtreArretsMode === 'intervalle'
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                Par intervalle
+              </button>
+            </div>
+            {filtreArretsMode === 'mois' ? (
+              <div>
+                <label className="label !mb-1">Mois</label>
+                <input
+                  className="input !w-auto"
+                  type="month"
+                  value={filtreArretsMois || moisEnCoursLocal()}
+                  max={moisEnCoursLocal()}
+                  onChange={(e) => setFiltreArretsMois(e.target.value)}
+                />
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="label !mb-1">Du</label>
+                  <input
+                    className="input !w-auto"
+                    type="date"
+                    value={filtreArretsDebut}
+                    max={filtreArretsFin || aujourdhuiLocalIso()}
+                    onChange={(e) => setFiltreArretsDebut(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="label !mb-1">Au</label>
+                  <input
+                    className="input !w-auto"
+                    type="date"
+                    value={filtreArretsFin}
+                    min={filtreArretsDebut || undefined}
+                    max={aujourdhuiLocalIso()}
+                    onChange={(e) => setFiltreArretsFin(e.target.value)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary !py-2 text-xs"
+                  onClick={() => {
+                    const { debut, fin } = bornesMois(moisEnCoursLocal())
+                    setFiltreArretsDebut(debut)
+                    setFiltreArretsFin(fin)
+                  }}
+                >
+                  Mois en cours
+                </button>
+              </>
+            )}
+          </div>
         </div>
         {arretsAffiches.length === 0 ? (
           <div className="p-5">
-            <EtatVide titre="Aucun arrêt" />
+            <EtatVide
+              titre="Aucun arrêt"
+              description={
+                filtreArretsMode === 'mois'
+                  ? 'Aucun arrêt pour ce mois.'
+                  : 'Aucun arrêt pour cet intervalle.'
+              }
+            />
           </div>
         ) : (
           <div className="overflow-x-auto">
