@@ -24,7 +24,7 @@ import { useConfirmation } from './Confirmation'
 
 export default function Layout() {
   const [menuOuvert, setMenuOuvert] = useState(false)
-  const { data, employeConnecte, deconnexion, estAdmin, aDroit, reinitialiserDemo } = useStore()
+  const { data, employeConnecte, deconnexion, estAdmin, estChefAgence, aDroit, reinitialiserDemo } = useStore()
   const { confirmer } = useConfirmation()
 
   const agence = data.agences.find((a) => a.id === employeConnecte?.agenceId)
@@ -36,7 +36,11 @@ export default function Layout() {
     { to: '/comptes', label: 'Comptes', icon: Wallet },
     ...(MODULE_CREDITS_ACTIF ? [{ to: '/credits', label: 'Crédits', icon: Banknote }] : []),
     { to: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-    { to: '/caisse', label: 'Caisse', icon: Scale },
+    {
+      to: '/caisse',
+      label: estAdmin || estChefAgence ? 'Suivi caisses' : 'Ma caisse',
+      icon: Scale,
+    },
     ...(aDroit('voir_rapports') ? [{ to: '/rapports', label: 'Rapports', icon: FileBarChart }] : []),
     ...(estAdmin ? [{ to: '/agences', label: 'Agences', icon: Building2 }] : []),
     ...(aDroit('gerer_zones') ? [{ to: '/zones', label: 'Zones', icon: MapPinned }] : []),

@@ -31,13 +31,18 @@ import {
   compteZoneDe,
   depotsTontineZoneJour,
   eligibiliteRetraitCarnet,
+  journeesCaisseEnRetard,
+  messageBlocageCaisseJournaliere,
+  arretCaisseDuJour,
+  aujourdHuiIso,
+  situationCaisse,
   statutDepuisEcart,
 } from './metier'
 import { genererDonneesDemo } from './demo-data'
 import { numeroCarnet, numeroClient, numeroCompteSolde, pad4, uid } from './utils'
 
-const STORAGE_KEY = 'microfinance-data-v14'
-const SESSION_KEY = 'microfinance-session-v14'
+const STORAGE_KEY = 'microfinance-data-v15'
+const SESSION_KEY = 'microfinance-session-v15'
 
 export const LIBELLES_ROLE: Record<Role, string> = {
   admin: 'Administrateur',
@@ -127,7 +132,7 @@ interface StoreApi {
   supprimerEmploye: (id: string) => void
   basculerActifEmploye: (id: string) => void
   // Caisse
-  arreterCaisse: (montantCompte: number, note?: string) => void
+  arreterCaisse: (montantCompte: number, note?: string, journee?: string) => string | null
   reinitialiserDemo: () => void
 }
 
@@ -139,6 +144,10 @@ function normaliserAppData(brut: AppData): AppData {
     comptesZoneTontine: brut.comptesZoneTontine ?? [],
     journeesCompteZone: brut.journeesCompteZone ?? [],
     ajustementsCompteZone: brut.ajustementsCompteZone ?? [],
+    arretsCaisse: (brut.arretsCaisse ?? []).map((a) => ({
+      ...a,
+      journee: a.journee ?? a.date.slice(0, 10),
+    })),
   }
   const manquants: CompteZoneTontine[] = d.zones
     .filter((z) => !d.comptesZoneTontine.some((c) => c.zoneId === z.id))
@@ -206,6 +215,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!employeConnecte) return false
       if (employeConnecte.role === 'admin') return true
       return employeConnecte.droits.includes(droit)
+    }
+
+    /** Bloque si une journée passée n'a pas d'arrêt de caisse. */
+    const verifierCaisseJournaliere = (d: AppData): string | null => {
+      if (!employeConnecte) return 'Non connecté.'
+      return messageBlocageCaisseJournaliere(
+        employeConnecte.id,
+        d.transactions,
+        d.arretsCaisse,
+      )
     }
 
     return {
@@ -586,6 +605,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!employeConnecte) return { erreur: 'Non connecté.' }
         let resultat: { id: string; numero: string } | { erreur: string } = { erreur: 'Erreur inconnue.' }
         setData((d) => {
+          const blocage = verifierCaisseJournaliere(d)
+          if (blocage) {
+            resultat = { erreur: blocage }
+            return d
+          }
           const client = d.clients.find((c) => c.id === clientId)
           if (!client) {
             resultat = { erreur: 'Client introuvable.' }
@@ -646,6 +670,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       encaisserCotisation(carnetId, montant) {
         let erreur: string | null = null
         setData((d) => {
+          erreur = verifierCaisseJournaliere(d)
+          if (erreur) return d
           const carnet = d.carnets.find((c) => c.id === carnetId)
           if (!carnet || !carnet.actif) return d
           if (carnet.verrouille) {
@@ -765,6 +791,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (nombreCarreaux <= 0) return 'Nombre de carreaux invalide.'
         let erreur: string | null = null
         setData((d) => {
+          erreur = verifierCaisseJournaliere(d)
+          if (erreur) return d
           const carnet = d.carnets.find((c) => c.id === carnetId)
           if (!carnet || !carnet.actif) return d
           if (carnet.verrouille) {
@@ -889,6 +917,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (montant <= 0) return 'Montant invalide.'
         let erreur: string | null = null
         setData((d) => {
+          erreur = verifierCaisseJournaliere(d)
+          if (erreur) return d
           const compte = d.comptes.find((c) => c.id === compteId)
           if (!compte) return d
           if (compte.verrouille) {
@@ -920,6 +950,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (montant <= 0) return 'Montant invalide.'
         let erreur: string | null = null
         setData((d) => {
+          erreur = verifierCaisseJournaliere(d)
+          if (erreur) return d
           const compte = d.comptes.find((c) => c.id === compteId)
           if (!compte) return d
           if (compte.verrouille) {
@@ -1076,45 +1108,60 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }))
       },
 
-      arreterCaisse(montantCompte, note) {
-        if (!employeConnecte) return
+      arreterCaisse(montantCompte, note, journee) {
+        if (!employeConnecte) return 'Non connecté.'
+        if (montantCompte < 0) return 'Montant invalide.'
+        const jour = journee ?? aujourdHuiIso()
+        let erreur: string | null = null
         setData((d) => {
-          const dernierArret =
-            d.arretsCaisse
-              .filter((a) => a.employeId === employeConnecte.id)
-              .sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
-          const periode = d.transactions.filter(
-            (t) =>
-              t.operateurId === employeConnecte.id && (!dernierArret || t.date > dernierArret.date),
+          if (arretCaisseDuJour(d.arretsCaisse, employeConnecte.id, jour)) {
+            erreur = `La caisse du ${jour} est déjà arrêtée.`
+            return d
+          }
+          const retards = journeesCaisseEnRetard(
+            employeConnecte.id,
+            d.transactions,
+            d.arretsCaisse,
           )
-          let totalEntrees = 0
-          let totalSorties = 0
-          periode.forEach((t) => {
-            if (t.type === 'retrait_tontine' || t.type === 'retrait_compte' || t.type === 'octroi_credit') {
-              totalSorties += t.montant
-            } else {
-              totalEntrees += t.montant
-            }
-          })
-          const soldeTheorique = totalEntrees - totalSorties
-          const dates = periode.map((t) => t.date).sort()
+          // On doit clôturer les jours en retard dans l'ordre ; aujourd'hui seulement si aucun retard
+          if (retards.length > 0 && jour !== retards[0]) {
+            erreur =
+              jour > retards[0]
+                ? `Clôturez d’abord la journée du ${retards[0]} avant celle du ${jour}.`
+                : `Journée invalide : le prochain arrêt à faire est celui du ${retards[0]}.`
+            return d
+          }
+          if (retards.length === 0 && jour !== aujourdHuiIso()) {
+            erreur = 'Seule la journée en cours (ou une journée en retard) peut être arrêtée.'
+            return d
+          }
+
+          const sit = situationCaisse(
+            employeConnecte.id,
+            d.transactions,
+            d.arretsCaisse,
+            jour,
+          )
+          const dates = sit.transactions.map((t) => t.date).sort()
           const arret: ArretCaisse = {
             id: uid(),
             employeId: employeConnecte.id,
             employeNom: employeConnecte.nomComplet,
             agenceId: employeConnecte.agenceId,
+            journee: jour,
             date: maintenant(),
-            debutPeriode: dernierArret?.date ?? dates[0] ?? maintenant(),
-            nombreOperations: periode.length,
-            totalEntrees,
-            totalSorties,
-            soldeTheorique,
+            debutPeriode: dates[0] ?? `${jour}T00:00:00.000Z`,
+            nombreOperations: sit.nombreOperations,
+            totalEntrees: sit.totalEntrees,
+            totalSorties: sit.totalSorties,
+            soldeTheorique: sit.soldeTheorique,
             montantCompte,
-            ecart: montantCompte - soldeTheorique,
+            ecart: montantCompte - sit.soldeTheorique,
             note,
           }
           return { ...d, arretsCaisse: [arret, ...d.arretsCaisse] }
         })
+        return erreur
       },
 
       reinitialiserDemo() {

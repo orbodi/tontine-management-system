@@ -236,6 +236,9 @@ export interface ArretCaisse {
   employeId: string
   employeNom: string
   agenceId: string
+  /** Jour calendaire clôturé YYYY-MM-DD */
+  journee: string
+  /** Horodatage de validation de l'arrêt */
   date: string
   debutPeriode: string
   nombreOperations: number

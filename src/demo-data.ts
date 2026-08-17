@@ -491,13 +491,15 @@ export function genererDonneesDemo(): AppData {
     [brice, 1, 12, 71500, 25000, 46500],
   ]
   arretsParametres.forEach(([employe, jours, nb, entrees, sorties, compte, note]) => {
+    const date = ilYa(jours, 17)
     data.arretsCaisse.push({
       id: uid(),
       employeId: employe.id,
       employeNom: employe.nomComplet,
       agenceId: employe.agenceId,
-      date: ilYa(jours, 17),
-      debutPeriode: ilYa(jours + 7, 8),
+      journee: date.slice(0, 10),
+      date,
+      debutPeriode: ilYa(jours, 8),
       nombreOperations: nb,
       totalEntrees: entrees,
       totalSorties: sorties,
@@ -508,6 +510,50 @@ export function genererDonneesDemo(): AppData {
     })
   })
 
+  // Clôturer automatiquement les journées passées encore ouvertes (évite un blocage au 1er login démo)
+  const auj = new Date().toISOString().slice(0, 10)
+  const typesSortie = new Set(['retrait_tontine', 'retrait_compte', 'octroi_credit'])
+  for (const employe of data.employes) {
+    const joursOps = new Set(
+      data.transactions
+        .filter((t) => t.operateurId === employe.id && t.date.slice(0, 10) < auj)
+        .map((t) => t.date.slice(0, 10)),
+    )
+    const joursArretes = new Set(
+      data.arretsCaisse
+        .filter((a) => a.employeId === employe.id)
+        .map((a) => a.journee ?? a.date.slice(0, 10)),
+    )
+    for (const jour of [...joursOps].filter((j) => !joursArretes.has(j)).sort()) {
+      const ops = data.transactions.filter(
+        (t) => t.operateurId === employe.id && t.date.slice(0, 10) === jour,
+      )
+      let entrees = 0
+      let sorties = 0
+      ops.forEach((t) => {
+        if (typesSortie.has(t.type)) sorties += t.montant
+        else entrees += t.montant
+      })
+      const solde = entrees - sorties
+      data.arretsCaisse.push({
+        id: uid(),
+        employeId: employe.id,
+        employeNom: employe.nomComplet,
+        agenceId: employe.agenceId,
+        journee: jour,
+        date: `${jour}T17:30:00.000Z`,
+        debutPeriode: ops.map((t) => t.date).sort()[0] ?? `${jour}T08:00:00.000Z`,
+        nombreOperations: ops.length,
+        totalEntrees: entrees,
+        totalSorties: sorties,
+        soldeTheorique: solde,
+        montantCompte: solde,
+        ecart: 0,
+      })
+    }
+  }
+
   data.transactions.sort((a, b) => b.date.localeCompare(a.date))
+  data.arretsCaisse.sort((a, b) => b.date.localeCompare(a.date))
   return data
 }

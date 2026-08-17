@@ -199,27 +199,92 @@ export function calculerMisesDepuisMontant(
 // ---------- Caisse ----------
 
 export interface SituationCaisse {
+  /** Jour YYYY-MM-DD concerné */
+  journee: string
   debutPeriode: string | null
   nombreOperations: number
   totalEntrees: number
   totalSorties: number
   soldeTheorique: number
   transactions: Transaction[]
+  /** Arrêt déjà effectué pour ce jour (s'il existe). */
+  arretDuJour: ArretCaisse | null
+  /** Dernier arrêt (tous jours). */
   dernierArret: ArretCaisse | null
+  /** Jours passés avec opérations mais sans arrêt (du plus ancien au plus récent). */
+  journeesEnRetard: string[]
+  cloturee: boolean
 }
 
+function jourIsoDepuisDate(iso: string): string {
+  return iso.slice(0, 10)
+}
+
+export function aujourdHuiIso(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+export function arretCaisseDuJour(
+  arretsCaisse: ArretCaisse[],
+  employeId: string,
+  journee: string,
+): ArretCaisse | undefined {
+  return arretsCaisse.find(
+    (a) => a.employeId === employeId && (a.journee ?? jourIsoDepuisDate(a.date)) === journee,
+  )
+}
+
+/** Jours (strictement avant `avantJour`) avec ops et sans arrêt, triés du plus ancien. */
+export function journeesCaisseEnRetard(
+  employeId: string,
+  transactions: Transaction[],
+  arretsCaisse: ArretCaisse[],
+  avantJour: string = aujourdHuiIso(),
+): string[] {
+  const joursAvecOps = new Set(
+    transactions
+      .filter((t) => t.operateurId === employeId && jourIsoDepuisDate(t.date) < avantJour)
+      .map((t) => jourIsoDepuisDate(t.date)),
+  )
+  const joursArretes = new Set(
+    arretsCaisse
+      .filter((a) => a.employeId === employeId)
+      .map((a) => a.journee ?? jourIsoDepuisDate(a.date)),
+  )
+  return [...joursAvecOps].filter((j) => !joursArretes.has(j)).sort()
+}
+
+/**
+ * Bloque les nouvelles opérations si une journée passée n'a pas été arrêtée.
+ * Retourne le message d'erreur, ou null si OK.
+ */
+export function messageBlocageCaisseJournaliere(
+  employeId: string,
+  transactions: Transaction[],
+  arretsCaisse: ArretCaisse[],
+): string | null {
+  const retard = journeesCaisseEnRetard(employeId, transactions, arretsCaisse)
+  if (retard.length === 0) return null
+  const premier = retard[0]
+  return `Arrêt de caisse obligatoire : clôturez d’abord la journée du ${premier} (page Caisse) avant de continuer.`
+}
+
+/** Situation de caisse pour un jour donné (défaut : aujourd’hui). */
 export function situationCaisse(
   employeId: string,
   transactions: Transaction[],
   arretsCaisse: ArretCaisse[],
+  journee: string = aujourdHuiIso(),
 ): SituationCaisse {
   const dernierArret =
     arretsCaisse
       .filter((a) => a.employeId === employeId)
       .sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
 
+  const arretDuJour = arretCaisseDuJour(arretsCaisse, employeId, journee) ?? null
+
   const periode = transactions
-    .filter((t) => t.operateurId === employeId && (!dernierArret || t.date > dernierArret.date))
+    .filter((t) => t.operateurId === employeId && jourIsoDepuisDate(t.date) === journee)
     .sort((a, b) => b.date.localeCompare(a.date))
 
   let totalEntrees = 0
@@ -231,13 +296,17 @@ export function situationCaisse(
 
   const dates = periode.map((t) => t.date).sort()
   return {
-    debutPeriode: dernierArret?.date ?? dates[0] ?? null,
+    journee,
+    debutPeriode: dates[0] ?? null,
     nombreOperations: periode.length,
     totalEntrees,
     totalSorties,
     soldeTheorique: totalEntrees - totalSorties,
     transactions: periode,
+    arretDuJour,
     dernierArret,
+    journeesEnRetard: journeesCaisseEnRetard(employeId, transactions, arretsCaisse),
+    cloturee: !!arretDuJour,
   }
 }
 
