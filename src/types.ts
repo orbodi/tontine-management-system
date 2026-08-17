@@ -239,8 +239,28 @@ export interface CompteCaisse {
   numero: string
   /** Solde courant (mis à jour automatiquement). */
   solde: number
+  /** Cumul unique toutes dates — alimenté à chaque clôture avec écart négatif. */
+  cumulManquant: number
+  /** Cumul unique toutes dates — alimenté à chaque clôture avec écart positif. */
+  cumulSurplus: number
   dateOuverture: string
   actif: boolean
+}
+
+/** Correction admin des cumuls manquant / surplus d'un compte caisse. */
+export interface AjustementCompteCaisse {
+  id: string
+  compteCaisseId: string
+  employeId: string
+  date: string
+  type: 'manquant' | 'surplus'
+  /** Montant retiré du cumul (positif). */
+  montant: number
+  motif: string
+  adminId: string
+  adminNom: string
+  cumulAvant: number
+  cumulApres: number
 }
 
 export type TypeMouvementCaisse =
@@ -374,6 +394,7 @@ export interface AppData {
   transactions: Transaction[]
   comptesCaisse: CompteCaisse[]
   mouvementsCompteCaisse: MouvementCompteCaisse[]
+  ajustementsCompteCaisse: AjustementCompteCaisse[]
   ouverturesCaisse: OuvertureCaisse[]
   arretsCaisse: ArretCaisse[]
   journalConnexions: JournalConnexion[]

@@ -6,15 +6,14 @@ import {
   LIBELLES_TYPE,
   TYPES_SORTIE,
   aujourdHuiIso,
-  arretClotureEnRetard,
   compteCaisseDe,
-  dateClotureArret,
   situationCaisse,
   type SituationCaisse,
 } from '../metier'
 import type { Employe } from '../types'
 import { formatDate, formatDateHeure, formatMontant } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
+import { TableauArretsCaisse } from '../components/TableauArretsCaisse'
 
 function BadgeEcart({ ecart }: { ecart: number }) {
   if (ecart === 0) return <span className="badge bg-emerald-100 text-emerald-700">Juste</span>
@@ -45,28 +44,6 @@ function BadgeStatutCaisse({ situation }: { situation: SituationCaisse }) {
 function prenomNom(nomComplet: string) {
   const [prenom, ...reste] = nomComplet.split(' ')
   return { prenom, nom: reste.join(' ') || prenom }
-}
-
-/** Date / mois locaux (évite le décalage UTC de toISOString). */
-function aujourdhuiLocalIso(): string {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-function moisEnCoursLocal(): string {
-  return aujourdhuiLocalIso().slice(0, 7)
-}
-
-function bornesMois(mois: string): { debut: string; fin: string } {
-  const [y, m] = mois.split('-').map(Number)
-  const dernierJour = new Date(y, m, 0).getDate()
-  return {
-    debut: `${mois}-01`,
-    fin: `${mois}-${String(dernierJour).padStart(2, '0')}`,
-  }
 }
 
 function ListeTransactions({
@@ -114,11 +91,6 @@ function VueGlobaleCaisses() {
   const [filtreStatut, setFiltreStatut] = useState<
     'tous' | 'a_arreter' | 'retard' | 'arretee' | 'non_ouverte'
   >('tous')
-  const [filtreArretsMode, setFiltreArretsMode] = useState<'mois' | 'intervalle'>('mois')
-  const [filtreArretsMois, setFiltreArretsMois] = useState(moisEnCoursLocal)
-  const bornesMoisCourant = bornesMois(moisEnCoursLocal())
-  const [filtreArretsDebut, setFiltreArretsDebut] = useState(bornesMoisCourant.debut)
-  const [filtreArretsFin, setFiltreArretsFin] = useState(bornesMoisCourant.fin)
 
   const caisses = useMemo(() => {
     return data.employes
@@ -183,32 +155,13 @@ function VueGlobaleCaisses() {
     )
   }, [caisses])
 
-  const arretsAffiches = useMemo(() => {
+  const arretsAgence = useMemo(() => {
     let arrets = data.arretsCaisse
     if (agenceFiltreOperations) {
       arrets = arrets.filter((a) => a.agenceId === agenceFiltreOperations)
     }
-    arrets = arrets.filter((a) => {
-      const jour = a.journee ?? dateClotureArret(a).slice(0, 10)
-      if (filtreArretsMode === 'mois') {
-        const mois = filtreArretsMois || moisEnCoursLocal()
-        return jour.startsWith(mois)
-      }
-      const debut = filtreArretsDebut || bornesMois(moisEnCoursLocal()).debut
-      const fin = filtreArretsFin || bornesMois(moisEnCoursLocal()).fin
-      if (jour < debut) return false
-      if (jour > fin) return false
-      return true
-    })
-    return [...arrets].sort((a, b) => dateClotureArret(b).localeCompare(dateClotureArret(a)))
-  }, [
-    data.arretsCaisse,
-    agenceFiltreOperations,
-    filtreArretsMode,
-    filtreArretsMois,
-    filtreArretsDebut,
-    filtreArretsFin,
-  ])
+    return arrets
+  }, [data.arretsCaisse, agenceFiltreOperations])
 
   return (
     <div>
@@ -324,26 +277,39 @@ function VueGlobaleCaisses() {
                         {formatMontant(compteCaisseDe(data.comptesCaisse, employe.id)?.solde ?? 0)}
                       </div>
                     </div>
-                    <div>
-                      <div className="text-slate-500">Ouverture</div>
-                      <div className="font-semibold text-slate-800">
-                        {formatMontant(situation.soldeOuverture)}
+                    {situation.ouverte || situation.cloturee ? (
+                      <>
+                        <div>
+                          <div className="text-slate-500">Ouverture</div>
+                          <div className="font-semibold text-slate-800">
+                            {formatMontant(situation.soldeOuverture)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-slate-500">Entrées / sorties</div>
+                          <div className="font-semibold">
+                            <span className="text-emerald-600">
+                              {formatMontant(situation.totalEntrees)}
+                            </span>
+                            {' / '}
+                            <span className="text-rose-600">
+                              {formatMontant(situation.totalSorties)}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-slate-500">Fermeture th.</div>
+                          <div className="font-bold text-slate-800">
+                            {formatMontant(situation.soldeFermetureTheorique)}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="col-span-1 sm:col-span-3">
+                        <div className="text-slate-500">État du jour</div>
+                        <div className="font-semibold text-slate-600">Journée non ouverte</div>
                       </div>
-                    </div>
-                    <div>
-                      <div className="text-slate-500">Entrées / sorties</div>
-                      <div className="font-semibold">
-                        <span className="text-emerald-600">{formatMontant(situation.totalEntrees)}</span>
-                        {' / '}
-                        <span className="text-rose-600">{formatMontant(situation.totalSorties)}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-slate-500">Fermeture th.</div>
-                      <div className="font-bold text-slate-800">
-                        {formatMontant(situation.soldeFermetureTheorique)}
-                      </div>
-                    </div>
+                    )}
                   </div>
                   <p className="mt-2 text-xs text-slate-500">
                     {situation.nombreOperations} opération
@@ -386,151 +352,11 @@ function VueGlobaleCaisses() {
         </div>
       </div>
 
-      <div className="card !p-0">
-        <div className="space-y-3 border-b border-slate-200 px-5 py-4">
-          <h3 className="font-semibold text-slate-900">
-            Arrêts de caisse ({arretsAffiches.length})
-          </h3>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setFiltreArretsMode('mois')
-                  setFiltreArretsMois(moisEnCoursLocal())
-                }}
-                className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
-                  filtreArretsMode === 'mois'
-                    ? 'bg-brand-600 text-white'
-                    : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                Par mois
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setFiltreArretsMode('intervalle')
-                  const { debut, fin } = bornesMois(filtreArretsMois || moisEnCoursLocal())
-                  setFiltreArretsDebut(debut)
-                  setFiltreArretsFin(fin)
-                }}
-                className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
-                  filtreArretsMode === 'intervalle'
-                    ? 'bg-brand-600 text-white'
-                    : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                Par intervalle
-              </button>
-            </div>
-            {filtreArretsMode === 'mois' ? (
-              <div>
-                <label className="label !mb-1">Mois</label>
-                <input
-                  className="input !w-auto"
-                  type="month"
-                  value={filtreArretsMois || moisEnCoursLocal()}
-                  max={moisEnCoursLocal()}
-                  onChange={(e) => setFiltreArretsMois(e.target.value)}
-                />
-              </div>
-            ) : (
-              <>
-                <div>
-                  <label className="label !mb-1">Du</label>
-                  <input
-                    className="input !w-auto"
-                    type="date"
-                    value={filtreArretsDebut}
-                    max={filtreArretsFin || aujourdhuiLocalIso()}
-                    onChange={(e) => setFiltreArretsDebut(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label !mb-1">Au</label>
-                  <input
-                    className="input !w-auto"
-                    type="date"
-                    value={filtreArretsFin}
-                    min={filtreArretsDebut || undefined}
-                    max={aujourdhuiLocalIso()}
-                    onChange={(e) => setFiltreArretsFin(e.target.value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  className="btn-secondary !py-2 text-xs"
-                  onClick={() => {
-                    const { debut, fin } = bornesMois(moisEnCoursLocal())
-                    setFiltreArretsDebut(debut)
-                    setFiltreArretsFin(fin)
-                  }}
-                >
-                  Mois en cours
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-        {arretsAffiches.length === 0 ? (
-          <div className="p-5">
-            <EtatVide
-              titre="Aucun arrêt"
-              description={
-                filtreArretsMode === 'mois'
-                  ? 'Aucun arrêt pour ce mois.'
-                  : 'Aucun arrêt pour cet intervalle.'
-              }
-            />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-5 py-3">Journée</th>
-                  <th className="px-5 py-3">Clôture</th>
-                  <th className="px-5 py-3">Caissier</th>
-                  <th className="px-5 py-3 text-right">Ouverture</th>
-                  <th className="px-5 py-3 text-right">Fermeture th.</th>
-                  <th className="px-5 py-3 text-right">Compté</th>
-                  <th className="px-5 py-3">Écart</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {arretsAffiches.map((a) => (
-                  <tr key={a.id} className="hover:bg-slate-50">
-                    <td className="px-5 py-3">
-                      <div className="font-medium">
-                        {formatDate((a.journee ?? dateClotureArret(a).slice(0, 10)) + 'T12:00:00')}
-                      </div>
-                      {arretClotureEnRetard(a) && (
-                        <span className="badge mt-1 bg-amber-100 text-amber-800">Clôturé en retard</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-slate-600">
-                      <div className="text-sm">{formatDateHeure(dateClotureArret(a))}</div>
-                      {a.valideParNom && (
-                        <div className="text-xs text-slate-400">par {a.valideParNom}</div>
-                      )}
-                    </td>
-                    <td className="px-5 py-3">{a.employeNom}</td>
-                    <td className="px-5 py-3 text-right">{formatMontant(a.soldeOuverture ?? 0)}</td>
-                    <td className="px-5 py-3 text-right font-semibold">
-                      {formatMontant(a.soldeTheorique)}
-                    </td>
-                    <td className="px-5 py-3 text-right">{formatMontant(a.montantCompte)}</td>
-                    <td className="px-5 py-3">
-                      <BadgeEcart ecart={a.ecart} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <TableauArretsCaisse
+        arrets={arretsAgence}
+        titre="Arrêts de caisse"
+        afficherCaissier
+      />
     </div>
   )
 }
@@ -567,10 +393,7 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
   )
 
   const arretsPerso = useMemo(
-    () =>
-      [...data.arretsCaisse]
-        .filter((a) => a.employeId === employe.id)
-        .sort((a, b) => dateClotureArret(b).localeCompare(dateClotureArret(a))),
+    () => data.arretsCaisse.filter((a) => a.employeId === employe.id),
     [data.arretsCaisse, employe.id],
   )
 
@@ -633,113 +456,58 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="card">
-          <div className="text-xs text-slate-500">Statut du jour</div>
-          <div className="mt-1">
-            <BadgeStatutCaisse situation={maCaisse} />
+      {(maCaisse.ouverte || maCaisse.cloturee) && (
+        <>
+          <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div className="card">
+              <div className="text-xs text-slate-500">Statut du jour</div>
+              <div className="mt-1">
+                <BadgeStatutCaisse situation={maCaisse} />
+              </div>
+            </div>
+            <div className="card">
+              <div className="text-xs text-slate-500">Solde à l’ouverture</div>
+              <div className="mt-1 text-lg font-bold text-slate-800">
+                {formatMontant(maCaisse.soldeOuverture)}
+              </div>
+            </div>
+            <div className="card">
+              <div className="text-xs text-slate-500">Entrées / sorties</div>
+              <div className="mt-1 text-sm font-bold">
+                <span className="text-emerald-600">{formatMontant(maCaisse.totalEntrees)}</span>
+                <span className="text-slate-400"> / </span>
+                <span className="text-rose-600">{formatMontant(maCaisse.totalSorties)}</span>
+              </div>
+              <div className="text-xs text-slate-500">{maCaisse.nombreOperations} op.</div>
+            </div>
+            <div className="card">
+              <div className="text-xs text-slate-500">Fermeture théorique</div>
+              <div className="mt-1 text-lg font-bold text-brand-700">
+                {formatMontant(maCaisse.soldeFermetureTheorique)}
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="card">
-          <div className="text-xs text-slate-500">Solde à l’ouverture</div>
-          <div className="mt-1 text-lg font-bold text-slate-800">
-            {formatMontant(maCaisse.soldeOuverture)}
-          </div>
-        </div>
-        <div className="card">
-          <div className="text-xs text-slate-500">Entrées / sorties</div>
-          <div className="mt-1 text-sm font-bold">
-            <span className="text-emerald-600">{formatMontant(maCaisse.totalEntrees)}</span>
-            <span className="text-slate-400"> / </span>
-            <span className="text-rose-600">{formatMontant(maCaisse.totalSorties)}</span>
-          </div>
-          <div className="text-xs text-slate-500">{maCaisse.nombreOperations} op.</div>
-        </div>
-        <div className="card">
-          <div className="text-xs text-slate-500">Fermeture théorique</div>
-          <div className="mt-1 text-lg font-bold text-brand-700">
-            {formatMontant(maCaisse.soldeFermetureTheorique)}
-          </div>
-        </div>
-      </div>
 
-      <div className="card mb-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-semibold text-slate-900">
-            Opérations du jour ({maCaisse.nombreOperations})
-          </h3>
-          <button
-            type="button"
-            className="btn-secondary !py-2 text-xs"
-            disabled={maCaisse.nombreOperations === 0}
-            onClick={() => setDetailOuvert(true)}
-          >
-            Agrandir
-          </button>
-        </div>
-        <ListeTransactions transactions={maCaisse.transactions} />
-      </div>
+          <div className="card mb-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold text-slate-900">
+                Opérations du jour ({maCaisse.nombreOperations})
+              </h3>
+              <button
+                type="button"
+                className="btn-secondary !py-2 text-xs"
+                disabled={maCaisse.nombreOperations === 0}
+                onClick={() => setDetailOuvert(true)}
+              >
+                Agrandir
+              </button>
+            </div>
+            <ListeTransactions transactions={maCaisse.transactions} />
+          </div>
+        </>
+      )}
 
-      <div className="card !p-0">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <h3 className="font-semibold text-slate-900">
-            Historique des arrêts ({arretsPerso.length})
-          </h3>
-        </div>
-        {arretsPerso.length === 0 ? (
-          <div className="p-5">
-            <EtatVide
-              titre="Aucun arrêt"
-              description="L’admin ou le chef d’agence effectue l’arrêt de caisse."
-            />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-5 py-3">Journée</th>
-                  <th className="px-5 py-3">Clôture</th>
-                  <th className="px-5 py-3 text-right">Ops</th>
-                  <th className="px-5 py-3 text-right">Ouverture</th>
-                  <th className="px-5 py-3 text-right">Fermeture th.</th>
-                  <th className="px-5 py-3 text-right">Compté</th>
-                  <th className="px-5 py-3">Écart</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {arretsPerso.map((a) => (
-                  <tr key={a.id} className="hover:bg-slate-50">
-                    <td className="px-5 py-3">
-                      <div className="font-medium">
-                        {formatDate((a.journee ?? dateClotureArret(a).slice(0, 10)) + 'T12:00:00')}
-                      </div>
-                      {arretClotureEnRetard(a) && (
-                        <span className="badge mt-1 bg-amber-100 text-amber-800">En retard</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-slate-600">
-                      <div className="text-sm">{formatDateHeure(dateClotureArret(a))}</div>
-                      {a.valideParNom && (
-                        <div className="text-xs text-slate-400">par {a.valideParNom}</div>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-right">{a.nombreOperations}</td>
-                    <td className="px-5 py-3 text-right">{formatMontant(a.soldeOuverture ?? 0)}</td>
-                    <td className="px-5 py-3 text-right font-semibold">
-                      {formatMontant(a.soldeTheorique)}
-                    </td>
-                    <td className="px-5 py-3 text-right">{formatMontant(a.montantCompte)}</td>
-                    <td className="px-5 py-3">
-                      <BadgeEcart ecart={a.ecart} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <TableauArretsCaisse arrets={arretsPerso} titre="Historique des arrêts" />
 
       <Modale
         titre="Opérations du jour"

@@ -49,8 +49,8 @@ import {
 import { genererDonneesDemo } from './demo-data'
 import { numeroCarnet, numeroClient, numeroCompteCaisse, numeroCompteSolde, pad4, uid } from './utils'
 
-const STORAGE_KEY = 'microfinance-data-v20'
-const SESSION_KEY = 'microfinance-session-v20'
+const STORAGE_KEY = 'microfinance-data-v21'
+const SESSION_KEY = 'microfinance-session-v21'
 
 export const LIBELLES_ROLE: Record<Role, string> = {
   admin: 'Administrateur',
@@ -147,6 +147,13 @@ interface StoreApi {
     note?: string,
     journee?: string,
   ) => string | null
+  /** Régularisation admin des cumuls manquant / surplus du compte caisse. */
+  regulariserCumulCompteCaisse: (
+    employeId: string,
+    type: 'manquant' | 'surplus',
+    montant: number,
+    motif: string,
+  ) => string | null
   arreterCaisse: (
     montantFermeture: number,
     note?: string,
@@ -176,6 +183,8 @@ function ouvrirCompteCaisseSiBesoin(d: AppData, employeId: string): AppData {
     agenceId: emp.agenceId,
     numero: numeroCompteCaisse(ordre),
     solde: 0,
+    cumulManquant: 0,
+    cumulSurplus: 0,
     dateOuverture: new Date().toISOString(),
     actif: true,
   }
@@ -229,8 +238,13 @@ function normaliserAppData(brut: AppData): AppData {
     comptesZoneTontine: brut.comptesZoneTontine ?? [],
     journeesCompteZone: brut.journeesCompteZone ?? [],
     ajustementsCompteZone: brut.ajustementsCompteZone ?? [],
-    comptesCaisse: brut.comptesCaisse ?? [],
+    comptesCaisse: (brut.comptesCaisse ?? []).map((c) => ({
+      ...c,
+      cumulManquant: c.cumulManquant ?? 0,
+      cumulSurplus: c.cumulSurplus ?? 0,
+    })),
     mouvementsCompteCaisse: brut.mouvementsCompteCaisse ?? [],
+    ajustementsCompteCaisse: brut.ajustementsCompteCaisse ?? [],
     ouverturesCaisse: brut.ouverturesCaisse ?? [],
     compteurs: {
       client: brut.compteurs?.client ?? 0,
@@ -1492,37 +1506,104 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
 
           let next: AppData = { ...d, arretsCaisse: [arret, ...d.arretsCaisse] }
-          if (ecart !== 0) {
-            next = ouvrirCompteCaisseSiBesoin(next, cible.id)
-            const compte = compteCaisseDe(next.comptesCaisse, cible.id)
-            if (compte) {
-              const soldeApres = montantFermeture
-              const mouvement: MouvementCompteCaisse = {
-                id: uid(),
-                compteCaisseId: compte.id,
-                employeId: cible.id,
-                type: 'ajustement_arret',
-                montant: Math.abs(ecart),
-                sens: ecart > 0 ? 'credit' : 'debit',
-                soldeApres,
-                date: maintenantIso,
-                description:
-                  ecart > 0
-                    ? `Ajustement de fermeture — surplus ${Math.abs(ecart)} FCFA`
-                    : `Ajustement de fermeture — manquant ${Math.abs(ecart)} FCFA`,
-                operateurId: employeConnecte.id,
-                operateurNom: employeConnecte.nomComplet,
-              }
-              next = {
-                ...next,
-                comptesCaisse: next.comptesCaisse.map((c) =>
-                  c.id === compte.id ? { ...c, solde: soldeApres } : c,
-                ),
-                mouvementsCompteCaisse: [mouvement, ...next.mouvementsCompteCaisse],
-              }
+          next = ouvrirCompteCaisseSiBesoin(next, cible.id)
+          const compte = compteCaisseDe(next.comptesCaisse, cible.id)
+          if (compte) {
+            let cumulManquant = compte.cumulManquant ?? 0
+            let cumulSurplus = compte.cumulSurplus ?? 0
+            if (ecart < 0) cumulManquant += Math.abs(ecart)
+            if (ecart > 0) cumulSurplus += ecart
+
+            let mouvements = next.mouvementsCompteCaisse
+            let solde = compte.solde
+            if (ecart !== 0 && compte.solde !== montantFermeture) {
+              solde = montantFermeture
+              mouvements = [
+                {
+                  id: uid(),
+                  compteCaisseId: compte.id,
+                  employeId: cible.id,
+                  type: 'ajustement_arret',
+                  montant: Math.abs(ecart),
+                  sens: ecart > 0 ? 'credit' : 'debit',
+                  soldeApres: solde,
+                  date: maintenantIso,
+                  description:
+                    ecart > 0
+                      ? `Ajustement de fermeture — surplus ${Math.abs(ecart)} FCFA`
+                      : `Ajustement de fermeture — manquant ${Math.abs(ecart)} FCFA`,
+                  operateurId: employeConnecte.id,
+                  operateurNom: employeConnecte.nomComplet,
+                },
+                ...mouvements,
+              ]
+            }
+            next = {
+              ...next,
+              comptesCaisse: next.comptesCaisse.map((c) =>
+                c.id === compte.id
+                  ? { ...c, solde, cumulManquant, cumulSurplus }
+                  : c,
+              ),
+              mouvementsCompteCaisse: mouvements,
             }
           }
           return next
+        })
+        return erreur
+      },
+
+      regulariserCumulCompteCaisse(employeId, type, montant, motif) {
+        if (!employeConnecte) return 'Non connecté.'
+        if (!estAdmin) return 'Seul l’administrateur peut régulariser les cumuls de caisse.'
+        if (montant <= 0) return 'Montant invalide.'
+        if (!motif.trim()) return 'Le motif est obligatoire.'
+        let erreur: string | null = null
+        setData((d) => {
+          const cible = d.employes.find((e) => e.id === employeId && e.actif)
+          if (!cible) {
+            erreur = 'Employé introuvable.'
+            return d
+          }
+          const compte = compteCaisseDe(d.comptesCaisse, cible.id)
+          if (!compte) {
+            erreur = 'Compte caisse introuvable.'
+            return d
+          }
+          const cumulAvant = type === 'manquant' ? compte.cumulManquant ?? 0 : compte.cumulSurplus ?? 0
+          if (montant > cumulAvant) {
+            erreur = `Le montant dépasse le cumul ${type} (${cumulAvant} FCFA).`
+            return d
+          }
+          const cumulApres = cumulAvant - montant
+          return {
+            ...d,
+            comptesCaisse: d.comptesCaisse.map((c) =>
+              c.id === compte.id
+                ? {
+                    ...c,
+                    cumulManquant: type === 'manquant' ? cumulApres : c.cumulManquant,
+                    cumulSurplus: type === 'surplus' ? cumulApres : c.cumulSurplus,
+                  }
+                : c,
+            ),
+            ajustementsCompteCaisse: [
+              {
+                id: uid(),
+                compteCaisseId: compte.id,
+                employeId: cible.id,
+                date: maintenant(),
+                type,
+                montant,
+                motif: motif.trim(),
+                adminId: employeConnecte.id,
+                adminNom: employeConnecte.nomComplet,
+                cumulAvant,
+                cumulApres,
+              },
+              ...(d.ajustementsCompteCaisse ?? []),
+            ],
+          }
         })
         return erreur
       },

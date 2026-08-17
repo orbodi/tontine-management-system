@@ -223,6 +223,7 @@ export function genererDonneesDemo(): AppData {
     transactions: [],
     comptesCaisse: [],
     mouvementsCompteCaisse: [],
+    ajustementsCompteCaisse: [],
     ouverturesCaisse: [],
     arretsCaisse: [],
     journalConnexions: [
@@ -633,6 +634,8 @@ export function genererDonneesDemo(): AppData {
       agenceId: employe.agenceId,
       numero: numeroCompteCaisse(data.compteurs.compteCaisse),
       solde: 0,
+      cumulManquant: 0,
+      cumulSurplus: 0,
       dateOuverture: ilYa(60, 8),
       actif: true,
     }
@@ -700,6 +703,14 @@ export function genererDonneesDemo(): AppData {
       a.montantCompte = a.soldeTheorique
       a.ecart = 0
     }
+  }
+
+  // Cumuls manquant / surplus (toutes dates) à partir des écarts d'arrêt
+  for (const a of data.arretsCaisse) {
+    const compte = data.comptesCaisse.find((c) => c.employeId === a.employeId && c.actif)
+    if (!compte || !a.ecart) continue
+    if (a.ecart < 0) compte.cumulManquant += Math.abs(a.ecart)
+    if (a.ecart > 0) compte.cumulSurplus += a.ecart
   }
 
   // Ouvertures de journée (admin/chef) — une par arrêt + scénarios ouverts
