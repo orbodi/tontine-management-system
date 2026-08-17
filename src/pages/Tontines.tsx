@@ -242,6 +242,23 @@ export default function Tontines() {
         }
       />
 
+      {peutOperer && (
+        <div className="mb-6 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950 ring-1 ring-amber-200">
+          <p className="font-semibold">Avant les dépôts tontine</p>
+          <p className="mt-1">
+            Saisissez d’abord le <strong>montant réel collecté</strong> sur le compte zone du jour
+            (menu <strong>Collecte tontine</strong> / Zones), puis enregistrez les dépôts sur les
+            carnets.
+          </p>
+          <Link
+            to="/zones"
+            className="mt-2 inline-flex text-sm font-semibold text-brand-700 hover:text-brand-800"
+          >
+            Aller à la collecte tontine →
+          </Link>
+        </div>
+      )}
+
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="relative max-w-md flex-1">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />

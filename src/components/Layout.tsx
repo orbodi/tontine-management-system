@@ -43,7 +43,15 @@ export default function Layout() {
     },
     ...(aDroit('voir_rapports') ? [{ to: '/rapports', label: 'Rapports', icon: FileBarChart }] : []),
     ...(estAdmin ? [{ to: '/agences', label: 'Agences', icon: Building2 }] : []),
-    ...(aDroit('gerer_zones') ? [{ to: '/zones', label: 'Zones', icon: MapPinned }] : []),
+    ...(aDroit('gerer_zones') || aDroit('operer_comptes')
+      ? [
+          {
+            to: '/zones',
+            label: aDroit('gerer_zones') ? 'Zones' : 'Collecte tontine',
+            icon: MapPinned,
+          },
+        ]
+      : []),
     ...(estAdmin ? [{ to: '/employes', label: 'Employés', icon: ShieldCheck }] : []),
     ...(estAdmin ? [{ to: '/audit', label: 'Audit', icon: ClipboardList }] : []),
   ]

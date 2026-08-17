@@ -37,11 +37,12 @@ import {
   depotsTontineZoneJour,
   eligibiliteRetraitCarnet,
   estOperationCaisse,
+  aujourdHuiIso,
   journeesCaisseEnRetard,
   journeesOuvertesEnAttenteCloture,
+  journeeZoneDuJour,
   messageBlocageCaisseJournaliere,
   arretCaisseDuJour,
-  aujourdHuiIso,
   ouvertureCaisseDuJour,
   situationCaisse,
   statutDepuisEcart,
@@ -526,12 +527,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!employeConnecte) return 'Non connecté.'
         if (!aLeDroit('operer_comptes') && !estAdmin) return 'Droit insuffisant.'
         if (montantReel < 0) return 'Montant invalide.'
-        const jour = dateIso ?? new Date().toISOString().slice(0, 10)
+        const jour = dateIso ?? aujourdHuiIso()
         let erreur: string | null = null
         setData((d) => {
           const zone = d.zones.find((z) => z.id === zoneId)
           if (!zone) {
             erreur = 'Zone introuvable.'
+            return d
+          }
+          if (!estAdmin && zone.agenceId !== employeConnecte.agenceId) {
+            erreur = 'Cette zone n’appartient pas à votre agence.'
             return d
           }
           let compte = compteZoneDe(d.comptesZoneTontine, zoneId)
@@ -597,9 +602,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cloturerJourneeZone(zoneId, dateIso) {
         if (!employeConnecte) return 'Non connecté.'
         if (!aLeDroit('operer_comptes') && !estAdmin) return 'Droit insuffisant.'
-        const jour = dateIso ?? new Date().toISOString().slice(0, 10)
+        const jour = dateIso ?? aujourdHuiIso()
         let erreur: string | null = null
         setData((d) => {
+          const zone = d.zones.find((z) => z.id === zoneId)
+          if (!zone) {
+            erreur = 'Zone introuvable.'
+            return d
+          }
+          if (!estAdmin && zone.agenceId !== employeConnecte.agenceId) {
+            erreur = 'Cette zone n’appartient pas à votre agence.'
+            return d
+          }
           const journee = d.journeesCompteZone.find((j) => j.zoneId === zoneId && j.date === jour)
           if (!journee) {
             erreur = 'Saisissez d’abord le montant réel collecté pour ce jour.'
@@ -819,6 +833,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!carnet || !carnet.actif) return d
           if (carnet.verrouille) {
             erreur = 'Ce carnet est verrouillé.'
+            return d
+          }
+          const jour = aujourdHuiIso()
+          const journeeZone = journeeZoneDuJour(d.journeesCompteZone, carnet.zoneId, jour)
+          if (!journeeZone || journeeZone.cloturee) {
+            const zone = d.zones.find((z) => z.id === carnet.zoneId)
+            const code = zone?.code ?? '—'
+            erreur = journeeZone?.cloturee
+              ? `La collecte tontine de la zone ${code} est déjà clôturée pour aujourd’hui.`
+              : `Saisissez d’abord le montant réel collecté pour la zone ${code} (menu Collecte tontine / Compte zone) avant les dépôts.`
             return d
           }
           const calc = calculerMisesDepuisMontant(montant, carnet.mise)

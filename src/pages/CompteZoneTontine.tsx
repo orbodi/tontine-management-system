@@ -2,19 +2,11 @@ import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Calculator, Scale } from 'lucide-react'
 import { useStore } from '../store'
-import {
-  compteZoneDe,
-  depotsTontineZoneJour,
-  journeeZoneDuJour,
-} from '../metier'
+import { aujourdHuiIso, compteZoneDe, depotsTontineZoneJour, journeeZoneDuJour } from '../metier'
 import { formatDate, formatDateHeure, formatMontant } from '../utils'
 import { EnTetePage, EtatVide, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
 import type { StatutJourneeZone } from '../types'
-
-function aujourdHui(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 function BadgeStatut({ statut }: { statut: StatutJourneeZone }) {
   const styles: Record<StatutJourneeZone, string> = {
@@ -37,13 +29,14 @@ export default function CompteZoneTontinePage() {
   const {
     data,
     estAdmin,
+    employeConnecte,
     saisirMontantReelZone,
     cloturerJourneeZone,
     ajusterCumulCompteZone,
   } = useStore()
   const { alerter, confirmer } = useConfirmation()
 
-  const [dateJour, setDateJour] = useState(aujourdHui)
+  const [dateJour, setDateJour] = useState(aujourdHuiIso)
   const [montantReel, setMontantReel] = useState('')
   const [note, setNote] = useState('')
   const [modaleAjust, setModaleAjust] = useState(false)
@@ -54,36 +47,41 @@ export default function CompteZoneTontinePage() {
 
   const zone = data.zones.find((z) => z.id === zoneId)
   const agence = zone ? data.agences.find((a) => a.id === zone.agenceId) : undefined
-  const compte = zoneId ? compteZoneDe(data.comptesZoneTontine, zoneId) : undefined
-  const journee = zoneId ? journeeZoneDuJour(data.journeesCompteZone, zoneId, dateJour) : undefined
+  const accesZoneOk =
+    !!zone && (estAdmin || !employeConnecte || zone.agenceId === employeConnecte.agenceId)
+  const compte = zoneId && accesZoneOk ? compteZoneDe(data.comptesZoneTontine, zoneId) : undefined
+  const journee =
+    zoneId && accesZoneOk ? journeeZoneDuJour(data.journeesCompteZone, zoneId, dateJour) : undefined
 
   const theoriqueEnCours = useMemo(() => {
-    if (!zoneId) return 0
+    if (!zoneId || !accesZoneOk) return 0
     return depotsTontineZoneJour(zoneId, dateJour, data.clients, data.transactions)
-  }, [zoneId, dateJour, data.clients, data.transactions])
+  }, [zoneId, dateJour, data.clients, data.transactions, accesZoneOk])
 
   const historique = useMemo(() => {
-    if (!zoneId) return []
+    if (!zoneId || !accesZoneOk) return []
     return [...data.journeesCompteZone]
       .filter((j) => j.zoneId === zoneId)
       .sort((a, b) => b.date.localeCompare(a.date))
-  }, [data.journeesCompteZone, zoneId])
+  }, [data.journeesCompteZone, zoneId, accesZoneOk])
 
   const ajustements = useMemo(() => {
-    if (!zoneId) return []
+    if (!zoneId || !accesZoneOk) return []
     return [...data.ajustementsCompteZone]
       .filter((a) => a.zoneId === zoneId)
       .sort((a, b) => b.date.localeCompare(a.date))
-  }, [data.ajustementsCompteZone, zoneId])
+  }, [data.ajustementsCompteZone, zoneId, accesZoneOk])
 
-  if (!zone || !zoneId) {
+  if (!zone || !zoneId || !accesZoneOk) {
     return (
       <div>
         <Link to="/zones" className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-brand-600">
           <ArrowLeft className="h-4 w-4" />
-          Retour aux zones
+          Retour à la collecte / zones
         </Link>
-        <p className="text-slate-600">Zone introuvable.</p>
+        <p className="text-slate-600">
+          {!zone ? 'Zone introuvable.' : 'Cette zone n’appartient pas à votre agence.'}
+        </p>
       </div>
     )
   }
@@ -140,16 +138,16 @@ export default function CompteZoneTontinePage() {
   return (
     <div>
       <Link
-        to={agence ? `/zones?agence=${agence.id}` : '/zones'}
+        to="/zones"
         className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700"
       >
         <ArrowLeft className="h-4 w-4" />
-        Retour aux zones
+        Retour à la collecte / zones
       </Link>
 
       <EnTetePage
         titre={`Compte zone ${zone.code}`}
-        sousTitre={`${zone.nom ?? 'Zone'} — ${agence?.nom ?? 'Agence'} — tontine uniquement`}
+        sousTitre={`${zone.nom ?? 'Zone'} — ${agence?.nom ?? 'Agence'} — 1) montant réel · 2) dépôts · 3) clôture`}
         action={
           estAdmin && (
             <button className="btn-secondary" onClick={() => setModaleAjust(true)}>
@@ -160,6 +158,16 @@ export default function CompteZoneTontinePage() {
         }
       />
 
+      <div className="mb-6 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-950 ring-1 ring-brand-100">
+        <p className="font-semibold">Flux caissier</p>
+        <p className="mt-1">
+          Saisissez d’abord le <strong>montant réel collecté</strong>, puis les dépôts sur{' '}
+          <Link to="/tontines" className="font-semibold underline">
+            Tontine &amp; cartes
+          </Link>
+          , puis clôturez ici.
+        </p>
+      </div>
       <div className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="rounded-xl bg-rose-50 px-4 py-3 ring-1 ring-rose-100">
           <div className="text-xs font-medium uppercase text-rose-700">Cumul manquant</div>

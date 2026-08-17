@@ -10,7 +10,18 @@ import type { Zone } from '../types'
 export default function Zones() {
   const [searchParams] = useSearchParams()
   const filtreAgenceId = searchParams.get('agence') ?? ''
-  const { data, ajouterZone, modifierZone, basculerActifZone } = useStore()
+  const {
+    data,
+    aDroit,
+    estAdmin,
+    employeConnecte,
+    ajouterZone,
+    modifierZone,
+    basculerActifZone,
+  } = useStore()
+  const peutGererZones = aDroit('gerer_zones')
+  const agenceRestreinte =
+    !estAdmin && employeConnecte ? employeConnecte.agenceId : null
   const [modale, setModale] = useState(false)
   const [editionId, setEditionId] = useState<string | null>(null)
   const [agenceId, setAgenceId] = useState('')
@@ -19,18 +30,23 @@ export default function Zones() {
   const [erreur, setErreur] = useState('')
   const [zoneClients, setZoneClients] = useState<Zone | null>(null)
 
-  const agenceFiltre = data.agences.find((a) => a.id === filtreAgenceId)
+  const agenceEffectiveId = agenceRestreinte || filtreAgenceId
+  const agenceFiltre = data.agences.find((a) => a.id === agenceEffectiveId)
 
   const prochainCode = useMemo(() => {
-    const nums = data.zones.map((z) => parseInt(z.code, 10)).filter((n) => !Number.isNaN(n))
+    const base = agenceRestreinte
+      ? data.zones.filter((z) => z.agenceId === agenceRestreinte)
+      : data.zones
+    const nums = base.map((z) => parseInt(z.code, 10)).filter((n) => !Number.isNaN(n))
     const max = nums.length ? Math.max(...nums) : 0
     return pad2(max + 1)
-  }, [data.zones])
+  }, [data.zones, agenceRestreinte])
 
   const ouvrirCreation = () => {
     setEditionId(null)
     setAgenceId(
-      filtreAgenceId ||
+      agenceRestreinte ||
+        filtreAgenceId ||
         data.agences.find((a) => a.actif)?.id ||
         '',
     )
@@ -78,11 +94,14 @@ export default function Zones() {
   }
 
   const zonesTriees = useMemo(() => {
-    const liste = filtreAgenceId
-      ? data.zones.filter((z) => z.agenceId === filtreAgenceId)
-      : data.zones
+    let liste = data.zones
+    if (agenceRestreinte) {
+      liste = liste.filter((z) => z.agenceId === agenceRestreinte)
+    } else if (filtreAgenceId) {
+      liste = liste.filter((z) => z.agenceId === filtreAgenceId)
+    }
     return [...liste].sort((a, b) => a.code.localeCompare(b.code))
-  }, [data.zones, filtreAgenceId])
+  }, [data.zones, filtreAgenceId, agenceRestreinte])
 
   const clientsDeLaZone = useMemo(() => {
     if (!zoneClients) return []
@@ -93,7 +112,7 @@ export default function Zones() {
 
   return (
     <div>
-      {agenceFiltre && (
+      {filtreAgenceId && !agenceRestreinte && (
         <Link
           to="/agences"
           className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700"
@@ -104,19 +123,42 @@ export default function Zones() {
       )}
 
       <EnTetePage
-        titre={agenceFiltre ? `Zones — ${agenceFiltre.nom}` : 'Zones'}
-        sousTitre={
+        titre={
           agenceFiltre
-            ? `${zonesTriees.length} zone${zonesTriees.length > 1 ? 's' : ''} — carnets préfixés par le n° de zone`
-            : `${data.zones.length} zone${data.zones.length > 1 ? 's' : ''} — le n° de carnet hérite du n° de zone (ex. 010001)`
+            ? `${peutGererZones ? 'Zones' : 'Collecte tontine'} — ${agenceFiltre.nom}`
+            : peutGererZones
+              ? 'Zones'
+              : 'Collecte tontine'
+        }
+        sousTitre={
+          peutGererZones
+            ? agenceFiltre
+              ? `${zonesTriees.length} zone${zonesTriees.length > 1 ? 's' : ''} — carnets préfixés par le n° de zone`
+              : `${data.zones.length} zone${data.zones.length > 1 ? 's' : ''} — le n° de carnet hérite du n° de zone (ex. 010001)`
+            : agenceFiltre
+              ? `Zones de votre agence (${agenceFiltre.nom}) — saisissez le montant réel collecté avant les dépôts.`
+              : 'Avant les dépôts clients : saisissez le montant réel collecté sur le compte zone du jour.'
         }
         action={
-          <button className="btn-primary" onClick={ouvrirCreation}>
-            <Plus className="h-4 w-4" />
-            Nouvelle zone
-          </button>
+          peutGererZones ? (
+            <button className="btn-primary" onClick={ouvrirCreation}>
+              <Plus className="h-4 w-4" />
+              Nouvelle zone
+            </button>
+          ) : undefined
         }
       />
+
+      {!peutGererZones && (
+        <div className="mb-6 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950 ring-1 ring-amber-200">
+          <p className="font-semibold">Ordre de saisie tontine</p>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+            <li>Ouvrir le <strong>compte zone</strong> et saisir le <strong>montant réel collecté</strong></li>
+            <li>Enregistrer les <strong>dépôts</strong> sur les carnets (Tontine &amp; cartes)</li>
+            <li>Revenir ici pour <strong>clôturer</strong> la journée zone</li>
+          </ol>
+        </div>
+      )}
 
       {zonesTriees.length === 0 ? (
         <EtatVide
@@ -149,7 +191,7 @@ export default function Zones() {
                         {z.actif ? 'Active' : 'Inactive'}
                       </span>
                     </div>
-                    {!agenceFiltre && (
+                    {!agenceFiltre && !agenceRestreinte && (
                       <p className="mt-1 text-sm text-slate-500">
                         {agence ? `${agence.nom}` : 'Agence introuvable'}
                       </p>
@@ -168,7 +210,7 @@ export default function Zones() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Link to={`/zones/${z.id}/compte`} className="btn-primary !py-2 text-xs">
                     <Scale className="h-3.5 w-3.5" />
-                    Compte zone tontine
+                    {peutGererZones ? 'Compte zone tontine' : 'Saisir montant réel / clôturer'}
                   </Link>
                   <button
                     className="btn-secondary !py-2 text-xs"
@@ -177,12 +219,19 @@ export default function Zones() {
                     <Users className="h-3.5 w-3.5" />
                     Clients ({nbClients})
                   </button>
-                  <button className="btn-secondary !py-2 text-xs" onClick={() => ouvrirEdition(z.id)}>
-                    Modifier
-                  </button>
-                  <button className="btn-secondary !py-2 text-xs" onClick={() => basculerActifZone(z.id)}>
-                    {z.actif ? 'Désactiver' : 'Réactiver'}
-                  </button>
+                  {peutGererZones && (
+                    <>
+                      <button className="btn-secondary !py-2 text-xs" onClick={() => ouvrirEdition(z.id)}>
+                        Modifier
+                      </button>
+                      <button
+                        className="btn-secondary !py-2 text-xs"
+                        onClick={() => basculerActifZone(z.id)}
+                      >
+                        {z.actif ? 'Désactiver' : 'Réactiver'}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )

@@ -45,6 +45,7 @@ sur ce dernier. Cela sous attend la gestion des agences.
 - Pour les comptes tontines, desormais, on fait la saisi du montant cotisé, et deduire 
 le nombre de mise sachant qu'on connait le montant de la mise . Affiche la recaptulatif sur un modal pop
 confirmant les calculs avant que la caissier valide. S'il y a incoherence, un message d'erreur doit aviser le caissier.
+- Saisie tontine : au préalable le caissier saisit le montant réel collecté (compte zone) avant les dépôts carnets ; menu Collecte tontine visible pour le caissier.
 
 - Un caissier peut ajouter uniquement un client tontine, peut pas faire de modification .
 

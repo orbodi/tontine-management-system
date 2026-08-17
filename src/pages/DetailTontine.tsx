@@ -11,11 +11,13 @@ import { NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
 import { CYCLES_PAR_CARNET } from '../types'
 import {
+  aujourdHuiIso,
   CARNETS_RETRAIT_6_MOIS,
   LIBELLES_CARNET,
   calculerMisesDepuisMontant,
   carreauxNets,
   eligibiliteRetraitCarnet,
+  journeeZoneDuJour,
   moisDuCycle,
   situationsCycles,
   type EtatCycle,
@@ -46,8 +48,15 @@ export default function DetailTontine() {
 
   const carnet = data.carnets.find((c) => c.id === id)
   const client = carnet ? data.clients.find((c) => c.id === carnet.clientId) : undefined
+  const zone = carnet ? data.zones.find((z) => z.id === carnet.zoneId) : undefined
   const peutOperer = aDroit('operer_comptes')
   const peutVerrouiller = aDroit('verrouiller_comptes')
+
+  const journeeCollecte = carnet
+    ? journeeZoneDuJour(data.journeesCompteZone, carnet.zoneId, aujourdHuiIso())
+    : undefined
+  const collecteOuverte = !!journeeCollecte && !journeeCollecte.cloturee
+  const collecteCloturee = !!journeeCollecte?.cloturee
 
   const cycles = useMemo(
     () => (carnet ? situationsCycles(carnet, data.mises) : []),
@@ -77,6 +86,14 @@ export default function DetailTontine() {
 
   const ouvrirRecapDepot = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!collecteOuverte) {
+      setErreur(
+        collecteCloturee
+          ? 'La collecte de cette zone est déjà clôturée pour aujourd’hui.'
+          : 'Saisissez d’abord le montant réel collecté sur le compte zone.',
+      )
+      return
+    }
     if (!calcDepot?.ok) {
       setErreur(calcDepot && !calcDepot.ok ? calcDepot.erreur : 'Montant invalide.')
       return
@@ -155,7 +172,12 @@ export default function DetailTontine() {
             {peutOperer && payeesActuel < carnet.misesParCycle && (
               <button
                 className="btn-primary"
-                disabled={carnet.verrouille}
+                disabled={carnet.verrouille || !collecteOuverte}
+                title={
+                  !collecteOuverte
+                    ? 'Saisissez d’abord le montant réel collecté sur le compte zone'
+                    : undefined
+                }
                 onClick={() => {
                   setMontantDepot('')
                   setErreur('')
@@ -215,6 +237,51 @@ export default function DetailTontine() {
           </div>
         }
       />
+
+      {peutOperer && !collecteOuverte && (
+        <div
+          className={`mb-6 rounded-xl px-4 py-3 text-sm ring-1 ${
+            collecteCloturee
+              ? 'bg-slate-50 text-slate-700 ring-slate-200'
+              : 'bg-amber-50 text-amber-950 ring-amber-200'
+          }`}
+        >
+          {collecteCloturee ? (
+            <p>
+              La collecte tontine de la zone {zone?.code ?? '—'} est <strong>clôturée</strong> pour
+              aujourd’hui — plus de dépôt possible.
+            </p>
+          ) : (
+            <>
+              <p className="font-semibold">Montant réel collecté requis</p>
+              <p className="mt-1">
+                Avant tout dépôt sur ce carnet, saisissez le montant réellement collecté pour la zone{' '}
+                <strong>{zone?.code ?? '—'}</strong>
+                {zone?.nom ? ` (${zone.nom})` : ''}.
+              </p>
+              <Link
+                to={`/zones/${carnet.zoneId}/compte`}
+                className="mt-2 inline-flex text-sm font-semibold text-brand-700 hover:text-brand-800"
+              >
+                Aller saisir le montant réel →
+              </Link>
+            </>
+          )}
+        </div>
+      )}
+
+      {peutOperer && collecteOuverte && (
+        <div className="mb-6 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900 ring-1 ring-emerald-200">
+          Collecte zone {zone?.code ?? '—'} ouverte — réel saisi :{' '}
+          <strong>{formatMontant(journeeCollecte!.montantReel)}</strong>
+          <Link
+            to={`/zones/${carnet.zoneId}/compte`}
+            className="ml-2 font-semibold text-brand-700 hover:text-brand-800"
+          >
+            Voir le compte zone
+          </Link>
+        </div>
+      )}
 
       <div className="mb-6 flex flex-wrap items-center gap-4">
         <Avatar nom={client.nom} prenom={client.prenom} taille="lg" />

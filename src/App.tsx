@@ -40,7 +40,9 @@ export default function App() {
         <Route path="/caisse/:employeId" element={<DetailCaisse />} />
         {aDroit('voir_rapports') && <Route path="/rapports" element={<Rapports />} />}
         {estAdmin && <Route path="/agences" element={<Agences />} />}
-        {aDroit('gerer_zones') && <Route path="/zones" element={<Zones />} />}
+        {(aDroit('gerer_zones') || aDroit('operer_comptes')) && (
+          <Route path="/zones" element={<Zones />} />
+        )}
         {(aDroit('gerer_zones') || aDroit('operer_comptes')) && (
           <Route path="/zones/:zoneId/compte" element={<CompteZoneTontinePage />} />
         )}
