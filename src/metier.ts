@@ -8,6 +8,8 @@ import {
   type Credit,
   type JourneeCompteZone,
   type MiseTontine,
+  type MouvementCompteCaisse,
+  type OuvertureCaisse,
   type Remboursement,
   type StatutJourneeZone,
   type Transaction,
@@ -235,14 +237,26 @@ export interface SituationCaisse {
   nombreOperations: number
   totalEntrees: number
   totalSorties: number
+  /** Solde d’ouverture saisi (0 si journée non ouverte). */
+  soldeOuverture: number
+  /**
+   * Solde attendu à la fermeture (solde compte en fin de journée / actuel).
+   * = ouverture + flux du jour (ops + alimentations).
+   */
+  soldeFermetureTheorique: number
+  /** @deprecated Alias de soldeFermetureTheorique (compat affichages). */
   soldeTheorique: number
   transactions: Transaction[]
+  /** Ouverture déjà effectuée pour ce jour. */
+  ouvertureDuJour: OuvertureCaisse | null
   /** Arrêt déjà effectué pour ce jour (s'il existe). */
   arretDuJour: ArretCaisse | null
   /** Dernier arrêt (tous jours). */
   dernierArret: ArretCaisse | null
-  /** Jours passés avec opérations mais sans arrêt (du plus ancien au plus récent). */
+  /** Jours passés ouverts ou avec ops, sans arrêt (du plus ancien au plus récent). */
   journeesEnRetard: string[]
+  /** Journée ouverte (montant d’ouverture saisi). */
+  ouverte: boolean
   cloturee: boolean
 }
 
@@ -250,8 +264,52 @@ function jourIsoDepuisDate(iso: string): string {
   return iso.slice(0, 10)
 }
 
+function deltaMouvementCaisse(m: MouvementCompteCaisse): number {
+  return m.sens === 'credit' ? m.montant : -m.montant
+}
+
+/** Solde du compte juste avant le début du jour (YYYY-MM-DD). */
+export function soldeCompteCaisseAvantJour(
+  compte: CompteCaisse | undefined,
+  mouvements: MouvementCompteCaisse[],
+  journee: string,
+): number {
+  if (!compte) return 0
+  let s = compte.solde
+  for (const m of mouvements) {
+    if (m.compteCaisseId !== compte.id) continue
+    if (jourIsoDepuisDate(m.date) >= journee) s -= deltaMouvementCaisse(m)
+  }
+  return s
+}
+
+/** Solde du compte en fin de journée (pour aujourd’hui = solde courant). */
+export function soldeCompteCaisseFinJour(
+  compte: CompteCaisse | undefined,
+  mouvements: MouvementCompteCaisse[],
+  journee: string,
+  aujourdhui: string = aujourdHuiIso(),
+): number {
+  if (!compte) return 0
+  if (journee >= aujourdhui) return compte.solde
+  let s = compte.solde
+  for (const m of mouvements) {
+    if (m.compteCaisseId !== compte.id) continue
+    if (jourIsoDepuisDate(m.date) > journee) s -= deltaMouvementCaisse(m)
+  }
+  return s
+}
+
 export function aujourdHuiIso(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+export function ouvertureCaisseDuJour(
+  ouverturesCaisse: OuvertureCaisse[],
+  employeId: string,
+  journee: string,
+): OuvertureCaisse | undefined {
+  return ouverturesCaisse.find((o) => o.employeId === employeId && o.journee === journee)
 }
 
 export function arretCaisseDuJour(
@@ -275,11 +333,33 @@ export function arretClotureEnRetard(a: ArretCaisse): boolean {
   return jourIsoDepuisDate(dateClotureArret(a)) > journee
 }
 
-/** Jours (strictement avant `avantJour`) avec ops et sans arrêt, triés du plus ancien. */
+/** Jours ouverts et non encore clôturés (strictement avant `avantJour`). */
+export function journeesOuvertesEnAttenteCloture(
+  employeId: string,
+  ouverturesCaisse: OuvertureCaisse[],
+  arretsCaisse: ArretCaisse[],
+  avantJour: string = aujourdHuiIso(),
+): string[] {
+  const joursArretes = new Set(
+    arretsCaisse
+      .filter((a) => a.employeId === employeId)
+      .map((a) => a.journee ?? jourIsoDepuisDate(dateClotureArret(a))),
+  )
+  return ouverturesCaisse
+    .filter(
+      (o) =>
+        o.employeId === employeId && o.journee < avantJour && !joursArretes.has(o.journee),
+    )
+    .map((o) => o.journee)
+    .sort()
+}
+
+/** Jours (strictement avant `avantJour`) ouverts ou avec ops, sans arrêt. */
 export function journeesCaisseEnRetard(
   employeId: string,
   transactions: Transaction[],
   arretsCaisse: ArretCaisse[],
+  ouverturesCaisse: OuvertureCaisse[] = [],
   avantJour: string = aujourdHuiIso(),
 ): string[] {
   const joursAvecOps = new Set(
@@ -292,27 +372,40 @@ export function journeesCaisseEnRetard(
       )
       .map((t) => jourIsoDepuisDate(t.date)),
   )
+  const joursOuverts = new Set(
+    ouverturesCaisse
+      .filter((o) => o.employeId === employeId && o.journee < avantJour)
+      .map((o) => o.journee),
+  )
+  const jours = new Set([...joursAvecOps, ...joursOuverts])
   const joursArretes = new Set(
     arretsCaisse
       .filter((a) => a.employeId === employeId)
       .map((a) => a.journee ?? jourIsoDepuisDate(dateClotureArret(a))),
   )
-  return [...joursAvecOps].filter((j) => !joursArretes.has(j)).sort()
+  return [...jours].filter((j) => !joursArretes.has(j)).sort()
 }
 
 /**
- * Bloque les nouvelles opérations si une journée passée n'a pas été arrêtée.
- * Retourne le message d'erreur, ou null si OK.
+ * Bloque les nouvelles opérations si une journée passée n'a pas été arrêtée,
+ * ou si la journée en cours n'est pas ouverte.
  */
 export function messageBlocageCaisseJournaliere(
   employeId: string,
   transactions: Transaction[],
   arretsCaisse: ArretCaisse[],
+  ouverturesCaisse: OuvertureCaisse[] = [],
 ): string | null {
-  const retard = journeesCaisseEnRetard(employeId, transactions, arretsCaisse)
-  if (retard.length === 0) return null
-  const premier = retard[0]
-  return `Arrêt de caisse obligatoire : demandez à l’admin ou au chef d’agence de clôturer la journée du ${premier} avant de continuer.`
+  const retard = journeesCaisseEnRetard(employeId, transactions, arretsCaisse, ouverturesCaisse)
+  if (retard.length > 0) {
+    const premier = retard[0]
+    return `Arrêt de caisse obligatoire : demandez à l’admin ou au chef d’agence de clôturer la journée du ${premier} avant de continuer.`
+  }
+  const aujourdhui = aujourdHuiIso()
+  if (!ouvertureCaisseDuJour(ouverturesCaisse, employeId, aujourdhui)) {
+    return `Ouverture de caisse obligatoire : demandez à l’admin ou au chef d’agence d’ouvrir la journée (${aujourdhui}).`
+  }
+  return null
 }
 
 /** Situation de caisse pour un jour donné (défaut : aujourd’hui). */
@@ -321,6 +414,9 @@ export function situationCaisse(
   transactions: Transaction[],
   arretsCaisse: ArretCaisse[],
   journee: string = aujourdHuiIso(),
+  comptesCaisse: CompteCaisse[] = [],
+  mouvementsCompteCaisse: MouvementCompteCaisse[] = [],
+  ouverturesCaisse: OuvertureCaisse[] = [],
 ): SituationCaisse {
   const dernierArret =
     arretsCaisse
@@ -328,6 +424,7 @@ export function situationCaisse(
       .sort((a, b) => dateClotureArret(b).localeCompare(dateClotureArret(a)))[0] ?? null
 
   const arretDuJour = arretCaisseDuJour(arretsCaisse, employeId, journee) ?? null
+  const ouvertureDuJour = ouvertureCaisseDuJour(ouverturesCaisse, employeId, journee) ?? null
 
   const periode = transactions
     .filter(
@@ -345,6 +442,20 @@ export function situationCaisse(
     else totalEntrees += t.montant
   })
 
+  const compte = compteCaisseDe(comptesCaisse, employeId)
+  let soldeOuverture: number
+  let soldeFermetureTheorique: number
+  if (arretDuJour && typeof arretDuJour.soldeOuverture === 'number') {
+    soldeOuverture = arretDuJour.soldeOuverture
+    soldeFermetureTheorique = arretDuJour.soldeTheorique
+  } else if (ouvertureDuJour) {
+    soldeOuverture = ouvertureDuJour.soldeOuverture
+    soldeFermetureTheorique = soldeCompteCaisseFinJour(compte, mouvementsCompteCaisse, journee)
+  } else {
+    soldeOuverture = 0
+    soldeFermetureTheorique = soldeCompteCaisseFinJour(compte, mouvementsCompteCaisse, journee)
+  }
+
   const dates = periode.map((t) => t.date).sort()
   return {
     journee,
@@ -352,11 +463,20 @@ export function situationCaisse(
     nombreOperations: periode.length,
     totalEntrees,
     totalSorties,
-    soldeTheorique: totalEntrees - totalSorties,
+    soldeOuverture,
+    soldeFermetureTheorique,
+    soldeTheorique: soldeFermetureTheorique,
     transactions: periode,
+    ouvertureDuJour,
     arretDuJour,
     dernierArret,
-    journeesEnRetard: journeesCaisseEnRetard(employeId, transactions, arretsCaisse),
+    journeesEnRetard: journeesCaisseEnRetard(
+      employeId,
+      transactions,
+      arretsCaisse,
+      ouverturesCaisse,
+    ),
+    ouverte: !!ouvertureDuJour,
     cloturee: !!arretDuJour,
   }
 }

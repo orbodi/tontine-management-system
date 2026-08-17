@@ -2,6 +2,8 @@ import { MODULE_CREDITS_ACTIF } from './config'
 import {
   deltaSoldeOperationCaisse,
   estOperationCaisse,
+  soldeCompteCaisseAvantJour,
+  soldeCompteCaisseFinJour,
 } from './metier'
 import {
   CARREAUX_PAR_CYCLE,
@@ -13,6 +15,7 @@ import {
   type CompteZoneTontine,
   type Employe,
   type MouvementCompteCaisse,
+  type OuvertureCaisse,
   type StatutCredit,
   type Transaction,
   type TypeCarnet,
@@ -220,6 +223,7 @@ export function genererDonneesDemo(): AppData {
     transactions: [],
     comptesCaisse: [],
     mouvementsCompteCaisse: [],
+    ouverturesCaisse: [],
     arretsCaisse: [],
     journalConnexions: [
       {
@@ -513,6 +517,7 @@ export function genererDonneesDemo(): AppData {
       nombreOperations: nb,
       totalEntrees: entrees,
       totalSorties: sorties,
+      soldeOuverture: 0,
       soldeTheorique: entrees - sorties,
       montantCompte: compte,
       ecart: compte - (entrees - sorties),
@@ -523,8 +528,8 @@ export function genererDonneesDemo(): AppData {
   })
 
   // ----- Scénarios de test suivi caisse -----
-  // Affoué : opérations HIER non arrêtées → « En retard » (+ ops aujourd'hui)
-  // Brice : opérations AUJOURD'HUI seulement → « À arrêter »
+  // Affoué : ouverture HIER + ops, non clôturée → « En retard »
+  // Brice : ouverture AUJOURD'HUI + ops → « À clôturer »
   const dateHierMatin = ilYa(1, 10)
   const dateHierAprem = ilYa(1, 15)
   const jourHier = dateHierMatin.slice(0, 10)
@@ -603,6 +608,7 @@ export function genererDonneesDemo(): AppData {
         nombreOperations: ops.length,
         totalEntrees: entrees,
         totalSorties: sorties,
+        soldeOuverture: 0,
         soldeTheorique: solde,
         montantCompte: solde,
         ecart: 0,
@@ -680,6 +686,67 @@ export function genererDonneesDemo(): AppData {
       operateurNom: t.operateur,
     })
   }
+
+  // Recalcule ouverture / fermeture théorique à partir du compte caisse
+  for (const a of data.arretsCaisse) {
+    const compte = data.comptesCaisse.find((c) => c.employeId === a.employeId && c.actif)
+    const journee = a.journee ?? (a.dateCloture ?? a.date ?? '').slice(0, 10)
+    a.soldeOuverture = soldeCompteCaisseAvantJour(compte, data.mouvementsCompteCaisse, journee)
+    a.soldeTheorique = soldeCompteCaisseFinJour(compte, data.mouvementsCompteCaisse, journee)
+    if (a.note?.includes('Écart')) {
+      a.montantCompte = a.soldeTheorique - 500
+      a.ecart = -500
+    } else {
+      a.montantCompte = a.soldeTheorique
+      a.ecart = 0
+    }
+  }
+
+  // Ouvertures de journée (admin/chef) — une par arrêt + scénarios ouverts
+  const ajouterOuverture = (
+    employe: Employe,
+    journee: string,
+    soldeOuverture: number,
+    heure = 7,
+  ) => {
+    if (data.ouverturesCaisse.some((o) => o.employeId === employe.id && o.journee === journee)) {
+      return
+    }
+    const o: OuvertureCaisse = {
+      id: uid(),
+      employeId: employe.id,
+      employeNom: employe.nomComplet,
+      agenceId: employe.agenceId,
+      journee,
+      soldeOuverture,
+      dateOuverture: `${journee}T${String(heure).padStart(2, '0')}:45:00.000Z`,
+      ouvertParId: chef.id,
+      ouvertParNom: chef.nomComplet,
+    }
+    data.ouverturesCaisse.push(o)
+  }
+
+  for (const a of data.arretsCaisse) {
+    const emp = data.employes.find((e) => e.id === a.employeId)
+    if (!emp) continue
+    ajouterOuverture(emp, a.journee, a.soldeOuverture)
+  }
+
+  // Affoué : hier ouverte non clôturée (retard). Brice : aujourd'hui ouverte.
+  const compteAffoue = data.comptesCaisse.find((c) => c.employeId === affoue.id)
+  const compteBrice = data.comptesCaisse.find((c) => c.employeId === brice.id)
+  ajouterOuverture(
+    affoue,
+    jourHier,
+    soldeCompteCaisseAvantJour(compteAffoue, data.mouvementsCompteCaisse, jourHier),
+  )
+  ajouterOuverture(
+    brice,
+    auj,
+    soldeCompteCaisseAvantJour(compteBrice, data.mouvementsCompteCaisse, auj),
+  )
+
+  data.ouverturesCaisse.sort((a, b) => b.dateOuverture.localeCompare(a.dateOuverture))
   data.mouvementsCompteCaisse.sort((a, b) => b.date.localeCompare(a.date))
 
   return data

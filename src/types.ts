@@ -243,7 +243,12 @@ export interface CompteCaisse {
   actif: boolean
 }
 
-export type TypeMouvementCaisse = 'alimentation' | 'entree_operation' | 'sortie_operation'
+export type TypeMouvementCaisse =
+  | 'alimentation'
+  | 'entree_operation'
+  | 'sortie_operation'
+  | 'ajustement_arret'
+  | 'ouverture_journee'
 
 export interface MouvementCompteCaisse {
   id: string
@@ -260,6 +265,22 @@ export interface MouvementCompteCaisse {
   transactionId?: string
   operateurId: string
   operateurNom: string
+}
+
+/** Ouverture de journée saisie par admin / chef d'agence. */
+export interface OuvertureCaisse {
+  id: string
+  employeId: string
+  employeNom: string
+  agenceId: string
+  /** Jour calendaire ouvert (YYYY-MM-DD). */
+  journee: string
+  /** Montant d’ouverture saisi. */
+  soldeOuverture: number
+  dateOuverture: string
+  ouvertParId: string
+  ouvertParNom: string
+  note?: string
 }
 
 export interface ArretCaisse {
@@ -281,8 +302,16 @@ export interface ArretCaisse {
   nombreOperations: number
   totalEntrees: number
   totalSorties: number
+  /** Solde du compte caisse à l’ouverture de la journée. */
+  soldeOuverture: number
+  /**
+   * Solde attendu à la fermeture (= ouverture + entrées − sorties + alimentations du jour).
+   * Correspond au solde du compte caisse avant éventuel ajustement d’écart.
+   */
   soldeTheorique: number
+  /** Espèces comptées à la fermeture. */
   montantCompte: number
+  /** Écart = compté − solde théorique de fermeture. */
   ecart: number
   note?: string
   /** Admin ou chef d'agence ayant validé l'arrêt. */
@@ -345,6 +374,7 @@ export interface AppData {
   transactions: Transaction[]
   comptesCaisse: CompteCaisse[]
   mouvementsCompteCaisse: MouvementCompteCaisse[]
+  ouverturesCaisse: OuvertureCaisse[]
   arretsCaisse: ArretCaisse[]
   journalConnexions: JournalConnexion[]
   /** Ordre client par zone (clé = zoneId). */

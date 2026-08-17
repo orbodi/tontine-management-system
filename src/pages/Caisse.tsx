@@ -31,12 +31,15 @@ function BadgeStatutCaisse({ situation }: { situation: SituationCaisse }) {
     return <span className="badge bg-rose-100 text-rose-700">Retard</span>
   }
   if (situation.cloturee) {
-    return <span className="badge bg-emerald-100 text-emerald-700">Arrêtée</span>
+    return <span className="badge bg-emerald-100 text-emerald-700">Clôturée</span>
+  }
+  if (!situation.ouverte) {
+    return <span className="badge bg-slate-100 text-slate-600">Non ouverte</span>
   }
   if (situation.nombreOperations === 0) {
-    return <span className="badge bg-slate-100 text-slate-600">Sans ops</span>
+    return <span className="badge bg-sky-100 text-sky-700">Ouverte</span>
   }
-  return <span className="badge bg-amber-100 text-amber-800">À arrêter</span>
+  return <span className="badge bg-amber-100 text-amber-800">À clôturer</span>
 }
 
 function prenomNom(nomComplet: string) {
@@ -108,7 +111,9 @@ function ListeTransactions({
 function VueGlobaleCaisses() {
   const { data, estAdmin, agenceFiltreOperations } = useStore()
   const [dateJournal, setDateJournal] = useState(aujourdHuiIso())
-  const [filtreStatut, setFiltreStatut] = useState<'tous' | 'a_arreter' | 'retard' | 'arretee'>('tous')
+  const [filtreStatut, setFiltreStatut] = useState<
+    'tous' | 'a_arreter' | 'retard' | 'arretee' | 'non_ouverte'
+  >('tous')
   const [filtreArretsMode, setFiltreArretsMode] = useState<'mois' | 'intervalle'>('mois')
   const [filtreArretsMois, setFiltreArretsMois] = useState(moisEnCoursLocal)
   const bornesMoisCourant = bornesMois(moisEnCoursLocal())
@@ -121,12 +126,30 @@ function VueGlobaleCaisses() {
       .filter((u) => !agenceFiltreOperations || u.agenceId === agenceFiltreOperations)
       .map((employe) => ({
         employe,
-        situation: situationCaisse(employe.id, data.transactions, data.arretsCaisse, dateJournal),
+        situation: situationCaisse(
+          employe.id,
+          data.transactions,
+          data.arretsCaisse,
+          dateJournal,
+          data.comptesCaisse,
+          data.mouvementsCompteCaisse,
+          data.ouverturesCaisse ?? [],
+        ),
         agence: data.agences.find((a) => a.id === employe.agenceId),
       }))
       .sort((a, b) => {
         const prio = (s: SituationCaisse) =>
-          s.journeesEnRetard.length > 0 ? 0 : !s.cloturee && s.nombreOperations > 0 ? 1 : s.cloturee ? 2 : 3
+          s.journeesEnRetard.length > 0
+            ? 0
+            : !s.ouverte
+              ? 1
+              : !s.cloturee && s.nombreOperations > 0
+                ? 2
+                : s.ouverte && !s.cloturee
+                  ? 3
+                  : s.cloturee
+                    ? 4
+                    : 5
         const d = prio(a.situation) - prio(b.situation)
         if (d !== 0) return d
         return a.employe.nomComplet.localeCompare(b.employe.nomComplet)
@@ -138,7 +161,8 @@ function VueGlobaleCaisses() {
       if (filtreStatut === 'tous') return true
       if (filtreStatut === 'retard') return situation.journeesEnRetard.length > 0
       if (filtreStatut === 'arretee') return situation.cloturee
-      return !situation.cloturee && situation.journeesEnRetard.length === 0
+      if (filtreStatut === 'non_ouverte') return !situation.ouverte && !situation.cloturee
+      return situation.ouverte && !situation.cloturee
     })
   }, [caisses, filtreStatut])
 
@@ -150,10 +174,12 @@ function VueGlobaleCaisses() {
         acc.ops += situation.nombreOperations
         if (situation.journeesEnRetard.length > 0) acc.retard++
         else if (situation.cloturee) acc.arretees++
+        else if (!situation.ouverte) acc.nonOuvertes++
         else if (situation.nombreOperations > 0) acc.aArreter++
+        else acc.ouvertes++
         return acc
       },
-      { entrees: 0, sorties: 0, ops: 0, retard: 0, arretees: 0, aArreter: 0 },
+      { entrees: 0, sorties: 0, ops: 0, retard: 0, arretees: 0, aArreter: 0, nonOuvertes: 0, ouvertes: 0 },
     )
   }, [caisses])
 
@@ -207,9 +233,10 @@ function VueGlobaleCaisses() {
           {(
             [
               ['tous', 'Tous'],
-              ['a_arreter', 'À arrêter'],
+              ['non_ouverte', 'Non ouvertes'],
+              ['a_arreter', 'À clôturer'],
               ['retard', 'En retard'],
-              ['arretee', 'Arrêtées'],
+              ['arretee', 'Clôturées'],
             ] as const
           ).map(([v, label]) => (
             <button
@@ -228,7 +255,7 @@ function VueGlobaleCaisses() {
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-7">
         <div className="card">
           <div className="text-xs text-slate-500">Caisses</div>
           <div className="mt-1 text-xl font-bold text-slate-900">{caisses.length}</div>
@@ -245,7 +272,11 @@ function VueGlobaleCaisses() {
           </div>
         </div>
         <div className="card">
-          <div className="text-xs text-slate-500">À arrêter</div>
+          <div className="text-xs text-slate-500">Non ouvertes</div>
+          <div className="mt-1 text-xl font-bold text-slate-700">{totaux.nonOuvertes}</div>
+        </div>
+        <div className="card">
+          <div className="text-xs text-slate-500">À clôturer</div>
           <div className="mt-1 text-xl font-bold text-amber-700">{totaux.aArreter}</div>
         </div>
         <div className="card">
@@ -294,21 +325,23 @@ function VueGlobaleCaisses() {
                       </div>
                     </div>
                     <div>
-                      <div className="text-slate-500">Entrées</div>
-                      <div className="font-semibold text-emerald-600">
-                        {formatMontant(situation.totalEntrees)}
+                      <div className="text-slate-500">Ouverture</div>
+                      <div className="font-semibold text-slate-800">
+                        {formatMontant(situation.soldeOuverture)}
                       </div>
                     </div>
                     <div>
-                      <div className="text-slate-500">Sorties</div>
-                      <div className="font-semibold text-rose-600">
-                        {formatMontant(situation.totalSorties)}
+                      <div className="text-slate-500">Entrées / sorties</div>
+                      <div className="font-semibold">
+                        <span className="text-emerald-600">{formatMontant(situation.totalEntrees)}</span>
+                        {' / '}
+                        <span className="text-rose-600">{formatMontant(situation.totalSorties)}</span>
                       </div>
                     </div>
                     <div>
-                      <div className="text-slate-500">Solde jour</div>
+                      <div className="text-slate-500">Fermeture th.</div>
                       <div className="font-bold text-slate-800">
-                        {formatMontant(situation.soldeTheorique)}
+                        {formatMontant(situation.soldeFermetureTheorique)}
                       </div>
                     </div>
                   </div>
@@ -459,7 +492,8 @@ function VueGlobaleCaisses() {
                   <th className="px-5 py-3">Journée</th>
                   <th className="px-5 py-3">Clôture</th>
                   <th className="px-5 py-3">Caissier</th>
-                  <th className="px-5 py-3 text-right">Solde th.</th>
+                  <th className="px-5 py-3 text-right">Ouverture</th>
+                  <th className="px-5 py-3 text-right">Fermeture th.</th>
                   <th className="px-5 py-3 text-right">Compté</th>
                   <th className="px-5 py-3">Écart</th>
                 </tr>
@@ -482,6 +516,7 @@ function VueGlobaleCaisses() {
                       )}
                     </td>
                     <td className="px-5 py-3">{a.employeNom}</td>
+                    <td className="px-5 py-3 text-right">{formatMontant(a.soldeOuverture ?? 0)}</td>
                     <td className="px-5 py-3 text-right font-semibold">
                       {formatMontant(a.soldeTheorique)}
                     </td>
@@ -506,8 +541,24 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
   const [detailOuvert, setDetailOuvert] = useState(false)
 
   const maCaisse = useMemo(
-    () => situationCaisse(employe.id, data.transactions, data.arretsCaisse),
-    [employe.id, data.transactions, data.arretsCaisse],
+    () =>
+      situationCaisse(
+        employe.id,
+        data.transactions,
+        data.arretsCaisse,
+        aujourdHuiIso(),
+        data.comptesCaisse,
+        data.mouvementsCompteCaisse,
+        data.ouverturesCaisse ?? [],
+      ),
+    [
+      employe.id,
+      data.transactions,
+      data.arretsCaisse,
+      data.comptesCaisse,
+      data.mouvementsCompteCaisse,
+      data.ouverturesCaisse,
+    ],
   )
 
   const monCompte = useMemo(
@@ -557,6 +608,22 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
         </div>
       )}
 
+      {!enRetard && !maCaisse.ouverte && (
+        <div className="mb-6 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 ring-1 ring-slate-200">
+          Journée non ouverte — l’admin ou le chef d’agence doit saisir le montant d’ouverture avant
+          vos opérations.
+        </div>
+      )}
+
+      {!enRetard && maCaisse.ouverte && !maCaisse.cloturee && (
+        <div className="mb-6 rounded-xl bg-sky-50 px-4 py-3 text-sm text-sky-800 ring-1 ring-sky-200">
+          Journée ouverte — solde d’ouverture {formatMontant(maCaisse.soldeOuverture)}
+          {maCaisse.ouvertureDuJour?.ouvertParNom && (
+            <span> (par {maCaisse.ouvertureDuJour.ouvertParNom})</span>
+          )}
+        </div>
+      )}
+
       {!enRetard && maCaisse.cloturee && maCaisse.arretDuJour && (
         <div className="mb-6 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200">
           Caisse du jour arrêtée — écart <BadgeEcart ecart={maCaisse.arretDuJour.ecart} />
@@ -574,23 +641,25 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
           </div>
         </div>
         <div className="card">
-          <div className="text-xs text-slate-500">Entrées</div>
-          <div className="mt-1 text-lg font-bold text-emerald-600">
-            {formatMontant(maCaisse.totalEntrees)}
+          <div className="text-xs text-slate-500">Solde à l’ouverture</div>
+          <div className="mt-1 text-lg font-bold text-slate-800">
+            {formatMontant(maCaisse.soldeOuverture)}
           </div>
         </div>
         <div className="card">
-          <div className="text-xs text-slate-500">Sorties</div>
-          <div className="mt-1 text-lg font-bold text-rose-600">
-            {formatMontant(maCaisse.totalSorties)}
-          </div>
-        </div>
-        <div className="card">
-          <div className="text-xs text-slate-500">Solde théorique</div>
-          <div className="mt-1 text-lg font-bold text-brand-700">
-            {formatMontant(maCaisse.soldeTheorique)}
+          <div className="text-xs text-slate-500">Entrées / sorties</div>
+          <div className="mt-1 text-sm font-bold">
+            <span className="text-emerald-600">{formatMontant(maCaisse.totalEntrees)}</span>
+            <span className="text-slate-400"> / </span>
+            <span className="text-rose-600">{formatMontant(maCaisse.totalSorties)}</span>
           </div>
           <div className="text-xs text-slate-500">{maCaisse.nombreOperations} op.</div>
+        </div>
+        <div className="card">
+          <div className="text-xs text-slate-500">Fermeture théorique</div>
+          <div className="mt-1 text-lg font-bold text-brand-700">
+            {formatMontant(maCaisse.soldeFermetureTheorique)}
+          </div>
         </div>
       </div>
 
@@ -632,7 +701,8 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
                   <th className="px-5 py-3">Journée</th>
                   <th className="px-5 py-3">Clôture</th>
                   <th className="px-5 py-3 text-right">Ops</th>
-                  <th className="px-5 py-3 text-right">Solde th.</th>
+                  <th className="px-5 py-3 text-right">Ouverture</th>
+                  <th className="px-5 py-3 text-right">Fermeture th.</th>
                   <th className="px-5 py-3 text-right">Compté</th>
                   <th className="px-5 py-3">Écart</th>
                 </tr>
@@ -655,6 +725,7 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
                       )}
                     </td>
                     <td className="px-5 py-3 text-right">{a.nombreOperations}</td>
+                    <td className="px-5 py-3 text-right">{formatMontant(a.soldeOuverture ?? 0)}</td>
                     <td className="px-5 py-3 text-right font-semibold">
                       {formatMontant(a.soldeTheorique)}
                     </td>

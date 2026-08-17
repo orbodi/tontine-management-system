@@ -18,6 +18,7 @@ import {
   type MiseTontine,
   type MouvementCompte,
   type MouvementCompteCaisse,
+  type OuvertureCaisse,
   type Remboursement,
   type Role,
   type Transaction,
@@ -37,17 +38,19 @@ import {
   eligibiliteRetraitCarnet,
   estOperationCaisse,
   journeesCaisseEnRetard,
+  journeesOuvertesEnAttenteCloture,
   messageBlocageCaisseJournaliere,
   arretCaisseDuJour,
   aujourdHuiIso,
+  ouvertureCaisseDuJour,
   situationCaisse,
   statutDepuisEcart,
 } from './metier'
 import { genererDonneesDemo } from './demo-data'
 import { numeroCarnet, numeroClient, numeroCompteCaisse, numeroCompteSolde, pad4, uid } from './utils'
 
-const STORAGE_KEY = 'microfinance-data-v18'
-const SESSION_KEY = 'microfinance-session-v18'
+const STORAGE_KEY = 'microfinance-data-v20'
+const SESSION_KEY = 'microfinance-session-v20'
 
 export const LIBELLES_ROLE: Record<Role, string> = {
   admin: 'Administrateur',
@@ -137,8 +140,15 @@ interface StoreApi {
   supprimerEmploye: (id: string) => void
   basculerActifEmploye: (id: string) => void
   // Caisse
+  /** Ouverture de journée : saisie du montant d'ouverture (admin / chef). */
+  ouvrirJourneeCaisse: (
+    employeId: string,
+    soldeOuverture: number,
+    note?: string,
+    journee?: string,
+  ) => string | null
   arreterCaisse: (
-    montantCompte: number,
+    montantFermeture: number,
     note?: string,
     journee?: string,
     /** Caisse du caissier à arrêter (obligatoire pour admin/chef). */
@@ -221,6 +231,7 @@ function normaliserAppData(brut: AppData): AppData {
     ajustementsCompteZone: brut.ajustementsCompteZone ?? [],
     comptesCaisse: brut.comptesCaisse ?? [],
     mouvementsCompteCaisse: brut.mouvementsCompteCaisse ?? [],
+    ouverturesCaisse: brut.ouverturesCaisse ?? [],
     compteurs: {
       client: brut.compteurs?.client ?? 0,
       compte: brut.compteurs?.compte ?? 0,
@@ -229,11 +240,20 @@ function normaliserAppData(brut: AppData): AppData {
     },
     arretsCaisse: (brut.arretsCaisse ?? []).map((a) => {
       const dateCloture = a.dateCloture ?? a.date ?? new Date().toISOString()
+      const totalEntrees = a.totalEntrees ?? 0
+      const totalSorties = a.totalSorties ?? 0
+      const soldeTheorique = a.soldeTheorique ?? totalEntrees - totalSorties
+      const soldeOuverture =
+        typeof a.soldeOuverture === 'number'
+          ? a.soldeOuverture
+          : Math.max(0, soldeTheorique - (totalEntrees - totalSorties))
       return {
         ...a,
         journee: a.journee ?? dateCloture.slice(0, 10),
         dateCloture,
         date: dateCloture,
+        soldeOuverture,
+        soldeTheorique,
       }
     }),
   }
@@ -319,7 +339,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         employeConnecte.id,
         d.transactions,
         d.arretsCaisse,
+        d.ouverturesCaisse ?? [],
       )
+    }
+
+    const verifierSoldeCaissePourSortie = (d: AppData, montant: number): string | null => {
+      if (!employeConnecte) return 'Non connecté.'
+      const compte = compteCaisseDe(d.comptesCaisse, employeConnecte.id)
+      const solde = compte?.solde ?? 0
+      if (solde < montant) {
+        return `Solde de caisse insuffisant (${solde.toLocaleString('fr-FR')} FCFA). Alimentez le compte caisse avant ce retrait.`
+      }
+      return null
     }
 
     return {
@@ -916,8 +947,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             erreur = `Retrait impossible : seulement ${disponibles} carreau(x) disponible(s) (hors P.C).`
             return d
           }
-          const date = maintenant()
           const montant = carnet.mise * nombreCarreaux
+          erreur = verifierSoldeCaissePourSortie(d, montant)
+          if (erreur) return d
+          const date = maintenant()
           const retrait: MiseTontine = {
             id: uid(),
             carnetId,
@@ -1059,6 +1092,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             erreur = 'Solde insuffisant.'
             return d
           }
+          erreur = verifierSoldeCaissePourSortie(d, montant)
+          if (erreur) return d
           const date = maintenant()
           const mouvement: MouvementCompte = { id: uid(), compteId, type: 'retrait', montant, date, note }
           const txRetrait = transaction({
@@ -1111,6 +1146,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setData((d) => {
           const credit = d.credits.find((c) => c.id === creditId)
           if (!credit || credit.statut !== 'en_attente') return d
+          const insuffisant = verifierSoldeCaissePourSortie(d, credit.montant)
+          if (insuffisant) return d
           const date = maintenant()
           const txOctroi = transaction({
             type: 'octroi_credit',
@@ -1264,12 +1301,120 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return erreur
       },
 
-      arreterCaisse(montantCompte, note, journee, cibleEmployeId) {
+      ouvrirJourneeCaisse(employeId, soldeOuverture, note, journee) {
+        if (!employeConnecte) return 'Non connecté.'
+        if (!estAdmin && !estChefAgence) {
+          return 'Seul l’administrateur ou le chef d’agence peut ouvrir une journée de caisse.'
+        }
+        if (soldeOuverture < 0) return 'Montant d’ouverture invalide.'
+        const jour = journee ?? aujourdHuiIso()
+        let erreur: string | null = null
+        setData((d) => {
+          const cible = d.employes.find((e) => e.id === employeId && e.actif)
+          if (!cible) {
+            erreur = 'Employé introuvable.'
+            return d
+          }
+          if (!employeACompteCaisse(cible.role)) {
+            erreur = 'Cet employé n’a pas de compte caisse.'
+            return d
+          }
+          if (estChefAgence && cible.agenceId !== employeConnecte.agenceId) {
+            erreur = 'Vous ne pouvez ouvrir que les caisses de votre agence.'
+            return d
+          }
+          if (ouvertureCaisseDuJour(d.ouverturesCaisse ?? [], cible.id, jour)) {
+            erreur = `La journée du ${jour} est déjà ouverte.`
+            return d
+          }
+          if (arretCaisseDuJour(d.arretsCaisse, cible.id, jour)) {
+            erreur = `La journée du ${jour} est déjà clôturée.`
+            return d
+          }
+          // Interdit d’ouvrir un nouveau jour tant qu’un jour précédent est en attente de clôture
+          const enAttente = journeesOuvertesEnAttenteCloture(
+            cible.id,
+            d.ouverturesCaisse ?? [],
+            d.arretsCaisse,
+            jour,
+          )
+          if (enAttente.length > 0) {
+            erreur = `Impossible d’ouvrir le ${jour} : la journée du ${enAttente[0]} est en attente de clôture.`
+            return d
+          }
+          const retards = journeesCaisseEnRetard(
+            cible.id,
+            d.transactions,
+            d.arretsCaisse,
+            d.ouverturesCaisse ?? [],
+            jour,
+          )
+          if (retards.length > 0 && jour !== retards[0]) {
+            erreur =
+              jour > retards[0]
+                ? `Clôturez d’abord la journée du ${retards[0]} avant d’ouvrir le ${jour}.`
+                : `Journée invalide : traitez d’abord le retard du ${retards[0]}.`
+            return d
+          }
+          if (retards.length === 0 && jour !== aujourdHuiIso()) {
+            erreur = 'Seule la journée en cours (ou une journée en retard) peut être ouverte.'
+            return d
+          }
+
+          const date = maintenant()
+          const ouverture: OuvertureCaisse = {
+            id: uid(),
+            employeId: cible.id,
+            employeNom: cible.nomComplet,
+            agenceId: cible.agenceId,
+            journee: jour,
+            soldeOuverture,
+            dateOuverture: date,
+            ouvertParId: employeConnecte.id,
+            ouvertParNom: employeConnecte.nomComplet,
+            note: note?.trim() || undefined,
+          }
+
+          let next: AppData = {
+            ...d,
+            ouverturesCaisse: [ouverture, ...(d.ouverturesCaisse ?? [])],
+          }
+          next = ouvrirCompteCaisseSiBesoin(next, cible.id)
+          const compte = compteCaisseDe(next.comptesCaisse, cible.id)
+          if (compte && compte.solde !== soldeOuverture) {
+            const delta = soldeOuverture - compte.solde
+            const mouvement: MouvementCompteCaisse = {
+              id: uid(),
+              compteCaisseId: compte.id,
+              employeId: cible.id,
+              type: 'ouverture_journee',
+              montant: Math.abs(delta),
+              sens: delta >= 0 ? 'credit' : 'debit',
+              soldeApres: soldeOuverture,
+              date,
+              description: `Ouverture de caisse — solde saisi ${soldeOuverture} FCFA`,
+              operateurId: employeConnecte.id,
+              operateurNom: employeConnecte.nomComplet,
+            }
+            next = {
+              ...next,
+              comptesCaisse: next.comptesCaisse.map((c) =>
+                c.id === compte.id ? { ...c, solde: soldeOuverture } : c,
+              ),
+              mouvementsCompteCaisse: [mouvement, ...next.mouvementsCompteCaisse],
+            }
+          }
+          return next
+        })
+        return erreur
+      },
+
+      arreterCaisse(montantFermeture, note, journee, cibleEmployeId) {
         if (!employeConnecte) return 'Non connecté.'
         if (!estAdmin && !estChefAgence) {
           return 'Seul l’administrateur ou le chef d’agence peut effectuer un arrêt de caisse.'
         }
-        if (montantCompte < 0) return 'Montant invalide.'
+        if (montantFermeture < 0) return 'Montant de fermeture invalide.'
         const cibleId = cibleEmployeId
         if (!cibleId) return 'Caissier non précisé.'
         const jour = journee ?? aujourdHuiIso()
@@ -1288,7 +1433,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             erreur = `La caisse du ${jour} est déjà arrêtée.`
             return d
           }
-          const retards = journeesCaisseEnRetard(cible.id, d.transactions, d.arretsCaisse)
+          const ouverture = ouvertureCaisseDuJour(d.ouverturesCaisse ?? [], cible.id, jour)
+          if (!ouverture) {
+            erreur = `Ouvrez d’abord la journée du ${jour} (saisie du montant d’ouverture).`
+            return d
+          }
+          const retards = journeesCaisseEnRetard(
+            cible.id,
+            d.transactions,
+            d.arretsCaisse,
+            d.ouverturesCaisse ?? [],
+          )
           if (retards.length > 0 && jour !== retards[0]) {
             erreur =
               jour > retards[0]
@@ -1301,9 +1456,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             return d
           }
 
-          const sit = situationCaisse(cible.id, d.transactions, d.arretsCaisse, jour)
+          const sit = situationCaisse(
+            cible.id,
+            d.transactions,
+            d.arretsCaisse,
+            jour,
+            d.comptesCaisse,
+            d.mouvementsCompteCaisse,
+            d.ouverturesCaisse ?? [],
+          )
           const dates = sit.transactions.map((t) => t.date).sort()
           const maintenantIso = maintenant()
+          const soldeOuverture = ouverture.soldeOuverture
+          const soldeFermetureTheorique = sit.soldeFermetureTheorique
+          const ecart = montantFermeture - soldeFermetureTheorique
           const arret: ArretCaisse = {
             id: uid(),
             employeId: cible.id,
@@ -1312,18 +1478,51 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             journee: jour,
             dateCloture: maintenantIso,
             date: maintenantIso,
-            debutPeriode: dates[0] ?? `${jour}T00:00:00.000Z`,
+            debutPeriode: dates[0] ?? ouverture.dateOuverture,
             nombreOperations: sit.nombreOperations,
             totalEntrees: sit.totalEntrees,
             totalSorties: sit.totalSorties,
-            soldeTheorique: sit.soldeTheorique,
-            montantCompte,
-            ecart: montantCompte - sit.soldeTheorique,
+            soldeOuverture,
+            soldeTheorique: soldeFermetureTheorique,
+            montantCompte: montantFermeture,
+            ecart,
             note,
             valideParId: employeConnecte.id,
             valideParNom: employeConnecte.nomComplet,
           }
-          return { ...d, arretsCaisse: [arret, ...d.arretsCaisse] }
+
+          let next: AppData = { ...d, arretsCaisse: [arret, ...d.arretsCaisse] }
+          if (ecart !== 0) {
+            next = ouvrirCompteCaisseSiBesoin(next, cible.id)
+            const compte = compteCaisseDe(next.comptesCaisse, cible.id)
+            if (compte) {
+              const soldeApres = montantFermeture
+              const mouvement: MouvementCompteCaisse = {
+                id: uid(),
+                compteCaisseId: compte.id,
+                employeId: cible.id,
+                type: 'ajustement_arret',
+                montant: Math.abs(ecart),
+                sens: ecart > 0 ? 'credit' : 'debit',
+                soldeApres,
+                date: maintenantIso,
+                description:
+                  ecart > 0
+                    ? `Ajustement de fermeture — surplus ${Math.abs(ecart)} FCFA`
+                    : `Ajustement de fermeture — manquant ${Math.abs(ecart)} FCFA`,
+                operateurId: employeConnecte.id,
+                operateurNom: employeConnecte.nomComplet,
+              }
+              next = {
+                ...next,
+                comptesCaisse: next.comptesCaisse.map((c) =>
+                  c.id === compte.id ? { ...c, solde: soldeApres } : c,
+                ),
+                mouvementsCompteCaisse: [mouvement, ...next.mouvementsCompteCaisse],
+              }
+            }
+          }
+          return next
         })
         return erreur
       },
