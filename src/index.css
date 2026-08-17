@@ -31,3 +31,26 @@
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
 }
+
+@media print {
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  main,
+  main > div {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+}
