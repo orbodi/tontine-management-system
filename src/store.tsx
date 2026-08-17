@@ -289,6 +289,21 @@ function normaliserAppData(brut: AppData): AppData {
       d = ouvrirCompteCaisseSiBesoin(d, emp.id)
     }
   }
+  // Cycles déjà à 31 carreaux sans passage au mois suivant (données démo / anciennes)
+  d = {
+    ...d,
+    carnets: d.carnets.map((c) => {
+      if (!c.actif) return c
+      let cycle = c.cycleActuel
+      while (
+        cycle < CYCLES_PAR_CARNET &&
+        carreauxNets({ ...c, cycleActuel: cycle }, d.mises, cycle) >= c.misesParCycle
+      ) {
+        cycle += 1
+      }
+      return cycle === c.cycleActuel ? c : { ...c, cycleActuel: cycle }
+    }),
+  }
   return d
 }
 
@@ -829,12 +844,64 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setData((d) => {
           erreur = verifierCaisseJournaliere(d)
           if (erreur) return d
-          const carnet = d.carnets.find((c) => c.id === carnetId)
-          if (!carnet || !carnet.actif) return d
-          if (carnet.verrouille) {
+          const carnet0 = d.carnets.find((c) => c.id === carnetId)
+          if (!carnet0 || !carnet0.actif) return d
+          if (carnet0.verrouille) {
             erreur = 'Ce carnet est verrouillé.'
             return d
           }
+
+          // Si le mois courant est déjà complet, passer au suivant avant le dépôt
+          let carnetsAvance = d.carnets
+          let carnet = carnet0
+          while (
+            carnet.cycleActuel < CYCLES_PAR_CARNET &&
+            carreauxNets(carnet, d.mises) >= carnet.misesParCycle
+          ) {
+            const prochain = carnet.cycleActuel + 1
+            carnetsAvance = carnetsAvance.map((c) =>
+              c.id === carnetId ? { ...c, cycleActuel: prochain } : c,
+            )
+            carnet = { ...carnet, cycleActuel: prochain }
+          }
+          // Fin des 12 mois déjà complets : renouvellement avant le nouveau dépôt
+          if (carreauxNets(carnet, d.mises) >= carnet.misesParCycle) {
+            const client = d.clients.find((c) => c.id === carnet.clientId)
+            const zone = client ? d.zones.find((z) => z.id === client.zoneId) : undefined
+            const nouveauNumero =
+              client && zone ? numeroCarnet(zone.code, client.ordreZone) : carnet.numero
+            const dateRenouv = maintenant()
+            carnetsAvance = carnetsAvance.map((c) =>
+              c.id === carnetId
+                ? {
+                    ...c,
+                    cycleActuel: 1,
+                    zoneId: zone?.id ?? c.zoneId,
+                    agenceId: zone?.agenceId ?? c.agenceId,
+                    numero: nouveauNumero,
+                    dateOuverture: dateRenouv,
+                  }
+                : c,
+            )
+            carnet = carnetsAvance.find((c) => c.id === carnetId)!
+            d = enregistrerTransactions(
+              { ...d, carnets: carnetsAvance },
+              [
+                transaction({
+                  type: 'vente_carnet',
+                  clientId: carnet.clientId,
+                  montant: PRIX_CARNET,
+                  date: dateRenouv,
+                  description: `Renouvellement auto carnet ${nouveauNumero} — ${nomClient(d, carnet.clientId)} (nouveau cycle 1/12)`,
+                }),
+              ],
+            )
+            carnetsAvance = d.carnets
+            carnet = d.carnets.find((c) => c.id === carnetId)!
+          } else if (carnetsAvance !== d.carnets) {
+            d = { ...d, carnets: carnetsAvance }
+          }
+
           const jour = aujourdHuiIso()
           const journeeZone = journeeZoneDuJour(d.journeesCompteZone, carnet.zoneId, jour)
           if (!journeeZone || journeeZone.cloturee) {

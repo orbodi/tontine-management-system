@@ -169,14 +169,18 @@ export default function DetailTontine() {
         sousTitre={`${LIBELLES_CARNET[carnet.typeCarnet]} — ${client.prenom} ${client.nom} (${client.codeClient}) — ${data.agences.find((a) => a.id === carnet.agenceId)?.nom ?? 'Agence'} · Zone ${data.zones.find((z) => z.id === carnet.zoneId)?.code ?? '—'}`}
         action={
           <div className="flex flex-wrap gap-2">
-            {peutOperer && payeesActuel < carnet.misesParCycle && (
+            {peutOperer && (
               <button
                 className="btn-primary"
                 disabled={carnet.verrouille || !collecteOuverte}
                 title={
-                  !collecteOuverte
-                    ? 'Saisissez d’abord le montant réel collecté sur le compte zone'
-                    : undefined
+                  carnet.verrouille
+                    ? 'Carnet verrouillé'
+                    : !collecteOuverte
+                      ? 'Saisissez d’abord le montant réel collecté sur le compte zone'
+                      : payeesActuel >= carnet.misesParCycle
+                        ? 'Mois complet : le prochain dépôt passera au mois suivant'
+                        : undefined
                 }
                 onClick={() => {
                   setMontantDepot('')
