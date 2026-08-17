@@ -29,6 +29,22 @@ export const LIBELLES_TYPE: Record<TypeTransaction, string> = {
 
 export const TYPES_SORTIE: TypeTransaction[] = ['retrait_tontine', 'retrait_compte', 'octroi_credit']
 
+/** Types d'opérations qui alimentent le compte de caisse d'un caissier. */
+export const TYPES_OPERATION_CAISSE: TypeTransaction[] = [
+  'vente_carnet',
+  'mise_tontine',
+  'retrait_tontine',
+  'commission_tontine',
+  'depot_compte',
+  'retrait_compte',
+  'octroi_credit',
+  'remboursement_credit',
+]
+
+export function estOperationCaisse(type: TypeTransaction): boolean {
+  return TYPES_OPERATION_CAISSE.includes(type)
+}
+
 // ---------- Carnets ----------
 
 export const LIBELLES_CARNET: Record<TypeCarnet, string> = {
@@ -243,7 +259,12 @@ export function journeesCaisseEnRetard(
 ): string[] {
   const joursAvecOps = new Set(
     transactions
-      .filter((t) => t.operateurId === employeId && jourIsoDepuisDate(t.date) < avantJour)
+      .filter(
+        (t) =>
+          t.operateurId === employeId &&
+          estOperationCaisse(t.type) &&
+          jourIsoDepuisDate(t.date) < avantJour,
+      )
       .map((t) => jourIsoDepuisDate(t.date)),
   )
   const joursArretes = new Set(
@@ -266,7 +287,7 @@ export function messageBlocageCaisseJournaliere(
   const retard = journeesCaisseEnRetard(employeId, transactions, arretsCaisse)
   if (retard.length === 0) return null
   const premier = retard[0]
-  return `Arrêt de caisse obligatoire : clôturez d’abord la journée du ${premier} (page Caisse) avant de continuer.`
+  return `Arrêt de caisse obligatoire : demandez à l’admin ou au chef d’agence de clôturer la journée du ${premier} avant de continuer.`
 }
 
 /** Situation de caisse pour un jour donné (défaut : aujourd’hui). */
@@ -284,7 +305,12 @@ export function situationCaisse(
   const arretDuJour = arretCaisseDuJour(arretsCaisse, employeId, journee) ?? null
 
   const periode = transactions
-    .filter((t) => t.operateurId === employeId && jourIsoDepuisDate(t.date) === journee)
+    .filter(
+      (t) =>
+        t.operateurId === employeId &&
+        estOperationCaisse(t.type) &&
+        jourIsoDepuisDate(t.date) === journee,
+    )
     .sort((a, b) => b.date.localeCompare(a.date))
 
   let totalEntrees = 0
@@ -323,6 +349,7 @@ export function etatJournalierCaisse(
 } {
   const duJour = transactions.filter((t) => {
     if (t.date.slice(0, 10) !== dateIso) return false
+    if (!estOperationCaisse(t.type)) return false
     if (filtres?.employeId && t.operateurId !== filtres.employeId) return false
     if (filtres?.agenceId && t.agenceId !== filtres.agenceId) return false
     return true

@@ -3,27 +3,55 @@ import { ArrowDownRight, ArrowUpRight, Download, Search } from 'lucide-react'
 import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
 import type { TypeTransaction } from '../types'
-import { LIBELLES_TYPE, TYPES_SORTIE } from '../metier'
+import { estOperationCaisse, LIBELLES_TYPE, TYPES_SORTIE } from '../metier'
 import { exporterCsv, formatDateHeure, formatMontant } from '../utils'
 import { EnTetePage, EtatVide } from '../components/ui'
 
 export default function Transactions() {
-  const { data } = useStore()
+  const { data, employeConnecte, estAdmin, estChefAgence, agenceFiltreOperations } = useStore()
   const [recherche, setRecherche] = useState('')
   const [typeFiltre, setTypeFiltre] = useState<'tous' | TypeTransaction>('tous')
   const [dateDebut, setDateDebut] = useState('')
   const [dateFin, setDateFin] = useState('')
 
+  const perimetre =
+    estAdmin
+      ? 'toutes les caisses'
+      : estChefAgence
+        ? 'caisses de votre agence'
+        : 'votre caisse uniquement'
+
   const transactionsFiltrees = useMemo(() => {
     const q = recherche.trim().toLowerCase()
     return data.transactions.filter((t) => {
+      // Périmètre caisse selon le rôle
+      if (!estOperationCaisse(t.type)) return false
+      if (estAdmin) {
+        // tout
+      } else if (estChefAgence && agenceFiltreOperations) {
+        if (t.agenceId !== agenceFiltreOperations) return false
+      } else if (employeConnecte) {
+        if (t.operateurId !== employeConnecte.id) return false
+      }
       if (typeFiltre !== 'tous' && t.type !== typeFiltre) return false
       if (dateDebut && t.date < dateDebut) return false
       if (dateFin && t.date > dateFin + 'T23:59:59') return false
-      if (q && !t.description.toLowerCase().includes(q) && !t.operateur.toLowerCase().includes(q)) return false
+      if (q && !t.description.toLowerCase().includes(q) && !t.operateur.toLowerCase().includes(q)) {
+        return false
+      }
       return true
     })
-  }, [data.transactions, recherche, typeFiltre, dateDebut, dateFin])
+  }, [
+    data.transactions,
+    recherche,
+    typeFiltre,
+    dateDebut,
+    dateFin,
+    estAdmin,
+    estChefAgence,
+    agenceFiltreOperations,
+    employeConnecte,
+  ])
 
   const totaux = useMemo(() => {
     let entrees = 0
@@ -53,7 +81,7 @@ export default function Transactions() {
     <div>
       <EnTetePage
         titre="Transactions"
-        sousTitre={`${transactionsFiltrees.length} opération${transactionsFiltrees.length > 1 ? 's' : ''} — entrées : ${formatMontant(totaux.entrees)} — sorties : ${formatMontant(totaux.sorties)}`}
+        sousTitre={`${transactionsFiltrees.length} opération${transactionsFiltrees.length > 1 ? 's' : ''} (${perimetre}) — entrées : ${formatMontant(totaux.entrees)} — sorties : ${formatMontant(totaux.sorties)}`}
         action={
           <button className="btn-secondary" onClick={exporter} disabled={transactionsFiltrees.length === 0}>
             <Download className="h-4 w-4" />

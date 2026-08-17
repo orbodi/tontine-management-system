@@ -1,26 +1,17 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Banknote,
-  CheckCircle2,
-  ChevronRight,
-  Scale,
-} from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, ChevronRight } from 'lucide-react'
 import { LIBELLES_ROLE, useStore } from '../store'
 import {
   LIBELLES_TYPE,
   TYPES_SORTIE,
   aujourdHuiIso,
-  etatJournalierCaisse,
   situationCaisse,
   type SituationCaisse,
 } from '../metier'
 import type { Employe } from '../types'
 import { formatDate, formatDateHeure, formatMontant } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
-import { useConfirmation } from '../components/Confirmation'
 
 function BadgeEcart({ ecart }: { ecart: number }) {
   if (ecart === 0) return <span className="badge bg-emerald-100 text-emerald-700">Juste</span>
@@ -144,22 +135,14 @@ function VueGlobaleCaisses() {
     return [...arrets].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 40)
   }, [data.arretsCaisse, agenceFiltreOperations])
 
-  const journalGlobal = useMemo(
-    () =>
-      etatJournalierCaisse(data.transactions, dateJournal, {
-        agenceId: agenceFiltreOperations ?? undefined,
-      }),
-    [data.transactions, dateJournal, agenceFiltreOperations],
-  )
-
   return (
     <div>
       <EnTetePage
         titre="Suivi des caisses"
         sousTitre={
           estAdmin
-            ? 'Vue globale de toutes les caisses'
-            : 'Vue des caisses de votre agence'
+            ? 'Vue globale — l’arrêt de caisse est validé par l’admin ou le chef d’agence'
+            : 'Caisses de votre agence — vous validez les arrêts de caisse'
         }
       />
 
@@ -285,26 +268,23 @@ function VueGlobaleCaisses() {
 
       <div className="card mb-6">
         <h3 className="mb-3 font-semibold text-slate-900">
-          Synthèse du {formatDate(dateJournal + 'T12:00:00')}
+          Synthèse des caisses — {formatDate(dateJournal + 'T12:00:00')}
         </h3>
-        {journalGlobal.duJour.length === 0 ? (
-          <p className="text-sm text-slate-500">Aucune opération sur cette période.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 text-sm">
-            <div className="rounded-xl bg-emerald-50 px-3 py-2">
-              Entrées : <span className="font-bold">{formatMontant(journalGlobal.entrees)}</span>
-            </div>
-            <div className="rounded-xl bg-rose-50 px-3 py-2">
-              Sorties : <span className="font-bold">{formatMontant(journalGlobal.sorties)}</span>
-            </div>
-            <div className="rounded-xl bg-slate-50 px-3 py-2">
-              Net :{' '}
-              <span className="font-bold">
-                {formatMontant(journalGlobal.entrees - journalGlobal.sorties)}
-              </span>
-            </div>
+        <p className="mb-3 text-xs text-slate-500">
+          Totaux calculés uniquement à partir des opérations de chaque caisse listée.
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 text-sm">
+          <div className="rounded-xl bg-emerald-50 px-3 py-2">
+            Entrées : <span className="font-bold">{formatMontant(totaux.entrees)}</span>
           </div>
-        )}
+          <div className="rounded-xl bg-rose-50 px-3 py-2">
+            Sorties : <span className="font-bold">{formatMontant(totaux.sorties)}</span>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2">
+            Net :{' '}
+            <span className="font-bold">{formatMontant(totaux.entrees - totaux.sorties)}</span>
+          </div>
+        </div>
       </div>
 
       <div className="card !p-0">
@@ -355,25 +335,14 @@ function VueGlobaleCaisses() {
   )
 }
 
-/** Vue caissier : état de sa caisse + arrêt journalier. */
+/** Vue caissier : consultation de sa caisse (l’arrêt est fait par admin / chef). */
 function VueCaisseCaissier({ employe }: { employe: Employe }) {
-  const { data, arreterCaisse } = useStore()
-  const { alerter } = useConfirmation()
-  const [modaleArret, setModaleArret] = useState(false)
-  const [montantCompte, setMontantCompte] = useState('')
-  const [noteArret, setNoteArret] = useState('')
+  const { data } = useStore()
   const [detailOuvert, setDetailOuvert] = useState(false)
 
   const maCaisse = useMemo(
     () => situationCaisse(employe.id, data.transactions, data.arretsCaisse),
     [employe.id, data.transactions, data.arretsCaisse],
-  )
-
-  const jourAArreter = maCaisse.journeesEnRetard[0] ?? aujourdHuiIso()
-
-  const caisseAArreter = useMemo(
-    () => situationCaisse(employe.id, data.transactions, data.arretsCaisse, jourAArreter),
-    [employe.id, data.transactions, data.arretsCaisse, jourAArreter],
   )
 
   const arretsPerso = useMemo(
@@ -385,53 +354,12 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
   )
 
   const enRetard = maCaisse.journeesEnRetard.length > 0
-  const ecartPrevu =
-    montantCompte === '' ? null : Number(montantCompte) - caisseAArreter.soldeTheorique
-
-  const validerArret = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const err = arreterCaisse(Number(montantCompte), noteArret.trim() || undefined, jourAArreter)
-    if (err) {
-      await alerter('Arrêt impossible', err)
-      return
-    }
-    setModaleArret(false)
-    setMontantCompte('')
-    setNoteArret('')
-    await alerter(
-      'Arrêt de caisse enregistré',
-      `La caisse du ${formatDate(jourAArreter + 'T12:00:00')} a été clôturée.`,
-    )
-  }
 
   return (
     <div>
       <EnTetePage
         titre="Ma caisse"
-        sousTitre={`État et gestion — ${employe.nomComplet}`}
-        action={
-          <button
-            className="btn-primary"
-            onClick={() => {
-              setMontantCompte('')
-              setNoteArret('')
-              setModaleArret(true)
-            }}
-            disabled={maCaisse.cloturee && !enRetard}
-            title={
-              maCaisse.cloturee && !enRetard
-                ? 'Caisse du jour déjà arrêtée'
-                : `Arrêter la caisse du ${jourAArreter}`
-            }
-          >
-            <Scale className="h-4 w-4" />
-            {enRetard
-              ? `Arrêter le ${formatDate(jourAArreter + 'T12:00:00')}`
-              : maCaisse.cloturee
-                ? 'Caisse du jour arrêtée'
-                : 'Arrêt de caisse du jour'}
-          </button>
-        }
+        sousTitre={`Consultation — opérations de votre caisse uniquement — ${employe.nomComplet}`}
       />
 
       {enRetard && (
@@ -439,8 +367,9 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
           <p className="font-semibold">Arrêt de caisse en retard</p>
           <p className="mt-1">
             Journée(s) non clôturée(s) :{' '}
-            {maCaisse.journeesEnRetard.map((j) => formatDate(j + 'T12:00:00')).join(', ')}. Les
-            nouvelles opérations sont bloquées jusqu’à clôture.
+            {maCaisse.journeesEnRetard.map((j) => formatDate(j + 'T12:00:00')).join(', ')}.
+            Contactez l’admin ou le chef d’agence pour l’arrêt. Les nouvelles opérations sont
+            bloquées jusqu’à clôture.
           </p>
         </div>
       )}
@@ -448,6 +377,9 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
       {!enRetard && maCaisse.cloturee && maCaisse.arretDuJour && (
         <div className="mb-6 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200">
           Caisse du jour arrêtée — écart <BadgeEcart ecart={maCaisse.arretDuJour.ecart} />
+          {maCaisse.arretDuJour.valideParNom && (
+            <span className="text-emerald-700"> — par {maCaisse.arretDuJour.valideParNom}</span>
+          )}
         </div>
       )}
 
@@ -499,12 +431,15 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
       <div className="card !p-0">
         <div className="border-b border-slate-200 px-5 py-4">
           <h3 className="font-semibold text-slate-900">
-            Mes arrêts de caisse ({arretsPerso.length})
+            Historique des arrêts ({arretsPerso.length})
           </h3>
         </div>
         {arretsPerso.length === 0 ? (
           <div className="p-5">
-            <EtatVide titre="Aucun arrêt" description="Effectuez l’arrêt en fin de journée." />
+            <EtatVide
+              titre="Aucun arrêt"
+              description="L’admin ou le chef d’agence effectue l’arrêt de caisse."
+            />
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -525,7 +460,10 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
                       <div className="font-medium">
                         {formatDate((a.journee ?? a.date.slice(0, 10)) + 'T12:00:00')}
                       </div>
-                      <div className="text-xs text-slate-400">{formatDateHeure(a.date)}</div>
+                      <div className="text-xs text-slate-400">
+                        {formatDateHeure(a.date)}
+                        {a.valideParNom ? ` · par ${a.valideParNom}` : ''}
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-right">{a.nombreOperations}</td>
                     <td className="px-5 py-3 text-right font-semibold">
@@ -544,88 +482,6 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
       </div>
 
       <Modale
-        titre={`Arrêt de caisse — ${formatDate(jourAArreter + 'T12:00:00')}`}
-        ouverte={modaleArret}
-        onFermer={() => setModaleArret(false)}
-      >
-        <form onSubmit={validerArret} className="space-y-4">
-          <p className="text-sm text-slate-600">
-            {enRetard
-              ? 'Clôture d’une journée en retard. Comptez les espèces de cette journée.'
-              : 'Clôture de la caisse du jour. Comptez les espèces en caisse.'}
-          </p>
-          <div className="rounded-xl bg-slate-50 p-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Opérations</span>
-              <span className="font-semibold">{caisseAArreter.nombreOperations}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Entrées</span>
-              <span className="font-semibold text-emerald-600">
-                {formatMontant(caisseAArreter.totalEntrees)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Sorties</span>
-              <span className="font-semibold text-rose-600">
-                {formatMontant(caisseAArreter.totalSorties)}
-              </span>
-            </div>
-            <div className="mt-1 flex justify-between border-t border-slate-200 pt-1">
-              <span className="font-semibold text-slate-700">Solde théorique</span>
-              <span className="font-bold text-brand-700">
-                {formatMontant(caisseAArreter.soldeTheorique)}
-              </span>
-            </div>
-          </div>
-          <div>
-            <label className="label">Espèces comptées (FCFA) *</label>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              required
-              autoFocus
-              value={montantCompte}
-              onChange={(e) => setMontantCompte(e.target.value)}
-            />
-          </div>
-          {ecartPrevu !== null && (
-            <div
-              className={`flex items-center gap-2 rounded-xl p-3 text-sm font-semibold ${
-                ecartPrevu === 0
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : ecartPrevu > 0
-                    ? 'bg-sky-50 text-sky-700'
-                    : 'bg-rose-50 text-rose-700'
-              }`}
-            >
-              {ecartPrevu === 0 ? (
-                <CheckCircle2 className="h-4 w-4" />
-              ) : (
-                <Banknote className="h-4 w-4" />
-              )}
-              {ecartPrevu === 0
-                ? 'Caisse juste, aucun écart.'
-                : `Écart de ${ecartPrevu > 0 ? '+' : ''}${formatMontant(ecartPrevu)}.`}
-            </div>
-          )}
-          <div>
-            <label className="label">Note</label>
-            <input className="input" value={noteArret} onChange={(e) => setNoteArret(e.target.value)} />
-          </div>
-          <div className="flex justify-end gap-2">
-            <button type="button" className="btn-secondary" onClick={() => setModaleArret(false)}>
-              Annuler
-            </button>
-            <button type="submit" className="btn-primary">
-              Valider l&apos;arrêt
-            </button>
-          </div>
-        </form>
-      </Modale>
-
-      <Modale
         titre="Opérations du jour"
         ouverte={detailOuvert}
         onFermer={() => setDetailOuvert(false)}
@@ -638,6 +494,7 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
 }
 
 export default function Caisse() {
+
   const { employeConnecte, estAdmin, estChefAgence } = useStore()
 
   if (!employeConnecte) return null

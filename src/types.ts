@@ -233,6 +233,7 @@ export interface Remboursement {
 
 export interface ArretCaisse {
   id: string
+  /** Caissier dont la caisse est arrêtée. */
   employeId: string
   employeNom: string
   agenceId: string
@@ -248,6 +249,9 @@ export interface ArretCaisse {
   montantCompte: number
   ecart: number
   note?: string
+  /** Admin ou chef d'agence ayant validé l'arrêt. */
+  valideParId?: string
+  valideParNom?: string
 }
 
 // ---------- Audit ----------

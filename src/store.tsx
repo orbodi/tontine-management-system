@@ -132,7 +132,13 @@ interface StoreApi {
   supprimerEmploye: (id: string) => void
   basculerActifEmploye: (id: string) => void
   // Caisse
-  arreterCaisse: (montantCompte: number, note?: string, journee?: string) => string | null
+  arreterCaisse: (
+    montantCompte: number,
+    note?: string,
+    journee?: string,
+    /** Caisse du caissier à arrêter (obligatoire pour admin/chef). */
+    cibleEmployeId?: string,
+  ) => string | null
   reinitialiserDemo: () => void
 }
 
@@ -1108,22 +1114,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }))
       },
 
-      arreterCaisse(montantCompte, note, journee) {
+      arreterCaisse(montantCompte, note, journee, cibleEmployeId) {
         if (!employeConnecte) return 'Non connecté.'
+        if (!estAdmin && !estChefAgence) {
+          return 'Seul l’administrateur ou le chef d’agence peut effectuer un arrêt de caisse.'
+        }
         if (montantCompte < 0) return 'Montant invalide.'
+        const cibleId = cibleEmployeId
+        if (!cibleId) return 'Caissier non précisé.'
         const jour = journee ?? aujourdHuiIso()
         let erreur: string | null = null
         setData((d) => {
-          if (arretCaisseDuJour(d.arretsCaisse, employeConnecte.id, jour)) {
+          const cible = d.employes.find((e) => e.id === cibleId && e.actif)
+          if (!cible) {
+            erreur = 'Employé introuvable.'
+            return d
+          }
+          if (estChefAgence && cible.agenceId !== employeConnecte.agenceId) {
+            erreur = 'Vous ne pouvez arrêter que les caisses de votre agence.'
+            return d
+          }
+          if (arretCaisseDuJour(d.arretsCaisse, cible.id, jour)) {
             erreur = `La caisse du ${jour} est déjà arrêtée.`
             return d
           }
-          const retards = journeesCaisseEnRetard(
-            employeConnecte.id,
-            d.transactions,
-            d.arretsCaisse,
-          )
-          // On doit clôturer les jours en retard dans l'ordre ; aujourd'hui seulement si aucun retard
+          const retards = journeesCaisseEnRetard(cible.id, d.transactions, d.arretsCaisse)
           if (retards.length > 0 && jour !== retards[0]) {
             erreur =
               jour > retards[0]
@@ -1136,18 +1151,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             return d
           }
 
-          const sit = situationCaisse(
-            employeConnecte.id,
-            d.transactions,
-            d.arretsCaisse,
-            jour,
-          )
+          const sit = situationCaisse(cible.id, d.transactions, d.arretsCaisse, jour)
           const dates = sit.transactions.map((t) => t.date).sort()
           const arret: ArretCaisse = {
             id: uid(),
-            employeId: employeConnecte.id,
-            employeNom: employeConnecte.nomComplet,
-            agenceId: employeConnecte.agenceId,
+            employeId: cible.id,
+            employeNom: cible.nomComplet,
+            agenceId: cible.agenceId,
             journee: jour,
             date: maintenant(),
             debutPeriode: dates[0] ?? `${jour}T00:00:00.000Z`,
@@ -1158,6 +1168,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             montantCompte,
             ecart: montantCompte - sit.soldeTheorique,
             note,
+            valideParId: employeConnecte.id,
+            valideParNom: employeConnecte.nomComplet,
           }
           return { ...d, arretsCaisse: [arret, ...d.arretsCaisse] }
         })
