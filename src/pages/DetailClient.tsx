@@ -39,7 +39,8 @@ const LIBELLES_FREQUENCE: Record<FrequenceMise, string> = {
 export default function DetailClient() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { data, aDroit, estCaissier, basculerActifClient, ouvrirCarnet, ouvrirCompte } = useStore()
+  const { data, aDroit, estCaissier, employeConnecte, basculerActifClient, ouvrirCarnet, ouvrirCompte } =
+    useStore()
   const { alerter } = useConfirmation()
   const [modaleMessage, setModaleMessage] = useState(false)
   const [texteMessage, setTexteMessage] = useState('')
@@ -59,7 +60,12 @@ export default function DetailClient() {
     const carnets = data.carnets.filter((c) => c.clientId === client.id)
     const comptes = data.comptes.filter((c) => c.clientId === client.id)
     const credits = data.credits.filter((c) => c.clientId === client.id)
-    const transactions = data.transactions.filter((t) => t.clientId === client.id)
+    const transactions = data.transactions.filter((t) => {
+      if (t.clientId !== client.id) return false
+      // Caissier : uniquement ses propres opérations
+      if (estCaissier && employeConnecte && t.operateurId !== employeConnecte.id) return false
+      return true
+    })
 
     const soldeTontine = carnets.reduce((s, carnet) => {
       const cycles = situationsCycles(carnet, data.mises)
@@ -71,7 +77,7 @@ export default function DetailClient() {
       .reduce((s, c) => s + situationCredit(c, data.remboursements).resteAPayer, 0)
 
     return { carnets, comptes, credits, transactions, soldeTontine, soldeEpargne, detteCredits }
-  }, [client, data])
+  }, [client, data, estCaissier, employeConnecte])
 
   if (!client || !activite) {
     return (
@@ -405,6 +411,7 @@ export default function DetailClient() {
       <div className="card mt-6">
         <h3 className="mb-4 font-semibold text-slate-900">
           Historique des opérations ({activite.transactions.length})
+          {estCaissier ? ' — vos opérations uniquement' : ''}
         </h3>
         {activite.transactions.length === 0 ? (
           <p className="text-sm text-slate-500">Aucune opération.</p>

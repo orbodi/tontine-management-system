@@ -50,22 +50,45 @@ export default function TableauDeBord() {
     return compteCaisseDe(data.comptesCaisse, employeConnecte.id)?.solde ?? null
   }, [data.comptesCaisse, employeConnecte])
 
+  const compteCaissePerso = useMemo(() => {
+    if (!employeConnecte) return null
+    return compteCaisseDe(data.comptesCaisse, employeConnecte.id) ?? null
+  }, [data.comptesCaisse, employeConnecte])
+
   const totalSoldesCaisses = useMemo(
     () => comptesCaisseVisibles.reduce((s, c) => s + c.solde, 0),
     [comptesCaisseVisibles],
   )
 
+  const totalCumulsCaisses = useMemo(
+    () =>
+      comptesCaisseVisibles.reduce(
+        (acc, c) => ({
+          manquant: acc.manquant + (c.cumulManquant ?? 0),
+          surplus: acc.surplus + (c.cumulSurplus ?? 0),
+        }),
+        { manquant: 0, surplus: 0 },
+      ),
+    [comptesCaisseVisibles],
+  )
+
   const txVisibles = useMemo(() => {
     let tx = data.transactions
-    if (agenceFiltreOperations) tx = tx.filter((t) => t.agenceId === agenceFiltreOperations)
-    else if (estCaissier && employeConnecte) tx = tx.filter((t) => t.operateurId === employeConnecte.id)
+    if (estCaissier && employeConnecte) {
+      tx = tx.filter((t) => t.operateurId === employeConnecte.id)
+    } else if (agenceFiltreOperations) {
+      tx = tx.filter((t) => t.agenceId === agenceFiltreOperations)
+    }
     return tx
   }, [data.transactions, agenceFiltreOperations, estCaissier, employeConnecte])
 
   const arretsVisibles = useMemo(() => {
     let arrets = data.arretsCaisse
-    if (agenceFiltreOperations) arrets = arrets.filter((a) => a.agenceId === agenceFiltreOperations)
-    else if (estCaissier && employeConnecte) arrets = arrets.filter((a) => a.employeId === employeConnecte.id)
+    if (estCaissier && employeConnecte) {
+      arrets = arrets.filter((a) => a.employeId === employeConnecte.id)
+    } else if (agenceFiltreOperations) {
+      arrets = arrets.filter((a) => a.agenceId === agenceFiltreOperations)
+    }
     return arrets
   }, [data.arretsCaisse, agenceFiltreOperations, estCaissier, employeConnecte])
 
@@ -212,6 +235,20 @@ export default function TableauDeBord() {
             couleur: 'bg-brand-100 text-brand-700',
             lien: '/caisse',
           },
+          {
+            label: 'Cumul manquant',
+            valeur: formatMontant(compteCaissePerso?.cumulManquant ?? 0),
+            icone: TriangleAlert,
+            couleur: 'bg-rose-100 text-rose-700',
+            lien: '/caisse',
+          },
+          {
+            label: 'Cumul surplus',
+            valeur: formatMontant(compteCaissePerso?.cumulSurplus ?? 0),
+            icone: Banknote,
+            couleur: 'bg-sky-100 text-sky-700',
+            lien: '/caisse',
+          },
         ]
       : estAdmin || estChefAgence
         ? [
@@ -220,6 +257,20 @@ export default function TableauDeBord() {
               valeur: formatMontant(totalSoldesCaisses),
               icone: Scale,
               couleur: 'bg-brand-100 text-brand-700',
+              lien: '/caisse',
+            },
+            {
+              label: estChefAgence ? 'Manquants (agence)' : 'Manquants caisses',
+              valeur: formatMontant(totalCumulsCaisses.manquant),
+              icone: TriangleAlert,
+              couleur: 'bg-rose-100 text-rose-700',
+              lien: '/caisse',
+            },
+            {
+              label: estChefAgence ? 'Surplus (agence)' : 'Surplus caisses',
+              valeur: formatMontant(totalCumulsCaisses.surplus),
+              icone: Banknote,
+              couleur: 'bg-sky-100 text-sky-700',
               lien: '/caisse',
             },
           ]
@@ -346,14 +397,22 @@ export default function TableauDeBord() {
             <div className="mt-1 text-lg font-bold text-rose-800">{formatMontant(infoCaisseMois.retraits)}</div>
           </div>
           <div className="rounded-xl bg-amber-50 px-4 py-3 ring-1 ring-amber-100">
-            <div className="text-xs font-medium uppercase tracking-wide text-amber-700">Manquant</div>
-            <div className="mt-1 text-lg font-bold text-amber-900">{formatMontant(infoCaisseMois.manquant)}</div>
-            <div className="mt-0.5 text-xs text-amber-700/80">Écarts négatifs (arrêts)</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-amber-700">
+              Manquant du mois
+            </div>
+            <div className="mt-1 text-lg font-bold text-amber-900">
+              {formatMontant(infoCaisseMois.manquant)}
+            </div>
+            <div className="mt-0.5 text-xs text-amber-700/80">Écarts négatifs (arrêts du mois)</div>
           </div>
           <div className="rounded-xl bg-sky-50 px-4 py-3 ring-1 ring-sky-100">
-            <div className="text-xs font-medium uppercase tracking-wide text-sky-700">Surplus</div>
-            <div className="mt-1 text-lg font-bold text-sky-900">{formatMontant(infoCaisseMois.surplus)}</div>
-            <div className="mt-0.5 text-xs text-sky-700/80">Écarts positifs (arrêts)</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-sky-700">
+              Surplus du mois
+            </div>
+            <div className="mt-1 text-lg font-bold text-sky-900">
+              {formatMontant(infoCaisseMois.surplus)}
+            </div>
+            <div className="mt-0.5 text-xs text-sky-700/80">Écarts positifs (arrêts du mois)</div>
           </div>
         </div>
       </div>

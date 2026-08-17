@@ -51,7 +51,7 @@ function normaliser(s: string): string {
 }
 
 export default function Tontines() {
-  const { data, aDroit, ouvrirCarnet } = useStore()
+  const { data, aDroit, estCaissier, employeConnecte, ouvrirCarnet } = useStore()
   const { alerter } = useConfirmation()
   const [recherche, setRecherche] = useState('')
   const [typeFiltre, setTypeFiltre] = useState<'tous' | TypeCarnet>('tous')
@@ -160,6 +160,7 @@ export default function Tontines() {
       .filter((t) => {
         if (t.clientId !== carnetSelectionne.clientId) return false
         if (!TYPES_TX_CARNET.includes(t.type)) return false
+        if (estCaissier && employeConnecte && t.operateurId !== employeConnecte.id) return false
         if (t.type === 'vente_carnet' || t.type === 'retrait_tontine') {
           return t.description.includes(numero)
         }
@@ -167,7 +168,7 @@ export default function Tontines() {
         return datesMises.has(t.date)
       })
       .sort((a, b) => b.date.localeCompare(a.date))
-  }, [carnetSelectionne, data.transactions, data.mises])
+  }, [carnetSelectionne, data.transactions, data.mises, estCaissier, employeConnecte])
 
   const encoursTotal = data.carnets
     .filter((c) => c.actif)

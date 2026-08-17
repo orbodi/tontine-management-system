@@ -8,7 +8,8 @@ import { exporterCsv, formatDateHeure, formatMontant } from '../utils'
 import { EnTetePage, EtatVide } from '../components/ui'
 
 export default function Transactions() {
-  const { data, employeConnecte, estAdmin, estChefAgence, agenceFiltreOperations } = useStore()
+  const { data, employeConnecte, estAdmin, estChefAgence, estCaissier, agenceFiltreOperations } =
+    useStore()
   const [recherche, setRecherche] = useState('')
   const [typeFiltre, setTypeFiltre] = useState<'tous' | TypeTransaction>('tous')
   const [dateDebut, setDateDebut] = useState('')
@@ -19,19 +20,19 @@ export default function Transactions() {
       ? 'toutes les caisses'
       : estChefAgence
         ? 'caisses de votre agence'
-        : 'votre caisse uniquement'
+        : 'vos opérations uniquement'
 
   const transactionsFiltrees = useMemo(() => {
     const q = recherche.trim().toLowerCase()
     return data.transactions.filter((t) => {
       // Périmètre caisse selon le rôle
       if (!estOperationCaisse(t.type)) return false
-      if (estAdmin) {
-        // tout
+      if (estCaissier) {
+        if (!employeConnecte || t.operateurId !== employeConnecte.id) return false
       } else if (estChefAgence && agenceFiltreOperations) {
         if (t.agenceId !== agenceFiltreOperations) return false
-      } else if (employeConnecte) {
-        if (t.operateurId !== employeConnecte.id) return false
+      } else if (!estAdmin) {
+        if (!employeConnecte || t.operateurId !== employeConnecte.id) return false
       }
       if (typeFiltre !== 'tous' && t.type !== typeFiltre) return false
       if (dateDebut && t.date < dateDebut) return false
@@ -49,6 +50,7 @@ export default function Transactions() {
     dateFin,
     estAdmin,
     estChefAgence,
+    estCaissier,
     agenceFiltreOperations,
     employeConnecte,
   ])
