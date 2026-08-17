@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   ArrowDownRight,
   ArrowUpRight,
   Banknote,
   CheckCircle2,
+  ChevronRight,
   Scale,
 } from 'lucide-react'
 import { LIBELLES_ROLE, useStore } from '../store'
@@ -90,7 +92,6 @@ function ListeTransactions({
 function VueGlobaleCaisses() {
   const { data, estAdmin, agenceFiltreOperations } = useStore()
   const [dateJournal, setDateJournal] = useState(aujourdHuiIso())
-  const [selectionId, setSelectionId] = useState<string | null>(null)
   const [filtreStatut, setFiltreStatut] = useState<'tous' | 'a_arreter' | 'retard' | 'arretee'>('tous')
 
   const caisses = useMemo(() => {
@@ -135,8 +136,6 @@ function VueGlobaleCaisses() {
     )
   }, [caisses])
 
-  const selection = caisses.find((c) => c.employe.id === selectionId)
-
   const arretsAffiches = useMemo(() => {
     let arrets = data.arretsCaisse
     if (agenceFiltreOperations) {
@@ -170,10 +169,7 @@ function VueGlobaleCaisses() {
           className="input !w-auto"
           type="date"
           value={dateJournal}
-          onChange={(e) => {
-            setDateJournal(e.target.value)
-            setSelectionId(null)
-          }}
+          onChange={(e) => setDateJournal(e.target.value)}
         />
         <div className="flex flex-wrap gap-2">
           {(
@@ -229,82 +225,61 @@ function VueGlobaleCaisses() {
         <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {caissesFiltrees.map(({ employe, situation, agence }) => {
             const { prenom, nom } = prenomNom(employe.nomComplet)
-            const actif = selectionId === employe.id
             return (
-              <button
+              <Link
                 key={employe.id}
-                type="button"
-                onClick={() => setSelectionId((id) => (id === employe.id ? null : employe.id))}
-                className={`card text-left transition hover:shadow-md hover:ring-2 hover:ring-brand-200 ${
-                  actif ? 'ring-2 ring-brand-500 shadow-md' : ''
-                }`}
+                to={`/caisse/${employe.id}`}
+                className="card group flex items-start gap-3 transition hover:shadow-md hover:ring-2 hover:ring-brand-200"
               >
-                <div className="flex items-start gap-3">
-                  <Avatar nom={nom} prenom={prenom} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-slate-900">{employe.nomComplet}</span>
-                      <BadgeStatutCaisse situation={situation} />
-                    </div>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      {LIBELLES_ROLE[employe.role]}
-                      {agence ? ` · ${agence.nom}` : ''}
-                    </p>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <div className="text-slate-500">Entrées</div>
-                        <div className="font-semibold text-emerald-600">
-                          {formatMontant(situation.totalEntrees)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-slate-500">Sorties</div>
-                        <div className="font-semibold text-rose-600">
-                          {formatMontant(situation.totalSorties)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-slate-500">Solde</div>
-                        <div className="font-bold text-brand-700">
-                          {formatMontant(situation.soldeTheorique)}
-                        </div>
-                      </div>
-                    </div>
-                    <p className="mt-2 text-xs text-slate-500">
-                      {situation.nombreOperations} opération
-                      {situation.nombreOperations > 1 ? 's' : ''}
-                      {situation.journeesEnRetard.length > 0 &&
-                        ` · ${situation.journeesEnRetard.length} j. en retard`}
-                      {situation.arretDuJour && (
-                        <>
-                          {' · '}
-                          <BadgeEcart ecart={situation.arretDuJour.ecart} />
-                        </>
-                      )}
-                    </p>
+                <Avatar nom={nom} prenom={prenom} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-slate-900 group-hover:text-brand-700">
+                      {employe.nomComplet}
+                    </span>
+                    <BadgeStatutCaisse situation={situation} />
                   </div>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {LIBELLES_ROLE[employe.role]}
+                    {agence ? ` · ${agence.nom}` : ''}
+                  </p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <div className="text-slate-500">Entrées</div>
+                      <div className="font-semibold text-emerald-600">
+                        {formatMontant(situation.totalEntrees)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500">Sorties</div>
+                      <div className="font-semibold text-rose-600">
+                        {formatMontant(situation.totalSorties)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500">Solde</div>
+                      <div className="font-bold text-brand-700">
+                        {formatMontant(situation.soldeTheorique)}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {situation.nombreOperations} opération
+                    {situation.nombreOperations > 1 ? 's' : ''}
+                    {situation.journeesEnRetard.length > 0 &&
+                      ` · ${situation.journeesEnRetard.length} j. en retard`}
+                    {situation.arretDuJour && (
+                      <>
+                        {' · '}
+                        <BadgeEcart ecart={situation.arretDuJour.ecart} />
+                      </>
+                    )}
+                  </p>
                 </div>
-              </button>
+                <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-300 transition group-hover:text-brand-600" />
+              </Link>
             )
           })}
-        </div>
-      )}
-
-      {selection && (
-        <div className="card mb-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="font-semibold text-slate-900">
-                Détail — {selection.employe.nomComplet}
-              </h3>
-              <p className="text-xs text-slate-500">
-                {formatDate(dateJournal + 'T12:00:00')} · consultation (l’arrêt est fait par le
-                caissier)
-              </p>
-            </div>
-            <BadgeStatutCaisse situation={selection.situation} />
-          </div>
-          <ListeTransactions transactions={selection.situation.transactions} />
         </div>
       )}
 

@@ -12,6 +12,7 @@ import Comptes from './pages/Comptes'
 import Credits from './pages/Credits'
 import Transactions from './pages/Transactions'
 import Caisse from './pages/Caisse'
+import DetailCaisse from './pages/DetailCaisse'
 import Rapports from './pages/Rapports'
 import Employes from './pages/Employes'
 import Agences from './pages/Agences'
@@ -36,6 +37,7 @@ export default function App() {
         {MODULE_CREDITS_ACTIF && <Route path="/credits" element={<Credits />} />}
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/caisse" element={<Caisse />} />
+        <Route path="/caisse/:employeId" element={<DetailCaisse />} />
         {aDroit('voir_rapports') && <Route path="/rapports" element={<Rapports />} />}
         {estAdmin && <Route path="/agences" element={<Agences />} />}
         {aDroit('gerer_zones') && <Route path="/zones" element={<Zones />} />}
