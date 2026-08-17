@@ -32,6 +32,15 @@ function ilYa(jours: number, heure = 10): string {
   return d.toISOString()
 }
 
+/** Date calendaire locale YYYY-MM-DD (alignée sur aujourdHuiIso métier). */
+function aujourdHuiLocalDemo(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export function genererDonneesDemo(): AppData {
   const agencePlateau: Agence = {
     id: uid(),
@@ -529,8 +538,8 @@ export function genererDonneesDemo(): AppData {
   })
 
   // ----- Scénarios de test suivi caisse -----
-  // Affoué : ouverture HIER + ops, non clôturée → « En retard »
-  // Brice : ouverture AUJOURD'HUI + ops → « À clôturer »
+  // Affoué (login caisse) : journée d’aujourd’hui ouverte → peut opérer
+  // Brice : ouverture HIER non clôturée → « En retard »
   const dateHierMatin = ilYa(1, 10)
   const dateHierAprem = ilYa(1, 15)
   const jourHier = dateHierMatin.slice(0, 10)
@@ -541,7 +550,7 @@ export function genererDonneesDemo(): AppData {
       5000,
       dateHierMatin,
       `Dépôt ×5 — ${nomComplet(clients[0])} (test caisse en retard)`,
-      affoue,
+      brice,
     ),
     tx(
       'commission_tontine',
@@ -549,7 +558,7 @@ export function genererDonneesDemo(): AppData {
       500,
       dateHierAprem,
       `Première cotisation (P.C) — ${nomComplet(clients[1])} (test caisse en retard)`,
-      affoue,
+      brice,
     ),
     tx(
       'depot_compte',
@@ -557,7 +566,7 @@ export function genererDonneesDemo(): AppData {
       15000,
       ilYa(0, 10),
       `Dépôt test jour — ${nomComplet(clients[4])} (caisse à arrêter)`,
-      brice,
+      affoue,
     ),
     tx(
       'mise_tontine',
@@ -565,13 +574,13 @@ export function genererDonneesDemo(): AppData {
       4000,
       ilYa(0, 11),
       `Dépôt ×4 — ${nomComplet(clients[4])} (caisse à arrêter)`,
-      brice,
+      affoue,
     ),
   )
 
   // Clôturer les journées passées encore ouvertes, SAUF les jours volontairement ouverts pour les tests
-  const auj = new Date().toISOString().slice(0, 10)
-  const joursOuvertsPourTest = new Set<string>([`${affoue.id}:${jourHier}`])
+  const auj = aujourdHuiLocalDemo()
+  const joursOuvertsPourTest = new Set<string>([`${brice.id}:${jourHier}`])
   const typesSortie = new Set(['retrait_tontine', 'retrait_compte', 'octroi_credit'])
   for (const employe of data.employes) {
     const joursOps = new Set(
@@ -743,18 +752,24 @@ export function genererDonneesDemo(): AppData {
     ajouterOuverture(emp, a.journee, a.soldeOuverture)
   }
 
-  // Affoué : hier ouverte non clôturée (retard). Brice : aujourd'hui ouverte.
+  // Affoué : aujourd'hui ouverte (peut opérer). Brice : hier ouverte non clôturée (retard).
   const compteAffoue = data.comptesCaisse.find((c) => c.employeId === affoue.id)
   const compteBrice = data.comptesCaisse.find((c) => c.employeId === brice.id)
+  const compteChef = data.comptesCaisse.find((c) => c.employeId === chef.id)
   ajouterOuverture(
     affoue,
-    jourHier,
-    soldeCompteCaisseAvantJour(compteAffoue, data.mouvementsCompteCaisse, jourHier),
+    auj,
+    soldeCompteCaisseAvantJour(compteAffoue, data.mouvementsCompteCaisse, auj),
   )
   ajouterOuverture(
     brice,
+    jourHier,
+    soldeCompteCaisseAvantJour(compteBrice, data.mouvementsCompteCaisse, jourHier),
+  )
+  ajouterOuverture(
+    chef,
     auj,
-    soldeCompteCaisseAvantJour(compteBrice, data.mouvementsCompteCaisse, auj),
+    soldeCompteCaisseAvantJour(compteChef, data.mouvementsCompteCaisse, auj),
   )
 
   data.ouverturesCaisse.sort((a, b) => b.dateOuverture.localeCompare(a.dateOuverture))

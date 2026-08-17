@@ -301,7 +301,11 @@ export function soldeCompteCaisseFinJour(
 }
 
 export function aujourdHuiIso(): string {
-  return new Date().toISOString().slice(0, 10)
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 export function ouvertureCaisseDuJour(
@@ -403,7 +407,7 @@ export function messageBlocageCaisseJournaliere(
   }
   const aujourdhui = aujourdHuiIso()
   if (!ouvertureCaisseDuJour(ouverturesCaisse, employeId, aujourdhui)) {
-    return `Ouverture de caisse obligatoire : demandez à l’admin ou au chef d’agence d’ouvrir la journée (${aujourdhui}).`
+    return `Ouverture de caisse obligatoire : l’admin ou le chef d’agence doit ouvrir la journée (${aujourdhui}) dans Suivi des caisses avant toute opération.`
   }
   return null
 }

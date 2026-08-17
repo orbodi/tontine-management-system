@@ -49,8 +49,8 @@ import {
 import { genererDonneesDemo } from './demo-data'
 import { numeroCarnet, numeroClient, numeroCompteCaisse, numeroCompteSolde, pad4, uid } from './utils'
 
-const STORAGE_KEY = 'microfinance-data-v21'
-const SESSION_KEY = 'microfinance-session-v21'
+const STORAGE_KEY = 'microfinance-data-v22'
+const SESSION_KEY = 'microfinance-session-v22'
 
 export const LIBELLES_ROLE: Record<Role, string> = {
   admin: 'Administrateur',
@@ -346,9 +346,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return employeConnecte.droits.includes(droit)
     }
 
-    /** Bloque si une journée passée n'a pas d'arrêt de caisse. */
+    /** Bloque si une journée passée n'a pas d'arrêt de caisse, ou si le jour n'est pas ouvert. */
     const verifierCaisseJournaliere = (d: AppData): string | null => {
       if (!employeConnecte) return 'Non connecté.'
+      // L’admin n’a pas de compte caisse journalier : pas de blocage d’ouverture.
+      if (employeConnecte.role === 'admin') return null
+      if (!employeACompteCaisse(employeConnecte.role)) return null
       return messageBlocageCaisseJournaliere(
         employeConnecte.id,
         d.transactions,

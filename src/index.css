@@ -30,6 +30,14 @@
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
+
+  .fiche-page {
+    @apply flex flex-col gap-1;
+  }
+
+  .fiche-moitie-wrap {
+    @apply min-h-[280px];
+  }
 }
 
 @media print {
@@ -46,11 +54,57 @@
     max-height: none !important;
   }
 
+  /* Fiche opération : n'imprimer que la fiche (pas le layout app) */
+  body:has(.fiche-impression-racine) aside,
+  body:has(.fiche-impression-racine) .sticky {
+    display: none !important;
+  }
+
+  body:has(.fiche-impression-racine) main {
+    margin: 0 !important;
+  }
+
+  body:has(.fiche-impression-racine) main > div {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
   thead {
     display: table-header-group;
   }
 
   tr {
     break-inside: avoid;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+
+  .fiche-impression-racine {
+    display: block !important;
+  }
+
+  .fiche-page {
+    width: 100%;
+    height: calc(297mm - 16mm);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+  }
+
+  .fiche-moitie-wrap {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .fiche-moitie {
+    height: 100%;
+    box-sizing: border-box;
+  }
+
+  .fiche-coupe {
+    flex: 0 0 auto;
   }
 }
