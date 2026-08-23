@@ -2,3 +2,10 @@ node_modules
 dist
 *.local
 .DS_Store
+backend/.venv
+backend/backend
+backend/data/app.db
+backend/data/*.db-journal
+__pycache__
+*.pyc
+.pytest_cache

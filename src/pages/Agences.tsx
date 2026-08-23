@@ -40,7 +40,7 @@ export default function Agences() {
     setModale(true)
   }
 
-  const enregistrer = (e: React.FormEvent) => {
+  const enregistrer = async (e: React.FormEvent) => {
     e.preventDefault()
     const patch = {
       code: code.trim(),
@@ -50,9 +50,9 @@ export default function Agences() {
       chefEmployeId: chefId || undefined,
     }
     if (editionId) {
-      modifierAgence(editionId, patch)
+      await modifierAgence(editionId, patch)
     } else {
-      const ok = ajouterAgence(patch)
+      const ok = await ajouterAgence(patch)
       if (!ok) {
         setErreur("Ce code d'agence existe déjà.")
         return
@@ -130,7 +130,12 @@ export default function Agences() {
                   <button className="btn-secondary !py-2 text-xs" onClick={() => ouvrirEdition(a.id)}>
                     Modifier
                   </button>
-                  <button className="btn-secondary !py-2 text-xs" onClick={() => basculerActifAgence(a.id)}>
+                  <button
+                    className="btn-secondary !py-2 text-xs"
+                    onClick={async () => {
+                      await basculerActifAgence(a.id)
+                    }}
+                  >
                     {a.actif ? 'Désactiver' : 'Réactiver'}
                   </button>
                 </div>

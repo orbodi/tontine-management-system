@@ -110,7 +110,7 @@ export default function DetailTontine() {
   const validerDepot = async () => {
     const montant = Number(montantDepot)
     const avant = carnet.cycleActuel
-    const resultat = encaisserCotisation(carnet.id, montant)
+    const resultat = await encaisserCotisation(carnet.id, montant)
     setRecapDepot(false)
     setModaleDepot(false)
     setMontantDepot('')
@@ -140,7 +140,7 @@ export default function DetailTontine() {
     const retiresApres = retraitSur.retires + n
     const disponiblesApres = Math.max(0, retraitSur.retirables - n)
     const montantDispoApres = disponiblesApres * carnet.mise
-    const resultat = retraitCycle(carnet.id, cycle, n)
+    const resultat = await retraitCycle(carnet.id, cycle, n)
     setRetraitSur(null)
     setNbCarreaux('1')
     setErreur('')
@@ -204,7 +204,7 @@ export default function DetailTontine() {
                     labelValider: carnet.verrouille ? 'Déverrouiller' : 'Verrouiller',
                     danger: !carnet.verrouille,
                   })
-                  if (ok) basculerVerrouCarnet(carnet.id)
+                  if (ok) await basculerVerrouCarnet(carnet.id)
                 }}
               >
                 {carnet.verrouille ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
@@ -224,7 +224,7 @@ export default function DetailTontine() {
                     danger: !activer,
                   })
                   if (!ok) return
-                  const err = basculerRetraitCarnetAdmin(carnet.id)
+                  const err = await basculerRetraitCarnetAdmin(carnet.id)
                   if (err) await alerter('Action impossible', err)
                   else
                     await alerter(
@@ -441,7 +441,7 @@ export default function DetailTontine() {
                               if (!ok) return
                               const n = et.retirables
                               const montant = et.montantRetirable
-                              const resultat = retraitCycle(carnet.id, et.cycle, n)
+                              const resultat = await retraitCycle(carnet.id, et.cycle, n)
                               if (resultat) await alerter('Retrait échoué', resultat)
                               else
                                 await alerter(

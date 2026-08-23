@@ -88,7 +88,9 @@ export default function Comptes() {
     const client = clientDuCompte(compte)
     const soldeAvant = compte.solde
     const resultat =
-      type === 'depot' ? deposerCompte(compte.id, montant, note) : retirerCompte(compte.id, montant, note)
+      type === 'depot'
+        ? await deposerCompte(compte.id, montant, note)
+        : await retirerCompte(compte.id, montant, note)
 
     setOperation(null)
     setMontantOp('')
@@ -298,7 +300,7 @@ export default function Comptes() {
                             labelValider: c.verrouille ? 'Déverrouiller' : 'Verrouiller',
                             danger: !c.verrouille,
                           })
-                          if (ok) basculerVerrouCompte(c.id)
+                          if (ok) await basculerVerrouCompte(c.id)
                         }}
                       >
                         {c.verrouille ? (
@@ -324,7 +326,7 @@ export default function Comptes() {
             onSubmit={async (e) => {
               e.preventDefault()
               if (!clientPourCompte) return
-              const resultat = ouvrirCompte(clientPourCompte, typeNouveauCompte)
+              const resultat = await ouvrirCompte(clientPourCompte, typeNouveauCompte)
               if ('erreur' in resultat) {
                 setErreur(resultat.erreur)
                 await alerter('Ouverture impossible', resultat.erreur)

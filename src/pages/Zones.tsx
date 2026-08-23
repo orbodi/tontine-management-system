@@ -67,10 +67,10 @@ export default function Zones() {
     setModale(true)
   }
 
-  const enregistrer = (e: React.FormEvent) => {
+  const enregistrer = async (e: React.FormEvent) => {
     e.preventDefault()
     if (editionId) {
-      const err = modifierZone(editionId, {
+      const err = await modifierZone(editionId, {
         agenceId,
         code: code.trim(),
         nom: nom.trim() || undefined,
@@ -80,7 +80,7 @@ export default function Zones() {
         return
       }
     } else {
-      const err = ajouterZone({
+      const err = await ajouterZone({
         agenceId,
         code: code.trim(),
         nom: nom.trim() || undefined,
@@ -226,7 +226,9 @@ export default function Zones() {
                       </button>
                       <button
                         className="btn-secondary !py-2 text-xs"
-                        onClick={() => basculerActifZone(z.id)}
+                        onClick={async () => {
+                          await basculerActifZone(z.id)
+                        }}
                       >
                         {z.actif ? 'Désactiver' : 'Réactiver'}
                       </button>

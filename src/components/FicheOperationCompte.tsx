@@ -105,7 +105,6 @@ function MoitieFiche({
           Montant {estDepot ? 'déposé' : 'retiré'}
         </div>
         <div className={`text-xl font-bold ${estDepot ? 'text-emerald-700' : 'text-rose-700'}`}>
-          {estDepot ? '+' : '−'}
           {formatMontant(data.montant)}
         </div>
       </div>
@@ -130,15 +129,11 @@ function MoitieFiche({
       <div className="mt-auto grid grid-cols-2 gap-6 pt-4">
         <div>
           <div className="mb-8 text-[11px] font-medium text-slate-700">Signature client</div>
-          <div className="border-t border-slate-400 pt-1 text-[10px] text-slate-500">
-            Nom et signature
-          </div>
+          <div className="border-t border-slate-400" />
         </div>
         <div>
           <div className="mb-8 text-[11px] font-medium text-slate-700">Signature caissier</div>
-          <div className="border-t border-slate-400 pt-1 text-[10px] text-slate-500">
-            Nom et signature
-          </div>
+          <div className="border-t border-slate-400" />
         </div>
       </div>
     </div>

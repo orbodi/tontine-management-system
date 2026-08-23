@@ -79,7 +79,7 @@ export default function Employes() {
     setModaleOuverte(true)
   }
 
-  const enregistrer = (e: React.FormEvent) => {
+  const enregistrer = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.agenceId) {
       setErreur('Sélectionnez une agence.')
@@ -97,9 +97,9 @@ export default function Employes() {
       pieceIdentite: form.pieceIdentite.trim() || undefined,
     }
     if (employeEnEdition) {
-      modifierEmploye(employeEnEdition.id, commun)
+      await modifierEmploye(employeEnEdition.id, commun)
     } else {
-      const ok = ajouterEmploye({ ...commun, motDePasse: form.motDePasse })
+      const ok = await ajouterEmploye({ ...commun, motDePasse: form.motDePasse })
       if (!ok) {
         setErreur('Cet identifiant existe déjà.')
         return
@@ -108,10 +108,10 @@ export default function Employes() {
     setModaleOuverte(false)
   }
 
-  const changerMdp = (e: React.FormEvent) => {
+  const changerMdp = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!employeMdp) return
-    modifierEmploye(employeMdp.id, { motDePasse: nouveauMdp })
+    await modifierEmploye(employeMdp.id, { motDePasse: nouveauMdp })
     setEmployeMdp(null)
     setNouveauMdp('')
   }
@@ -225,7 +225,9 @@ export default function Employes() {
                         <>
                           <button
                             className="btn-secondary !px-2.5 !py-1.5 text-xs"
-                            onClick={() => basculerActifEmploye(u.id)}
+                            onClick={async () => {
+                              await basculerActifEmploye(u.id)
+                            }}
                             title={u.actif ? 'Désactiver' : 'Réactiver'}
                           >
                             {u.actif ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
@@ -239,7 +241,7 @@ export default function Employes() {
                                 labelValider: 'Supprimer',
                                 danger: true,
                               })
-                              if (ok) supprimerEmploye(u.id)
+                              if (ok) await supprimerEmploye(u.id)
                             }}
                             title="Supprimer"
                           >

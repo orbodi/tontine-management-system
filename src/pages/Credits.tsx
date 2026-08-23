@@ -47,9 +47,9 @@ export default function Credits() {
     return r
   }, [data.credits])
 
-  const soumettre = (e: React.FormEvent) => {
+  const soumettre = async (e: React.FormEvent) => {
     e.preventDefault()
-    demanderCredit({
+    await demanderCredit({
       clientId: clientChoisi,
       montant: Number(montant),
       tauxInteret: Number(taux),
@@ -64,10 +64,10 @@ export default function Credits() {
     setMotif('')
   }
 
-  const validerRemboursement = (e: React.FormEvent) => {
+  const validerRemboursement = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!creditARembourser) return
-    rembourserCredit(creditARembourser.id, Number(montantRemboursement))
+    await rembourserCredit(creditARembourser.id, Number(montantRemboursement))
     setCreditARembourser(null)
     setMontantRemboursement('')
   }
@@ -158,7 +158,7 @@ export default function Credits() {
                                 message: `Approuver le crédit ${credit.numero} de ${formatMontant(credit.montant)} pour ${client.prenom} ${client.nom} ?`,
                                 labelValider: 'Approuver',
                               })
-                              if (ok) approuverCredit(credit.id)
+                              if (ok) await approuverCredit(credit.id)
                             }}
                           >
                             <Check className="h-4 w-4" />
@@ -173,7 +173,7 @@ export default function Credits() {
                                 labelValider: 'Rejeter',
                                 danger: true,
                               })
-                              if (ok) rejeterCredit(credit.id)
+                              if (ok) await rejeterCredit(credit.id)
                             }}
                           >
                             <X className="h-4 w-4" />

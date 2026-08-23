@@ -196,7 +196,7 @@ export default function Tontines() {
       setErreur('Le client doit appartenir à l’agence et à la zone sélectionnées.')
       return
     }
-    const resultat = ouvrirCarnet(clientChoisi, typeNouveauCarnet, Number(mise), frequence)
+    const resultat = await ouvrirCarnet(clientChoisi, typeNouveauCarnet, Number(mise), frequence)
     if ('erreur' in resultat) {
       setErreur(resultat.erreur)
       await alerter('Ouverture impossible', resultat.erreur)

@@ -9,9 +9,10 @@ export default function Connexion() {
   const [motDePasse, setMotDePasse] = useState('')
   const [erreur, setErreur] = useState('')
 
-  const valider = (e: React.FormEvent) => {
+  const valider = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!connexion(identifiant, motDePasse)) {
+    const ok = await connexion(identifiant, motDePasse)
+    if (!ok) {
       setErreur('Identifiant ou mot de passe incorrect.')
     }
   }

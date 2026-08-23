@@ -162,7 +162,7 @@ export default function DetailCaisse() {
     e.preventDefault()
     if (!employe) return
     const montant = Number(montantOuverture)
-    const err = ouvrirJourneeCaisse(
+    const err = await ouvrirJourneeCaisse(
       employe.id,
       montant,
       noteOuverture.trim() || undefined,
@@ -184,7 +184,7 @@ export default function DetailCaisse() {
   const validerArret = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!employe) return
-    const err = arreterCaisse(
+    const err = await arreterCaisse(
       Number(montantFermeture),
       noteArret.trim() || undefined,
       jourATraiter,
@@ -207,7 +207,7 @@ export default function DetailCaisse() {
     e.preventDefault()
     if (!employe) return
     const montant = Number(montantAlim)
-    const err = alimenterCompteCaisse(employe.id, montant, noteAlim.trim() || undefined)
+    const err = await alimenterCompteCaisse(employe.id, montant, noteAlim.trim() || undefined)
     if (err) {
       await alerter('Alimentation impossible', err)
       return
@@ -225,7 +225,7 @@ export default function DetailCaisse() {
     e.preventDefault()
     if (!employe) return
     setErreurRegulariser('')
-    const err = regulariserCumulCompteCaisse(
+    const err = await regulariserCumulCompteCaisse(
       employe.id,
       typeRegulariser,
       Number(montantRegulariser),

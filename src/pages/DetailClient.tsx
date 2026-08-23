@@ -116,7 +116,7 @@ export default function DetailClient() {
       setErreur('Le client doit être rattaché à une agence et une zone.')
       return
     }
-    const resultat = ouvrirCarnet(client.id, typeCarnet, Number(mise), frequence)
+    const resultat = await ouvrirCarnet(client.id, typeCarnet, Number(mise), frequence)
     if ('erreur' in resultat) {
       setErreur(resultat.erreur)
       await alerter('Ouverture impossible', resultat.erreur)
@@ -136,7 +136,7 @@ export default function DetailClient() {
 
   const creerCompte = async (e: React.FormEvent) => {
     e.preventDefault()
-    const resultat = ouvrirCompte(client.id, typeCompte)
+    const resultat = await ouvrirCompte(client.id, typeCompte)
     if ('erreur' in resultat) {
       setErreur(resultat.erreur)
       await alerter('Ouverture impossible', resultat.erreur)
@@ -193,7 +193,12 @@ export default function DetailClient() {
               <BellRing className="h-4 w-4" />
               Notifier
             </button>
-            <button className="btn-secondary" onClick={() => basculerActifClient(client.id)}>
+            <button
+              className="btn-secondary"
+              onClick={async () => {
+                await basculerActifClient(client.id)
+              }}
+            >
               {client.actif ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
               {client.actif ? 'Désactiver' : 'Réactiver'}
             </button>

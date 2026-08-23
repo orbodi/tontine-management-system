@@ -21,7 +21,15 @@ import CompteZoneTontinePage from './pages/CompteZoneTontine'
 import Audit from './pages/Audit'
 
 export default function App() {
-  const { employeConnecte, estAdmin, aDroit } = useStore()
+  const { employeConnecte, estAdmin, aDroit, chargement } = useStore()
+
+  if (chargement) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-900 text-sm text-slate-300">
+        Chargement…
+      </div>
+    )
+  }
 
   if (!employeConnecte) return <Connexion />
 

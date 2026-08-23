@@ -113,7 +113,7 @@ export default function Clients() {
       pieceIdentite: form.pieceIdentite.trim() || undefined,
     }
     if (clientEnEdition) {
-      const err = modifierClient(clientEnEdition.id, patch)
+      const err = await modifierClient(clientEnEdition.id, patch)
       if (err) {
         setErreur(err)
         return
@@ -139,7 +139,7 @@ export default function Clients() {
       setErreur('La zone doit appartenir à l’agence sélectionnée.')
       return
     }
-    const cree = ajouterClient({ ...patch, zoneId: form.zoneId })
+    const cree = await ajouterClient({ ...patch, zoneId: form.zoneId })
     if (!cree) {
       setErreur('Impossible d’ajouter le client (zone inactive ou introuvable).')
       return
@@ -148,7 +148,7 @@ export default function Clients() {
     setErreur('')
     await alerter(
       'Client ajouté',
-      `Le client ${cree.prenom} ${cree.nom} a été ajouté avec succès.\nNuméro client : ${cree.codeClient}`,
+      `Le client ${patch.prenom} ${patch.nom} a été ajouté avec succès.`,
     )
   }
 

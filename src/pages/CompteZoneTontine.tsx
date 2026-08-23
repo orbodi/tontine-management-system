@@ -88,7 +88,7 @@ export default function CompteZoneTontinePage() {
 
   const enregistrerReel = async (e: React.FormEvent) => {
     e.preventDefault()
-    const err = saisirMontantReelZone(zoneId, Number(montantReel), dateJour, note.trim() || undefined)
+    const err = await saisirMontantReelZone(zoneId, Number(montantReel), dateJour, note.trim() || undefined)
     if (err) {
       setErreur(err)
       await alerter('Saisie impossible', err)
@@ -113,7 +113,7 @@ export default function CompteZoneTontinePage() {
       labelValider: 'Clôturer',
     })
     if (!ok) return
-    const err = cloturerJourneeZone(zoneId, dateJour)
+    const err = await cloturerJourneeZone(zoneId, dateJour)
     if (err) {
       await alerter('Clôture impossible', err)
       return
@@ -123,7 +123,7 @@ export default function CompteZoneTontinePage() {
 
   const validerAjustement = async (e: React.FormEvent) => {
     e.preventDefault()
-    const err = ajusterCumulCompteZone(zoneId, typeAjust, Number(montantAjust), motifAjust)
+    const err = await ajusterCumulCompteZone(zoneId, typeAjust, Number(montantAjust), motifAjust)
     if (err) {
       setErreur(err)
       return

@@ -1,20 +1,19 @@
 # DON DE DIEU — Système de gestion de microfinance
 
 Application web de gestion pour la microfinance **DON DE DIEU** : clients, tontine individuelle (carnets),
-épargne, crédits, journal des transactions et rapports. Interface entièrement en français,
-devise FCFA.
+épargne, journal des transactions et rapports. Interface entièrement en français, devise FCFA.
+
+**Stack** : React 18 + Vite (front) · FastAPI + SQLite (API).
 
 ## Fonctionnalités
 
 - **Connexion et rôles** : Administrateur, Chef d'agence, Caissier (droits différenciés)
-- **Tableau de bord** : indicateurs clés, graphiques
-- **Clients** : fiche complète avec ID client unique (`0001`, `0002`…), vue 360° de l'activité financière
-- **Tontine individuelle** : carnets à mise fixe, encaissement des mises, clôture de cycle
-  avec commission d'une mise
-- **Épargne** : comptes (`B0001`…), dépôts et retraits directs (sans demande enregistrée)
-- **Transactions** : journal complet filtrable (type, période, recherche), export Excel
-- **Rapports** : état de caisse journalier, exports Excel, impression PDF
-- **Notifications clients** : messages pré-remplis envoyés via SMS ou WhatsApp, ou copiés
+- **Tableau de bord** : indicateurs clés, manquant/surplus de caisse
+- **Clients** : fiche complète, vue 360° (filtrée pour le caissier = ses opérations)
+- **Tontine** : carnets, collecte zone (montant réel), dépôts, retraits
+- **Comptes** : courant / épargne, dépôts et retraits
+- **Caisse** : ouverture / arrêt journalier, compte caisse, cumuls
+- **Transactions & rapports** : journal filtrable, exports
 
 ## Comptes de démonstration
 
@@ -24,19 +23,36 @@ devise FCFA.
 | Chef d'agence | `chef` | `chef123` |
 | Caissier | `caisse` | `caisse123` |
 
-## Démarrage
+## Démarrage (dev)
+
+### Windows (recommandé)
+
+Double-cliquez sur `lancer.bat` : il prépare au besoin les dépendances, ouvre l’API FastAPI, puis le front Vite (navigateur).
+
+### Manuel
+
+**1. API (terminal 1)**
+
+```bash
+cd backend
+py -3.12 -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+Voir aussi [backend/README.md](backend/README.md).
+
+**2. Front (terminal 2)**
 
 ```bash
 npm install
-npm run start
+npm run dev
 ```
 
-`npm run start` (ou `npm run dev:open`) démarre le serveur et ouvre le navigateur automatiquement.  
-Sans ouverture auto : `npm run dev`, puis http://localhost:5173
+Ouvrir http://localhost:5173 — le proxy Vite redirige `/api` vers `http://127.0.0.1:8000`.
 
-Sous Windows, vous pouvez aussi double-cliquer sur `lancer.bat`.
-
-## Build de production
+## Build front
 
 ```bash
 npm run build
@@ -45,9 +61,7 @@ npm run preview
 
 ## Notes techniques
 
-- **Stack** : React 18, TypeScript, Vite, Tailwind CSS, Recharts, React Router
-- **Stockage** : les données sont conservées dans le navigateur (localStorage).
-  Un jeu de données de démonstration est chargé au premier lancement ; le bouton
-  « Réinitialiser les données de démo » dans la barre latérale permet de repartir de zéro.
-- Les données étant locales au navigateur, une future migration vers un serveur
-  (multi-postes) est possible sans changer l'interface.
+- **Persistance** : SQLite (`backend/data/app.db`), seed automatique au premier démarrage
+- **Auth** : JWT Bearer, mots de passe hashés (bcrypt)
+- **Branche** : développement API sur `dev`
+- Le bouton « Réinitialiser les données de démo » (admin) appelle `POST /api/admin/reinitialiser-demo`

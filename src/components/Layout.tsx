@@ -1,19 +1,20 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   ArrowLeftRight,
   Banknote,
   Building2,
   ClipboardList,
+  Download,
   FileBarChart,
   HandCoins,
   LayoutDashboard,
   LogOut,
   MapPinned,
   Menu,
-  RefreshCw,
   Scale,
   ShieldCheck,
+  Upload,
   Users,
   Wallet,
   X,
@@ -24,8 +25,12 @@ import { useConfirmation } from './Confirmation'
 
 export default function Layout() {
   const [menuOuvert, setMenuOuvert] = useState(false)
-  const { data, employeConnecte, deconnexion, estAdmin, estChefAgence, aDroit, reinitialiserDemo } = useStore()
-  const { confirmer } = useConfirmation()
+  const [exportEnCours, setExportEnCours] = useState(false)
+  const [importEnCours, setImportEnCours] = useState(false)
+  const inputImportRef = useRef<HTMLInputElement>(null)
+  const { data, employeConnecte, deconnexion, estAdmin, estChefAgence, aDroit, exporterSauvegardeCsv, importerSauvegardeCsv } =
+    useStore()
+  const { alerter, confirmer } = useConfirmation()
 
   const agence = data.agences.find((a) => a.id === employeConnecte?.agenceId)
 
@@ -56,6 +61,42 @@ export default function Layout() {
     ...(estAdmin ? [{ to: '/audit', label: 'Audit', icon: ClipboardList }] : []),
   ]
 
+  const exporter = async () => {
+    setExportEnCours(true)
+    try {
+      await exporterSauvegardeCsv()
+      await alerter('Export terminé', 'La sauvegarde CSV (fichier ZIP) a été téléchargée.')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Impossible de générer la sauvegarde.'
+      await alerter('Export impossible', msg)
+    } finally {
+      setExportEnCours(false)
+    }
+  }
+
+  const surFichierImport = async (fichier: File | undefined) => {
+    if (!fichier) return
+    const ok = await confirmer({
+      titre: 'Importer une sauvegarde',
+      message:
+        'Cette opération remplace toutes les données actuelles par le contenu du fichier. Continuer ?',
+      labelValider: 'Importer',
+      danger: true,
+    })
+    if (!ok) return
+    setImportEnCours(true)
+    try {
+      const err = await importerSauvegardeCsv(fichier)
+      if (err) await alerter('Import impossible', err)
+      else await alerter('Import terminé', 'Les données ont été restaurées depuis la sauvegarde CSV.')
+    } catch {
+      await alerter('Import impossible', 'Le fichier n’a pas pu être importé.')
+    } finally {
+      setImportEnCours(false)
+      if (inputImportRef.current) inputImportRef.current.value = ''
+    }
+  }
+
   const navigation = (
     <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3">
       {liens.map(({ to, label, icon: Icon }) => (
@@ -76,6 +117,41 @@ export default function Layout() {
           {label}
         </NavLink>
       ))}
+      {estAdmin && (
+        <>
+          <button
+            type="button"
+            disabled={exportEnCours || importEnCours}
+            onClick={() => {
+              setMenuOuvert(false)
+              void exporter()
+            }}
+            className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+          >
+            <Download className="h-5 w-5 shrink-0" />
+            {exportEnCours ? 'Export…' : 'Sauvegarder (CSV)'}
+          </button>
+          <button
+            type="button"
+            disabled={exportEnCours || importEnCours}
+            onClick={() => {
+              setMenuOuvert(false)
+              inputImportRef.current?.click()
+            }}
+            className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+          >
+            <Upload className="h-5 w-5 shrink-0" />
+            {importEnCours ? 'Import…' : 'Importer (CSV)'}
+          </button>
+          <input
+            ref={inputImportRef}
+            type="file"
+            accept=".zip,application/zip"
+            className="hidden"
+            onChange={(e) => void surFichierImport(e.target.files?.[0])}
+          />
+        </>
+      )}
     </nav>
   )
 
@@ -103,26 +179,13 @@ export default function Layout() {
         )}
       </div>
       <button
-        onClick={deconnexion}
+        onClick={async () => {
+          await deconnexion()
+        }}
         className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
       >
         <LogOut className="h-4 w-4" />
         Se déconnecter
-      </button>
-      <button
-        onClick={async () => {
-          const ok = await confirmer({
-            titre: 'Réinitialiser les données',
-            message: 'Réinitialiser toutes les données avec le jeu de démonstration ? Les saisies actuelles seront perdues.',
-            labelValider: 'Réinitialiser',
-            danger: true,
-          })
-          if (ok) reinitialiserDemo()
-        }}
-        className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-xs text-slate-500 transition hover:text-slate-300"
-      >
-        <RefreshCw className="h-3.5 w-3.5" />
-        Réinitialiser les données de démo
       </button>
     </div>
   )

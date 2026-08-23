@@ -9,7 +9,9 @@
     "start": "vite --open",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "preview:open": "vite preview --open"
+    "preview:open": "vite preview --open",
+    "api": "cd backend && .venv\\Scripts\\uvicorn.exe app.main:app --reload --port 8000",
+    "api:install": "cd backend && py -3.12 -m venv .venv && .venv\\Scripts\\pip.exe install -r requirements.txt"
   },
   "dependencies": {
     "lucide-react": "^0.469.0",
