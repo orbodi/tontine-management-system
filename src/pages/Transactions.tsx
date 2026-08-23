@@ -139,9 +139,18 @@ export default function Transactions() {
       return
     }
     setTxEdition(null)
+    const estTontine = [
+      'mise_tontine',
+      'commission_tontine',
+      'retrait_tontine',
+      'complement_mise',
+    ].includes(txEdition.type)
     await alerter(
       'Transaction corrigée',
-      `Montant passé de ${formatMontant(txEdition.montant)} à ${formatMontant(montant)}.`,
+      `Montant passé de ${formatMontant(txEdition.montant)} à ${formatMontant(montant)}.\n` +
+        (estTontine
+          ? 'Les mises / carreaux du carnet et le cycle ont été recalculés.'
+          : 'Le compte concerné et la caisse ont été recalculés.'),
     )
   }
 
