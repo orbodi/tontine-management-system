@@ -27,6 +27,7 @@ const TYPES_TX_CARNET: TypeTransaction[] = [
   'mise_tontine',
   'retrait_tontine',
   'commission_tontine',
+  'complement_mise',
 ]
 
 const LIBELLES_FREQUENCE: Record<FrequenceMise, string> = {

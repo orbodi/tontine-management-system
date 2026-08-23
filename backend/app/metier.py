@@ -10,6 +10,7 @@ TYPES_OPERATION_CAISSE = [
     "mise_tontine",
     "retrait_tontine",
     "commission_tontine",
+    "complement_mise",
     "depot_compte",
     "retrait_compte",
     "octroi_credit",
@@ -56,6 +57,15 @@ def carreaux_nets(carnet: dict, mises: list, cycle: int | None = None) -> int:
     return sum(m["nombreMises"] for m in mises if m["carnetId"] == carnet["id"] and m["cycle"] == c)
 
 
+def carreaux_deposes(carnet: dict, mises: list, cycle: int | None = None) -> int:
+    c = cycle if cycle is not None else carnet["cycleActuel"]
+    return sum(
+        m["nombreMises"]
+        for m in mises
+        if m["carnetId"] == carnet["id"] and m["cycle"] == c and m["nombreMises"] > 0
+    )
+
+
 def calculer_mises_depuis_montant(montant: float, mise: float) -> dict[str, Any]:
     if mise <= 0:
         return {"ok": False, "erreur": "Mise invalide."}
@@ -84,7 +94,7 @@ def depots_tontine_zone_jour(zone_id: str, date_iso: str, clients: list, transac
     return sum(
         t["montant"]
         for t in transactions
-        if t["type"] in ("mise_tontine", "commission_tontine")
+        if t["type"] in ("mise_tontine", "commission_tontine", "complement_mise")
         and t["clientId"] in ids
         and t["date"][:10] == date_iso
     )

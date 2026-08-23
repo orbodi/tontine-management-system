@@ -110,6 +110,10 @@ interface StoreApi {
     frequence: 'journaliere' | 'hebdomadaire',
   ) => Promise<{ id: string; numero: string } | { erreur: string }>
   encaisserCotisation: (carnetId: string, montant: number) => Promise<string | null>
+  changerMiseCarnet: (
+    carnetId: string,
+    nouvelleMise: number,
+  ) => Promise<string | null>
   retraitCycle: (carnetId: string, cycle: number, nombreCarreaux: number) => Promise<string | null>
   basculerVerrouCarnet: (id: string) => Promise<void>
   basculerRetraitCarnetAdmin: (id: string) => Promise<string | null>
@@ -334,6 +338,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       async encaisserCotisation(carnetId, montant) {
         const res = await muter('encaisserCotisation', { carnetId, montant })
+        return res.erreur ?? null
+      },
+      async changerMiseCarnet(carnetId, nouvelleMise) {
+        const res = await muter('changerMiseCarnet', { carnetId, nouvelleMise })
         return res.erreur ?? null
       },
       async retraitCycle(carnetId, cycle, nombreCarreaux) {

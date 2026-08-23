@@ -27,6 +27,7 @@ MAPPINGS_DEFAUT = [
     ("retrait_compte", "CAISSE", "4671", "571", "Retrait compte client"),
     ("retrait_compte_epargne", "CAISSE", "4672", "571", "Retrait épargne client"),
     ("mise_tontine", "CAISSE", "571", "4673", "Cotisation tontine"),
+    ("complement_mise", "CAISSE", "571", "4673", "Complément de mise tontine"),
     ("retrait_tontine", "CAISSE", "4673", "571", "Retrait cycle tontine"),
     ("commission_tontine", "CAISSE", "571", "7061", "Commission tontine"),
     ("vente_carnet", "CAISSE", "571", "7071", "Vente de carnet"),

@@ -383,6 +383,7 @@ export type TypeTransaction =
   | 'mise_tontine'
   | 'retrait_tontine'
   | 'commission_tontine'
+  | 'complement_mise'
   | 'depot_compte'
   | 'retrait_compte'
   | 'octroi_credit'

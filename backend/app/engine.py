@@ -748,6 +748,90 @@ def encaisser_cotisation(d, u, p):
     return (None, d, {})
 
 
+def changer_mise_carnet(d, u, p):
+    """Augmente la mise du cycle en cours ; le client complète l'écart sur les carreaux déjà déposés."""
+    carnet_id = p["carnetId"]
+    nouvelle = float(p.get("nouvelleMise") or 0)
+    if nouvelle <= 0:
+        return {"erreur": "Nouvelle mise invalide."}
+    d = copy.deepcopy(d)
+    carnet = next((c for c in d["carnets"] if c["id"] == carnet_id), None)
+    if not carnet or not carnet.get("actif"):
+        return {"erreur": "Carnet introuvable."}
+    if carnet.get("verrouille"):
+        return {"erreur": "Ce carnet est verrouille."}
+    ancienne = float(carnet["mise"])
+    if nouvelle == ancienne:
+        return {"erreur": "La nouvelle mise est identique a la mise actuelle."}
+    if nouvelle < ancienne:
+        return {"erreur": "Seule une augmentation de mise est autorisee."}
+
+    cycle = carnet["cycleActuel"]
+    deposes = M.carreaux_deposes(carnet, d["mises"], cycle)
+    complement = deposes * (nouvelle - ancienne)
+
+    if complement > 0:
+        err = _verif_caisse(d, u)
+        if err:
+            return {"erreur": err}
+        jour = M.aujourd_hui_iso()
+        jz = M.journee_zone_du_jour(d["journeesCompteZone"], carnet["zoneId"], jour)
+        if not jz or jz.get("cloturee"):
+            zone = next((z for z in d["zones"] if z["id"] == carnet["zoneId"]), None)
+            code = zone["code"] if zone else "—"
+            if jz and jz.get("cloturee"):
+                return {"erreur": f"La collecte tontine de la zone {code} est deja cloturee pour aujourd'hui."}
+            return {
+                "erreur": f"Saisissez d'abord le montant reel collecté pour la zone {code} avant le complement."
+            }
+
+    date = M.maintenant()
+    d["carnets"] = [{**c, "mise": nouvelle} if c["id"] == carnet_id else c for c in d["carnets"]]
+
+    if complement > 0:
+        d["mises"] = [
+            *d["mises"],
+            {
+                "id": uid(),
+                "carnetId": carnet_id,
+                "cycle": cycle,
+                "nombreMises": 0,
+                "montant": complement,
+                "date": date,
+            },
+        ]
+        d = _enregistrer_tx(
+            d,
+            [
+                _mk_tx(
+                    u,
+                    {
+                        "type": "complement_mise",
+                        "clientId": carnet["clientId"],
+                        "montant": complement,
+                        "date": date,
+                        "description": (
+                            f"Complement mise {int(ancienne)}→{int(nouvelle)} ×{deposes} carreaux "
+                            f"— {_nom_client(d, carnet['clientId'])} (cycle {cycle})"
+                        ),
+                    },
+                )
+            ],
+        )
+
+    return (
+        None,
+        d,
+        {
+            "ancienneMise": ancienne,
+            "nouvelleMise": nouvelle,
+            "carreaux": deposes,
+            "complement": complement,
+            "cycle": cycle,
+        },
+    )
+
+
 def retrait_cycle(d, u, p):
     err = _verif_caisse(d, u)
     if err:
@@ -1543,6 +1627,7 @@ ACTIONS = {
     "supprimerClient": supprimer_client,
     "ouvrirCarnet": ouvrir_carnet,
     "encaisserCotisation": encaisser_cotisation,
+    "changerMiseCarnet": changer_mise_carnet,
     "retraitCycle": retrait_cycle,
     "basculerVerrouCarnet": basculer_verrou_carnet,
     "basculerRetraitCarnetAdmin": basculer_retrait_carnet_admin,

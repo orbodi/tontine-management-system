@@ -6,6 +6,7 @@ import {
   ArrowUpFromLine,
   Lock,
   LockOpen,
+  RefreshCw,
 } from 'lucide-react'
 import { NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
@@ -19,6 +20,7 @@ import {
   eligibiliteRetraitCarnet,
   journeeZoneDuJour,
   moisDuCycle,
+  montantComplementMise,
   situationsCycles,
   type EtatCycle,
 } from '../metier'
@@ -33,6 +35,7 @@ export default function DetailTontine() {
     aDroit,
     estAdmin,
     encaisserCotisation,
+    changerMiseCarnet,
     retraitCycle,
     basculerVerrouCarnet,
     basculerRetraitCarnetAdmin,
@@ -42,6 +45,8 @@ export default function DetailTontine() {
   const [modaleDepot, setModaleDepot] = useState(false)
   const [montantDepot, setMontantDepot] = useState('')
   const [recapDepot, setRecapDepot] = useState(false)
+  const [modaleMise, setModaleMise] = useState(false)
+  const [nouvelleMise, setNouvelleMise] = useState('')
   const [retraitSur, setRetraitSur] = useState<EtatCycle | null>(null)
   const [nbCarreaux, setNbCarreaux] = useState('1')
   const [erreur, setErreur] = useState('')
@@ -70,6 +75,9 @@ export default function DetailTontine() {
   const retraitAutorise = eligibilite.autorise && !carnet?.verrouille
   const calcDepot = carnet
     ? calculerMisesDepuisMontant(Number(montantDepot) || 0, carnet.mise)
+    : null
+  const apercuComplement = carnet
+    ? montantComplementMise(carnet, data.mises, Number(nouvelleMise) || 0)
     : null
 
   if (!carnet || !client) {
@@ -190,6 +198,21 @@ export default function DetailTontine() {
               >
                 <ArrowDownToLine className="h-4 w-4" />
                 Dépôt
+              </button>
+            )}
+            {peutOperer && (
+              <button
+                className="btn-secondary"
+                disabled={carnet.verrouille}
+                title={carnet.verrouille ? 'Carnet verrouillé' : undefined}
+                onClick={() => {
+                  setNouvelleMise(String(carnet.mise))
+                  setErreur('')
+                  setModaleMise(true)
+                }}
+              >
+                <RefreshCw className="h-4 w-4" />
+                Changer la mise
               </button>
             )}
             {peutVerrouiller && (
@@ -542,6 +565,116 @@ export default function DetailTontine() {
             </button>
             <button type="submit" className="btn-primary">
               Vérifier
+            </button>
+          </div>
+        </form>
+      </Modale>
+
+      <Modale
+        titre={`Changer la mise — ${client.prenom} ${client.nom}`}
+        ouverte={modaleMise}
+        onFermer={() => setModaleMise(false)}
+      >
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            const nm = Number(nouvelleMise)
+            if (!Number.isFinite(nm) || nm <= 0) {
+              setErreur('Nouvelle mise invalide.')
+              return
+            }
+            if (nm <= carnet.mise) {
+              setErreur('La nouvelle mise doit être supérieure à la mise actuelle.')
+              return
+            }
+            const apercu = montantComplementMise(carnet, data.mises, nm)
+            if (apercu.complement > 0 && !collecteOuverte) {
+              setErreur(
+                collecteCloturee
+                  ? 'La collecte de cette zone est déjà clôturée pour aujourd’hui.'
+                  : 'Saisissez d’abord le montant réel collecté sur le compte zone.',
+              )
+              return
+            }
+            const ok = await confirmer({
+              titre: 'Confirmer le changement de mise',
+              message:
+                apercu.complement > 0
+                  ? `Mise ${formatMontant(carnet.mise)} → ${formatMontant(nm)}.\n` +
+                    `${apercu.carreaux} carreau(x) déjà cotisé(s) : complément à encaisser ${formatMontant(apercu.complement)}.\n` +
+                    `Les dépôts suivants se feront à ${formatMontant(nm)}.`
+                  : `Mise ${formatMontant(carnet.mise)} → ${formatMontant(nm)}.\nAucun carreau encore cotisé sur ce cycle : pas de complément.`,
+              labelValider: apercu.complement > 0 ? 'Encaisser et changer' : 'Changer la mise',
+            })
+            if (!ok) return
+            const err = await changerMiseCarnet(carnet.id, nm)
+            if (err) {
+              setErreur(err)
+              await alerter('Changement impossible', err)
+              return
+            }
+            setModaleMise(false)
+            setErreur('')
+            await alerter(
+              'Mise mise à jour',
+              apercu.complement > 0
+                ? `Nouvelle mise : ${formatMontant(nm)}.\nComplément encaissé : ${formatMontant(apercu.complement)} (${apercu.carreaux} × ${formatMontant(nm - carnet.mise)}).`
+                : `Nouvelle mise : ${formatMontant(nm)}.`,
+            )
+          }}
+          className="space-y-4"
+        >
+          <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+            <p>
+              Mise actuelle : <strong>{formatMontant(carnet.mise)}</strong>
+            </p>
+            <p className="mt-1">
+              Cycle {carnet.cycleActuel}
+              {moisActuel ? ` (${moisActuel.label})` : ''} — carreaux cotisés :{' '}
+              <strong>{apercuComplement?.carreaux ?? 0}</strong>
+            </p>
+          </div>
+          <div>
+            <label className="label">Nouvelle mise (FCFA) *</label>
+            <input
+              className="input"
+              type="number"
+              min={carnet.mise + 1}
+              step={1}
+              required
+              autoFocus
+              value={nouvelleMise}
+              onChange={(e) => setNouvelleMise(e.target.value)}
+            />
+          </div>
+          {Number(nouvelleMise) > carnet.mise && apercuComplement && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              {apercuComplement.carreaux > 0 ? (
+                <>
+                  <p className="font-medium">Complément à encaisser</p>
+                  <p className="mt-1 text-xs">
+                    {apercuComplement.carreaux} carreaux ×{' '}
+                    {formatMontant(Number(nouvelleMise) - carnet.mise)} ={' '}
+                    <strong>{formatMontant(apercuComplement.complement)}</strong>
+                  </p>
+                  <p className="mt-2 text-xs text-amber-800">
+                    Le nombre de carreaux ne change pas. Les prochains dépôts se feront à la nouvelle
+                    mise.
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs">Aucun complément : aucun carreau encore cotisé sur ce cycle.</p>
+              )}
+            </div>
+          )}
+          {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-secondary" onClick={() => setModaleMise(false)}>
+              Annuler
+            </button>
+            <button type="submit" className="btn-primary">
+              <RefreshCw className="h-4 w-4" />
+              Valider
             </button>
           </div>
         </form>

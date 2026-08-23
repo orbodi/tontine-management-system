@@ -24,6 +24,7 @@ export const LIBELLES_TYPE: Record<TypeTransaction, string> = {
   mise_tontine: 'Dépôt',
   retrait_tontine: 'Retrait',
   commission_tontine: 'Première cotisation (P.C)',
+  complement_mise: 'Complément de mise',
   depot_compte: 'Dépôt',
   retrait_compte: 'Retrait',
   octroi_credit: 'Octroi de crédit',
@@ -40,6 +41,7 @@ export const TYPES_OPERATION_CAISSE: TypeTransaction[] = [
   'mise_tontine',
   'retrait_tontine',
   'commission_tontine',
+  'complement_mise',
   'depot_compte',
   'retrait_compte',
   'octroi_credit',
@@ -114,6 +116,20 @@ export function carreauxDeposes(carnet: CarnetTontine, mises: MiseTontine[], cyc
   return mises
     .filter((m) => m.carnetId === carnet.id && m.cycle === cycle && m.nombreMises > 0)
     .reduce((s, m) => s + m.nombreMises, 0)
+}
+
+/** Montant à encaisser pour passer d'une mise à une autre sur les carreaux déjà déposés du cycle. */
+export function montantComplementMise(
+  carnet: CarnetTontine,
+  mises: MiseTontine[],
+  nouvelleMise: number,
+  cycle?: number,
+): { carreaux: number; complement: number; ancienneMise: number } {
+  const c = cycle ?? carnet.cycleActuel
+  const carreaux = carreauxDeposes(carnet, mises, c)
+  const ancienneMise = carnet.mise
+  const complement = Math.max(0, carreaux * (nouvelleMise - ancienneMise))
+  return { carreaux, complement, ancienneMise }
 }
 
 /** Carreaux déjà retirés sur un cycle. */
@@ -538,7 +554,7 @@ export function depotsTontineZoneJour(
   return transactions
     .filter(
       (t) =>
-        (t.type === 'mise_tontine' || t.type === 'commission_tontine') &&
+        (t.type === 'mise_tontine' || t.type === 'commission_tontine' || t.type === 'complement_mise') &&
         clientIds.has(t.clientId) &&
         t.date.slice(0, 10) === dateIso,
     )
