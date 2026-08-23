@@ -1,67 +1,7952 @@
 [
-  {"numero": "1011", "intitule": "Capital social", "classe": 1, "type": "passif"},
-  {"numero": "1061", "intitule": "Réserve légale", "classe": 1, "type": "passif"},
-  {"numero": "118", "intitule": "Report à nouveau créditeur", "classe": 1, "type": "passif"},
-  {"numero": "119", "intitule": "Report à nouveau débiteur", "classe": 1, "type": "actif"},
-  {"numero": "121", "intitule": "Résultat net de l'exercice (bénéfice)", "classe": 1, "type": "passif"},
-  {"numero": "129", "intitule": "Résultat net de l'exercice (perte)", "classe": 1, "type": "actif"},
-  {"numero": "161", "intitule": "Emprunts et dettes assimilées", "classe": 1, "type": "passif"},
-  {"numero": "211", "intitule": "Terrains", "classe": 2, "type": "actif"},
-  {"numero": "212", "intitule": "Bâtiments", "classe": 2, "type": "actif"},
-  {"numero": "2131", "intitule": "Matériel informatique", "classe": 2, "type": "actif"},
-  {"numero": "2132", "intitule": "Mobilier de bureau", "classe": 2, "type": "actif"},
-  {"numero": "214", "intitule": "Matériel et outillage", "classe": 2, "type": "actif"},
-  {"numero": "2181", "intitule": "Logiciels de gestion", "classe": 2, "type": "actif"},
-  {"numero": "2182", "intitule": "Autres immobilisations incorporelles", "classe": 2, "type": "actif"},
-  {"numero": "244", "intitule": "Matériel de transport", "classe": 2, "type": "actif"},
-  {"numero": "2813", "intitule": "Amortissements matériel informatique", "classe": 2, "type": "passif"},
-  {"numero": "2818", "intitule": "Amortissements logiciels", "classe": 2, "type": "passif"},
-  {"numero": "311", "intitule": "Marchandises", "classe": 3, "type": "actif"},
-  {"numero": "4011", "intitule": "Fournisseurs", "classe": 4, "type": "passif"},
-  {"numero": "408", "intitule": "Fournisseurs factures non parvenues", "classe": 4, "type": "passif"},
-  {"numero": "4111", "intitule": "Clients — crédits à court terme", "classe": 4, "type": "actif"},
-  {"numero": "4112", "intitule": "Clients — crédits à moyen terme", "classe": 4, "type": "actif"},
-  {"numero": "416", "intitule": "Clients douteux ou litigieux", "classe": 4, "type": "actif"},
-  {"numero": "421", "intitule": "Personnel — rémunérations dues", "classe": 4, "type": "passif"},
-  {"numero": "431", "intitule": "Sécurité sociale", "classe": 4, "type": "passif"},
-  {"numero": "441", "intitule": "État — impôts et taxes", "classe": 4, "type": "passif"},
-  {"numero": "467", "intitule": "Autres débiteurs et créditeurs divers", "classe": 4, "type": "actif"},
-  {"numero": "4711", "intitule": "Dépôts à vue clients", "classe": 4, "type": "passif"},
-  {"numero": "4712", "intitule": "Épargne clients", "classe": 4, "type": "passif"},
-  {"numero": "4721", "intitule": "Collecte tontine à reverser", "classe": 4, "type": "passif"},
-  {"numero": "4722", "intitule": "Commissions tontine à recevoir", "classe": 4, "type": "actif"},
-  {"numero": "485", "intitule": "Charges constatées d'avance", "classe": 4, "type": "actif"},
-  {"numero": "487", "intitule": "Produits constatés d'avance", "classe": 4, "type": "passif"},
-  {"numero": "521", "intitule": "Banques locales", "classe": 5, "type": "actif"},
-  {"numero": "531", "intitule": "Chèques postaux", "classe": 5, "type": "actif"},
-  {"numero": "571", "intitule": "Caisse", "classe": 5, "type": "actif"},
-  {"numero": "585", "intitule": "Virements de fonds", "classe": 5, "type": "actif"},
-  {"numero": "601", "intitule": "Achats de marchandises", "classe": 6, "type": "charge"},
-  {"numero": "604", "intitule": "Achats stockés — matières et fournitures", "classe": 6, "type": "charge"},
-  {"numero": "605", "intitule": "Autres achats", "classe": 6, "type": "charge"},
-  {"numero": "611", "intitule": "Sous-traitance générale", "classe": 6, "type": "charge"},
-  {"numero": "613", "intitule": "Locations", "classe": 6, "type": "charge"},
-  {"numero": "616", "intitule": "Primes d'assurance", "classe": 6, "type": "charge"},
-  {"numero": "622", "intitule": "Rémunérations d'intermédiaires et honoraires", "classe": 6, "type": "charge"},
-  {"numero": "624", "intitule": "Transports de biens et transport collectif du personnel", "classe": 6, "type": "charge"},
-  {"numero": "625", "intitule": "Déplacements, missions et réceptions", "classe": 6, "type": "charge"},
-  {"numero": "626", "intitule": "Frais postaux et de télécommunications", "classe": 6, "type": "charge"},
-  {"numero": "627", "intitule": "Services bancaires et assimilés", "classe": 6, "type": "charge"},
-  {"numero": "628", "intitule": "Cotisations et divers", "classe": 6, "type": "charge"},
-  {"numero": "641", "intitule": "Rémunérations du personnel", "classe": 6, "type": "charge"},
-  {"numero": "645", "intitule": "Charges de sécurité sociale", "classe": 6, "type": "charge"},
-  {"numero": "661", "intitule": "Intérêts des emprunts", "classe": 6, "type": "charge"},
-  {"numero": "6581", "intitule": "Manquants de caisse", "classe": 6, "type": "charge"},
-  {"numero": "6582", "intitule": "Pertes sur créances clients", "classe": 6, "type": "charge"},
-  {"numero": "681", "intitule": "Dotations aux amortissements", "classe": 6, "type": "charge"},
-  {"numero": "701", "intitule": "Ventes de marchandises", "classe": 7, "type": "produit"},
-  {"numero": "7061", "intitule": "Commissions sur tontine", "classe": 7, "type": "produit"},
-  {"numero": "7062", "intitule": "Commissions et frais de dossier", "classe": 7, "type": "produit"},
-  {"numero": "7071", "intitule": "Vente de carnets tontine", "classe": 7, "type": "produit"},
-  {"numero": "708", "intitule": "Produits des activités annexes", "classe": 7, "type": "produit"},
-  {"numero": "751", "intitule": "Intérêts de crédits", "classe": 7, "type": "produit"},
-  {"numero": "7581", "intitule": "Surplus de caisse", "classe": 7, "type": "produit"},
-  {"numero": "7582", "intitule": "Produits divers de gestion courante", "classe": 7, "type": "produit"},
-  {"numero": "791", "intitule": "Transferts de charges", "classe": 7, "type": "produit"},
-  {"numero": "891", "intitule": "Bilan d'ouverture — contrepartie", "classe": 8, "type": "hors"}
+  {
+    "numero": "10",
+    "intitule": "CAPITAL",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "101",
+    "intitule": "CAPITAL SOCIAL",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1011",
+    "intitule": "Capital souscrit, non appelé",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1012",
+    "intitule": "Capital souscrit, appelé, non versé",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1013",
+    "intitule": "Capital souscrit, appelé, versé, non amorti",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1014",
+    "intitule": "Capital souscrit, appelé, versé, amorti",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1018",
+    "intitule": "Capital souscrit soumis à des conditions particulières",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "102",
+    "intitule": "CAPITAL PAR DOTATION",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1021",
+    "intitule": "Dotation initiale",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1022",
+    "intitule": "Dotations complémentaires",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1028",
+    "intitule": "Autres dotations",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "103",
+    "intitule": "CAPITAL PERSONNEL",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "104",
+    "intitule": "COMPTE DE L'EXPLOITANT",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1041",
+    "intitule": "Apports temporaires",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1042",
+    "intitule": "Opérations courantes",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1043",
+    "intitule": "Rémunérations, impôts et autres charges personnelles",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1047",
+    "intitule": "Prélèvements d'autoconsommation",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1048",
+    "intitule": "Autres prélèvements",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "105",
+    "intitule": "PRIMES LIÉES AU CAPITAL SOCIAL",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1051",
+    "intitule": "Primes d'émission",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1052",
+    "intitule": "Primes d'apport",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1053",
+    "intitule": "Primes de fusion",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1054",
+    "intitule": "Primes de conversion",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1058",
+    "intitule": "Autres primes",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "106",
+    "intitule": "ÉCARTS DE RÉÉVALUATION",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1061",
+    "intitule": "Écarts de réévaluation légale",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1062",
+    "intitule": "Écarts de réévaluation libre",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "109",
+    "intitule": "APPORTEURS, CAPITAL SOUSCRIT, NON APPELÉ",
+    "classe": 1,
+    "type": "actif"
+  },
+  {
+    "numero": "11",
+    "intitule": "RÉSERVES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "111",
+    "intitule": "RÉSERVE LÉGALE",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "112",
+    "intitule": "RÉSERVES STATUTAIRES OU CONTRACTUELLES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "113",
+    "intitule": "RÉSERVES RÉGLEMENTÉES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1131",
+    "intitule": "Réserves de plus-values nettes à long terme",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1132",
+    "intitule": "Réserves d'attribution gratuite d'actions au personnel",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1133",
+    "intitule": "Réserves consécutives à l'octroi de subventions d'investissement",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1134",
+    "intitule": "Réserves des valeurs mobilières donnant accès au capital",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1138",
+    "intitule": "Autres réserves réglementées",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "118",
+    "intitule": "AUTRES RÉSERVES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1181",
+    "intitule": "Réserves facultatives",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1188",
+    "intitule": "Réserves diverses",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "12",
+    "intitule": "REPORT À NOUVEAU",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "121",
+    "intitule": "REPORT À NOUVEAU CRÉDITEUR",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "129",
+    "intitule": "REPORT À NOUVEAU DÉBITEUR",
+    "classe": 1,
+    "type": "actif"
+  },
+  {
+    "numero": "1291",
+    "intitule": "Perte nette à reporter",
+    "classe": 1,
+    "type": "actif"
+  },
+  {
+    "numero": "1292",
+    "intitule": "Perte - Amortissements réputés différés",
+    "classe": 1,
+    "type": "actif"
+  },
+  {
+    "numero": "13",
+    "intitule": "RÉSULTAT NET DE L'EXERCICE",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "130",
+    "intitule": "RÉSULTAT EN INSTANCE D'AFFECTATION",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1301",
+    "intitule": "Résultat en instance d'affectation : Bénéfice",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1309",
+    "intitule": "Résultat en instance d'affectation : Perte",
+    "classe": 1,
+    "type": "actif"
+  },
+  {
+    "numero": "131",
+    "intitule": "RÉSULTAT NET : BÉNÉFICE",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "132",
+    "intitule": "MARGE COMMERCIALE (MC)",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "133",
+    "intitule": "VALEUR AJOUTÉE (VA)",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "134",
+    "intitule": "EXCÉDENT BRUT D'EXPLOITATION (EBE)",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "135",
+    "intitule": "RÉSULTAT D'EXPLOITATION (RE)",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "136",
+    "intitule": "RÉSULTAT FINANCIER (RF)",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "137",
+    "intitule": "RÉSULTAT DES ACTIVITÉS ORDINAIRES (RAO)",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "138",
+    "intitule": "RÉSULTAT HORS ACTIVITÉS ORDINAIRES (RHAO)",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1381",
+    "intitule": "Résultat de fusion",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1382",
+    "intitule": "Résultat d'apport partiel d'actif",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1383",
+    "intitule": "Résultat de scission",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1384",
+    "intitule": "Résultat de liquidation",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "139",
+    "intitule": "RÉSULTAT NET : PERTE",
+    "classe": 1,
+    "type": "actif"
+  },
+  {
+    "numero": "14",
+    "intitule": "SUBVENTIONS D'INVESTISSEMENT",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "141",
+    "intitule": "SUBVENTIONS D'ÉQUIPEMENT",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1411",
+    "intitule": "État",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1412",
+    "intitule": "Régions",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1413",
+    "intitule": "Départements",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1414",
+    "intitule": "Communes et collectivités publiques décentralisées",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1415",
+    "intitule": "Entités publiques ou mixtes",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1416",
+    "intitule": "Entités et organismes privés",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1417",
+    "intitule": "Organismes internationaux",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1418",
+    "intitule": "Autres",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "148",
+    "intitule": "AUTRES SUBVENTIONS D'INVESTISSEMENT",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "15",
+    "intitule": "PROVISIONS RÉGLEMENTÉES ET FONDS ASSIMILÉS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "151",
+    "intitule": "AMORTISSEMENTS DÉROGATOIRES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "152",
+    "intitule": "PLUS-VALUES DE CESSION À RÉINVESTIR",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "153",
+    "intitule": "FONDS RÉGLEMENTÉS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1531",
+    "intitule": "Fonds National",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1532",
+    "intitule": "Prélèvement pour le Budget",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "154",
+    "intitule": "PROVISIONS SPÉCIALES DE RÉÉVALUATION",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "155",
+    "intitule": "PROVISIONS RÉGLEMENTÉES RELATIVES AUX IMMOBILISATIONS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1551",
+    "intitule": "Reconstitution des gisements miniers et pétroliers",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "156",
+    "intitule": "PROVISIONS RÉGLEMENTÉES RELATIVES AUX STOCKS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1561",
+    "intitule": "Hausse de prix",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1562",
+    "intitule": "Fluctuation des cours",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "157",
+    "intitule": "PROVISIONS POUR INVESTISSEMENT",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "158",
+    "intitule": "AUTRES PROVISIONS ET FONDS RÉGLEMENTÉS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "16",
+    "intitule": "EMPRUNTS ET DETTES ASSIMILÉES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "161",
+    "intitule": "EMPRUNTS OBLIGATAIRES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1611",
+    "intitule": "Emprunts obligataires ordinaires",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1612",
+    "intitule": "Emprunts obligataires convertibles en actions",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1613",
+    "intitule": "Emprunts obligataires remboursables en actions",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1618",
+    "intitule": "Autres emprunts obligataires",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "162",
+    "intitule": "EMPRUNTS ET DETTES AUPRÈS DES ÉTABLISSEMENTS DE CRÉDIT",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "163",
+    "intitule": "AVANCES REÇUES DE L'ÉTAT",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "164",
+    "intitule": "AVANCES REÇUES ET COMPTES COURANTS BLOQUÉS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "165",
+    "intitule": "DÉPÔTS ET CAUTIONNEMENTS REÇUS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1651",
+    "intitule": "Dépôts",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1652",
+    "intitule": "Cautionnements",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "166",
+    "intitule": "INTÉRÊTS COURUS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1661",
+    "intitule": "sur emprunts obligataires",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1662",
+    "intitule": "sur emprunts et dettes auprès des établissements de crédit",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1663",
+    "intitule": "sur avances reçues de l'État",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1664",
+    "intitule": "sur avances reçues et comptes courants bloqués",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1665",
+    "intitule": "sur dépôts et cautionnements reçus",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1667",
+    "intitule": "sur avances assorties de conditions particulières",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1668",
+    "intitule": "sur autres emprunts et dettes",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "167",
+    "intitule": "AVANCES ASSORTIES DE CONDITIONS PARTICULIÈRES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1671",
+    "intitule": "Avances bloquées pour augmentation du capital",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1672",
+    "intitule": "Avances conditionnées par l'État",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1673",
+    "intitule": "Avances conditionnées par les autres organismes africains",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1674",
+    "intitule": "Avances conditionnées par les organismes internationaux",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "168",
+    "intitule": "AUTRES EMPRUNTS ET DETTES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1681",
+    "intitule": "Rentes viagères capitalisées",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1682",
+    "intitule": "Billets de fonds",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1683",
+    "intitule": "Dettes consécutives à des titres empruntés",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1684",
+    "intitule": "Emprunts participatifs",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1685",
+    "intitule": "Participation des travailleurs aux bénéfices",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1686",
+    "intitule": "Emprunts et dettes contractés auprès des autres tiers",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "17",
+    "intitule": "DETTES DE LOCATION-ACQUISITION",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "172",
+    "intitule": "Dettes de location-acquisition / crédit-bail immobilier",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "173",
+    "intitule": "Dettes de location-acquisition / crédit-bail mobilier",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "174",
+    "intitule": "Dettes de location-acquisition / location-vente",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "176",
+    "intitule": "INTÉRÊTS COURUS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1762",
+    "intitule": "sur dettes de location-acquisition / crédit-bail immobilier",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1763",
+    "intitule": "sur dettes de location-acquisition / crédit-bail mobilier",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1764",
+    "intitule": "sur dettes de location-acquisition / location-vente",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1768",
+    "intitule": "sur autres dettes de location-acquisition",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "178",
+    "intitule": "AUTRES DETTES DE LOCATION-ACQUISITION",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "18",
+    "intitule": "DETTES LIÉES À DES PARTICIPATIONS ET COMPTES DE LIAISON",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "181",
+    "intitule": "DETTES LIÉES À DES PARTICIPATIONS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1811",
+    "intitule": "Dettes liées à des participations (groupe)",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1812",
+    "intitule": "Dettes liées à des participations (hors groupe)",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "182",
+    "intitule": "DETTES LIÉES À DES SOCIÉTÉS EN PARTICIPATION",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "183",
+    "intitule": "INTÉRÊTS COURUS SUR DETTES LIÉES À DES PARTICIPATIONS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "184",
+    "intitule": "COMPTES PERMANENTS BLOQUÉS DES ÉTABLISSEMENTS ET SUCCURSALES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "185",
+    "intitule": "COMPTES PERMANENTS NON BLOQUÉS DES ÉTABLISSEMENTS ET SUCCURSALES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "186",
+    "intitule": "COMPTES DE LIAISON CHARGES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "187",
+    "intitule": "COMPTES DE LIAISON PRODUITS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "188",
+    "intitule": "COMPTES DE LIAISON DES SOCIÉTÉS EN PARTICIPATION",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "19",
+    "intitule": "PROVISIONS POUR RISQUES ET CHARGES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "191",
+    "intitule": "PROVISIONS POUR LITIGES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "192",
+    "intitule": "PROVISIONS POUR GARANTIES DONNÉES AUX CLIENTS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "193",
+    "intitule": "PROVISIONS POUR PERTES SUR MARCHÉS À ACHÈVEMENT FUTUR",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "194",
+    "intitule": "PROVISIONS POUR PERTES DE CHANGE",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "195",
+    "intitule": "PROVISIONS POUR IMPÔTS",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "196",
+    "intitule": "PROVISIONS POUR PENSIONS ET OBLIGATIONS SIMILAIRES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1961",
+    "intitule": "Provisions pour pensions et obligations similaires – engagement de retraite",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1962",
+    "intitule": "Actif du régime de retraite",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "197",
+    "intitule": "PROVISIONS POUR RESTRUCTURATION",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "198",
+    "intitule": "AUTRES PROVISIONS POUR RISQUES ET CHARGES",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1981",
+    "intitule": "Provisions pour amendes et pénalités",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1983",
+    "intitule": "Provisions de propre assureur",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1984",
+    "intitule": "Provisions pour démantèlement et remise en état",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1985",
+    "intitule": "Provisions pour droits à réduction ou avantage en nature",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "1988",
+    "intitule": "Provisions pour divers risques et charges",
+    "classe": 1,
+    "type": "passif"
+  },
+  {
+    "numero": "21",
+    "intitule": "IMMOBILISATIONS INCORPORELLES",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "211",
+    "intitule": "FRAIS DE DÉVELOPPEMENT",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "212",
+    "intitule": "BREVETS, LICENCES, CONCESSIONS ET DROITS SIMILAIRES",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2121",
+    "intitule": "Brevets",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2122",
+    "intitule": "Licences",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2123",
+    "intitule": "Concessions de service public",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2128",
+    "intitule": "Autres concessions et droits similaires",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "213",
+    "intitule": "LOGICIELS ET SITES INTERNET",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2131",
+    "intitule": "Logiciels",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2132",
+    "intitule": "Sites internet",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "214",
+    "intitule": "MARQUES",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "215",
+    "intitule": "FONDS COMMERCIAL",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "216",
+    "intitule": "DROIT AU BAIL",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "217",
+    "intitule": "INVESTISSEMENTS DE CRÉATION",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "218",
+    "intitule": "AUTRES DROITS ET VALEURS INCORPORELS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2181",
+    "intitule": "Frais de prospection et d'évaluation de ressources minérales",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2182",
+    "intitule": "Coûts d'obtention du contrat",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2183",
+    "intitule": "Fichiers clients, notices, titres de journaux et magazines",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2184",
+    "intitule": "Coûts des franchises",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2188",
+    "intitule": "Divers droits et valeurs incorporels",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "219",
+    "intitule": "IMMOBILISATIONS INCORPORELLES EN COURS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2191",
+    "intitule": "Frais de développement",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2193",
+    "intitule": "Logiciels et sites internet",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2198",
+    "intitule": "Autres droits et valeurs incorporels",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "22",
+    "intitule": "TERRAINS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "221",
+    "intitule": "TERRAINS AGRICOLES ET FORESTIERS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2211",
+    "intitule": "Terrains d'exploitation agricole",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2212",
+    "intitule": "Terrains d'exploitation forestière",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2218",
+    "intitule": "Autres terrains",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "222",
+    "intitule": "TERRAINS NUS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2221",
+    "intitule": "Terrains à bâtir",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2228",
+    "intitule": "Autres terrains nus",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "223",
+    "intitule": "TERRAINS BÂTIS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2231",
+    "intitule": "pour bâtiments industriels et agricoles",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2232",
+    "intitule": "pour bâtiments administratifs et commerciaux",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2234",
+    "intitule": "pour bâtiments affectés aux autres opérations professionnelles",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2235",
+    "intitule": "pour bâtiments affectés aux autres opérations non professionnelles",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2238",
+    "intitule": "Autres terrains bâtis",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "224",
+    "intitule": "TRAVAUX DE MISE EN VALEUR DES TERRAINS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2241",
+    "intitule": "Plantation d'arbres et d'arbustes",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2245",
+    "intitule": "Améliorations du fonds",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2248",
+    "intitule": "Autres travaux",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "225",
+    "intitule": "TERRAINS DE CARRIÈRES – TRÉFONDS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2251",
+    "intitule": "Carrières",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "226",
+    "intitule": "TERRAINS AMÉNAGÉS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2261",
+    "intitule": "Parkings",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "227",
+    "intitule": "TERRAINS MIS EN CONCESSION",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "228",
+    "intitule": "AUTRES TERRAINS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2281",
+    "intitule": "Terrains - immeubles de placement",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2285",
+    "intitule": "Terrains des logements affectés au personnel",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2286",
+    "intitule": "Terrains de location-acquisition",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2288",
+    "intitule": "Divers terrains",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "229",
+    "intitule": "AMÉNAGEMENTS DE TERRAINS EN COURS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2291",
+    "intitule": "Terrains agricoles et forestiers",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2292",
+    "intitule": "Terrains nus",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2295",
+    "intitule": "Terrains de carrières - tréfonds",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2298",
+    "intitule": "Autres terrains",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "23",
+    "intitule": "BÂTIMENTS, INSTALLATIONS TECHNIQUES ET AGENCEMENTS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "231",
+    "intitule": "BÂTIMENTS INDUSTRIELS, AGRICOLES, ADMIN. ET COMM. SUR SOL PROPRE",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2311",
+    "intitule": "Bâtiments industriels",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2312",
+    "intitule": "Bâtiments agricoles",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2313",
+    "intitule": "Bâtiments administratifs et commerciaux",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2314",
+    "intitule": "Bâtiments affectés au logement du personnel",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2315",
+    "intitule": "Bâtiments - immeubles de placement",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2316",
+    "intitule": "Bâtiments de location-acquisition",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "232",
+    "intitule": "BÂTIMENTS SUR SOL D'AUTRUI",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2321",
+    "intitule": "Bâtiments industriels",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2322",
+    "intitule": "Bâtiments agricoles",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2323",
+    "intitule": "Bâtiments administratifs et commerciaux",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2324",
+    "intitule": "Bâtiments affectés au logement du personnel",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2325",
+    "intitule": "Bâtiments - immeubles de placement",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2326",
+    "intitule": "Bâtiments de location-acquisition",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "233",
+    "intitule": "OUVRAGES D'INFRASTRUCTURE",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2331",
+    "intitule": "Voies de terre",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2332",
+    "intitule": "Voies de fer",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2333",
+    "intitule": "Voies d'eau",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2334",
+    "intitule": "Barrages, Digues",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2335",
+    "intitule": "Pistes d'aérodrome",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2338",
+    "intitule": "Autres ouvrages d'infrastructures",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "234",
+    "intitule": "AMÉNAGEMENTS, AGENCEMENTS ET INSTALLATIONS TECHNIQUES",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2341",
+    "intitule": "Installations complexes spécialisées sur sol propre",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2342",
+    "intitule": "Installations complexes spécialisées sur sol d'autrui",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2343",
+    "intitule": "Installations à caractère spécifique sur sol propre",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2344",
+    "intitule": "Installations à caractère spécifique sur sol d'autrui",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2345",
+    "intitule": "Aménagements et agencements des bâtiments",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "235",
+    "intitule": "AMÉNAGEMENTS DE BUREAUX",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2351",
+    "intitule": "Installations générales",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2358",
+    "intitule": "Autres aménagements de bureaux",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "237",
+    "intitule": "BÂTIMENTS INDUSTRIELS, AGRICOLES ET COMMERCIAUX MIS EN CONCESSION",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "238",
+    "intitule": "AUTRES INSTALLATIONS ET AGENCEMENTS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "239",
+    "intitule": "BÂTIMENTS, AMÉNAGEMENTS ET INSTALLATIONS EN COURS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2391",
+    "intitule": "Bâtiments en cours",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2392",
+    "intitule": "Installations en cours",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2393",
+    "intitule": "Ouvrages d'infrastructure en cours",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2394",
+    "intitule": "Aménagements, agencements et installations techniques en cours",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2395",
+    "intitule": "Aménagements de bureaux en cours",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2398",
+    "intitule": "Autres installations et agencements en cours",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "24",
+    "intitule": "MATÉRIEL, MOBILIER ET ACTIFS BIOLOGIQUES",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "241",
+    "intitule": "MATÉRIEL ET OUTILLAGE INDUSTRIEL ET COMMERCIAL",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2411",
+    "intitule": "Matériel industriel",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2412",
+    "intitule": "Outillage industriel",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2413",
+    "intitule": "Matériel commercial",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2414",
+    "intitule": "Outillage commercial",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2416",
+    "intitule": "Matériel et outillage industriel de location-acquisition",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "242",
+    "intitule": "MATÉRIEL ET OUTILLAGE AGRICOLE",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2421",
+    "intitule": "Matériel agricole",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2422",
+    "intitule": "Outillage agricole",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2426",
+    "intitule": "Matériel et outillage agricole de location-acquisition",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "243",
+    "intitule": "MATÉRIEL D'EMBALLAGE RÉCUPÉRABLE ET IDENTIFIABLE",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "244",
+    "intitule": "MATÉRIEL ET MOBILIER",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2441",
+    "intitule": "Matériel de bureau",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2442",
+    "intitule": "Matériel informatique",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2443",
+    "intitule": "Matériel bureautique",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2444",
+    "intitule": "Mobilier de bureau",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2445",
+    "intitule": "Matériel et mobilier - immeubles de placement",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2446",
+    "intitule": "Matériel et mobilier de location-acquisition",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2447",
+    "intitule": "Matériel et mobilier des logements du personnel",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "245",
+    "intitule": "MATÉRIEL DE TRANSPORT",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2451",
+    "intitule": "Matériel automobile",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2452",
+    "intitule": "Matériel ferroviaire",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2453",
+    "intitule": "Matériel fluvial, lagunaire",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2454",
+    "intitule": "Matériel naval",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2455",
+    "intitule": "Matériel aérien",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2456",
+    "intitule": "Matériel de transport de location-acquisition",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2457",
+    "intitule": "Matériel hippomobile",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2458",
+    "intitule": "Autres matériels de transport",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "246",
+    "intitule": "ACTIFS BIOLOGIQUES",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2461",
+    "intitule": "Cheptel, animaux de trait",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2462",
+    "intitule": "Cheptel, animaux reproducteurs",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2463",
+    "intitule": "Animaux de garde",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2465",
+    "intitule": "Plantations agricoles",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2468",
+    "intitule": "Autres actifs biologiques",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "247",
+    "intitule": "AGENCEMENTS ET AMÉNAGEMENTS DU MATÉRIEL ET DES ACTIFS BIOLOGIQUES",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2471",
+    "intitule": "Agencements et aménagements du matériel",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2472",
+    "intitule": "Agencements et aménagements des actifs biologiques",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2478",
+    "intitule": "Autres agencements et aménagements",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "248",
+    "intitule": "AUTRES MATÉRIELS ET MOBILIERS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2481",
+    "intitule": "Collections et œuvres d'art",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2488",
+    "intitule": "Divers matériels et mobiliers",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "249",
+    "intitule": "MATÉRIELS ET ACTIFS BIOLOGIQUES EN COURS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2491",
+    "intitule": "Matériel et outillage industriel et commercial",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2492",
+    "intitule": "Matériel et outillage agricole",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2493",
+    "intitule": "Matériel d'emballage récupérable et identifiable",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2494",
+    "intitule": "Matériel et mobilier de bureau",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2495",
+    "intitule": "Matériel de transport",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2496",
+    "intitule": "Actifs biologiques",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2497",
+    "intitule": "Agencements et aménagements du matériel et des actifs biologiques",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2498",
+    "intitule": "Autres matériels et actifs biologiques",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "25",
+    "intitule": "AVANCES ET ACOMPTES VERSÉS SUR IMMOBILISATIONS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "251",
+    "intitule": "Avances et acomptes versés sur immobilisations incorporelles",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "252",
+    "intitule": "Avances et acomptes versés sur immobilisations corporelles",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "26",
+    "intitule": "TITRES DE PARTICIPATION",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "261",
+    "intitule": "Titres de participation dans des entités sous contrôle exclusif",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "262",
+    "intitule": "Titres de participation dans des entités sous contrôle conjoint",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "263",
+    "intitule": "Titres de participation dans des entités conférant une influence notable",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "265",
+    "intitule": "Participations dans des organismes professionnels",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "266",
+    "intitule": "Parts dans des groupements d'intérêt économique (GIE)",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "268",
+    "intitule": "Autres titres de participation",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "27",
+    "intitule": "AUTRES IMMOBILISATIONS FINANCIÈRES",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "271",
+    "intitule": "PRÊTS ET CRÉANCES",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2711",
+    "intitule": "Prêts participatifs",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2712",
+    "intitule": "Prêts aux associés",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2713",
+    "intitule": "Billets de fonds",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2714",
+    "intitule": "Créances de location-financement",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2715",
+    "intitule": "Titres prêtés",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2718",
+    "intitule": "Autres prêts et créances",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "272",
+    "intitule": "PRÊTS AU PERSONNEL",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2721",
+    "intitule": "Prêts immobiliers",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2722",
+    "intitule": "Prêts mobiliers et d'installation",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2728",
+    "intitule": "Autres prêts au personnel",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "273",
+    "intitule": "CRÉANCES SUR L'ÉTAT",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2731",
+    "intitule": "Retenues de garantie",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2733",
+    "intitule": "Fonds réglementé",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2734",
+    "intitule": "Créances sur le concédant",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2738",
+    "intitule": "Autres créances sur l'État",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "274",
+    "intitule": "TITRES IMMOBILISÉS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2741",
+    "intitule": "Titres immobilisés de l'activité de portefeuille (TIAP)",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2742",
+    "intitule": "Titres participatifs",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2743",
+    "intitule": "Certificats d'investissement",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2744",
+    "intitule": "Parts de fonds commun de placement (FCP)",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2745",
+    "intitule": "Obligations",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2746",
+    "intitule": "Actions ou parts propres",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2748",
+    "intitule": "Autres titres immobilisés",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "275",
+    "intitule": "DÉPÔTS ET CAUTIONNEMENTS VERSÉS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2751",
+    "intitule": "Dépôts pour loyers d'avance",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2752",
+    "intitule": "Dépôts pour l'électricité",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2753",
+    "intitule": "Dépôts pour l'eau",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2754",
+    "intitule": "Dépôts pour le gaz",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2755",
+    "intitule": "Dépôts pour le téléphone, le télex",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2756",
+    "intitule": "Cautionnements sur marchés publics",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2757",
+    "intitule": "Cautionnements sur autres opérations",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2758",
+    "intitule": "Autres dépôts et cautionnements",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "276",
+    "intitule": "INTÉRÊTS COURUS",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2761",
+    "intitule": "Prêts et créances non commerciales",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2762",
+    "intitule": "Prêts au personnel",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2763",
+    "intitule": "Créances sur l'État",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2764",
+    "intitule": "Titres immobilisés",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2765",
+    "intitule": "Dépôts et cautionnements versés",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2766",
+    "intitule": "Créances de location-financement",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2767",
+    "intitule": "Créances rattachées à des participations",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2768",
+    "intitule": "Immobilisations financières diverses",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "277",
+    "intitule": "CRÉANCES RATTACHÉES À DES PARTICIPATIONS ET AVANCES À DES GIE",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2771",
+    "intitule": "Créances rattachées à des participations (groupe)",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2772",
+    "intitule": "Créances rattachées à des participations (hors groupe)",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2773",
+    "intitule": "Créances rattachées à des sociétés en participation",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2774",
+    "intitule": "Avances à des GIE",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "278",
+    "intitule": "IMMOBILISATIONS FINANCIÈRES DIVERSES",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2781",
+    "intitule": "Créances diverses groupe",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2782",
+    "intitule": "Créances diverses hors groupe",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2784",
+    "intitule": "Banques dépôts à terme",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2785",
+    "intitule": "Or et métaux précieux",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "2788",
+    "intitule": "Autres immobilisations financières",
+    "classe": 2,
+    "type": "actif"
+  },
+  {
+    "numero": "28",
+    "intitule": "AMORTISSEMENTS",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "281",
+    "intitule": "AMORTISSEMENTS DES IMMOBILISATIONS INCORPORELLES",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2811",
+    "intitule": "Amortissements des frais de développement",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2812",
+    "intitule": "Amortissements des brevets, licences, concessions",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2813",
+    "intitule": "Amortissements des logiciels et sites internet",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2814",
+    "intitule": "Amortissements des marques",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2815",
+    "intitule": "Amortissements du fonds commercial",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2816",
+    "intitule": "Amortissements du droit au bail",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2817",
+    "intitule": "Amortissements des investissements de création",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2818",
+    "intitule": "Amortissements des autres droits et valeurs incorporels",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "282",
+    "intitule": "AMORTISSEMENTS DES TERRAINS",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2824",
+    "intitule": "Amortissements des travaux de mise en valeur des terrains",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "283",
+    "intitule": "AMORTISSEMENTS DES BÂTIMENTS, INSTALLATIONS ET AGENCEMENTS",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2831",
+    "intitule": "Amortissements des bâtiments sur sol propre",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2832",
+    "intitule": "Amortissements des bâtiments sur sol d'autrui",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2833",
+    "intitule": "Amortissements des ouvrages d'infrastructure",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2834",
+    "intitule": "Amortissements des aménagements et installations techniques",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2835",
+    "intitule": "Amortissements des aménagements de bureaux",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2837",
+    "intitule": "Amortissements des bâtiments mis en concession",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2838",
+    "intitule": "Amortissements des autres installations",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "284",
+    "intitule": "AMORTISSEMENTS DU MATÉRIEL",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2841",
+    "intitule": "Amortissements du matériel et outillage industriel et commercial",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2842",
+    "intitule": "Amortissements du matériel et outillage agricole",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2843",
+    "intitule": "Amortissements du matériel d'emballage récupérable",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2844",
+    "intitule": "Amortissements du matériel et mobilier",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2845",
+    "intitule": "Amortissements du matériel de transport",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2846",
+    "intitule": "Amortissements des actifs biologiques",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2847",
+    "intitule": "Amortissements des agencements du matériel",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2848",
+    "intitule": "Amortissements des autres matériels",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "29",
+    "intitule": "DÉPRÉCIATIONS DES IMMOBILISATIONS",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "291",
+    "intitule": "DÉPRÉCIATIONS DES IMMOBILISATIONS INCORPORELLES",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2911",
+    "intitule": "Dépréciations des frais de développement",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2912",
+    "intitule": "Dépréciations des brevets, licences, concessions",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2913",
+    "intitule": "Dépréciations des logiciels et sites internet",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2914",
+    "intitule": "Dépréciations des marques",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2915",
+    "intitule": "Dépréciations du fonds commercial",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2916",
+    "intitule": "Dépréciations du droit au bail",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2917",
+    "intitule": "Dépréciations des investissements de création",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2918",
+    "intitule": "Dépréciations des autres droits et valeurs incorporels",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2919",
+    "intitule": "Dépréciations des immobilisations incorporelles en cours",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "292",
+    "intitule": "DÉPRÉCIATIONS DES TERRAINS",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2921",
+    "intitule": "Dépréciations des terrains agricoles et forestiers",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2922",
+    "intitule": "Dépréciations des terrains nus",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2923",
+    "intitule": "Dépréciations des terrains bâtis",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2924",
+    "intitule": "Dépréciations des travaux de mise en valeur des terrains",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2925",
+    "intitule": "Dépréciations des terrains de carrières-tréfonds",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2926",
+    "intitule": "Dépréciations des terrains aménagés",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2927",
+    "intitule": "Dépréciations des terrains mis en concession",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2928",
+    "intitule": "Dépréciations des autres terrains",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2929",
+    "intitule": "Dépréciations des aménagements de terrains en cours",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "293",
+    "intitule": "DÉPRÉCIATIONS DES BÂTIMENTS, INSTALLATIONS ET AGENCEMENTS",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2931",
+    "intitule": "Dépréciations des bâtiments sur sol propre",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2932",
+    "intitule": "Dépréciations des bâtiments sur sol d'autrui",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2933",
+    "intitule": "Dépréciations des ouvrages d'infrastructures",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2934",
+    "intitule": "Dépréciations des aménagements et installations techniques",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2935",
+    "intitule": "Dépréciations des aménagements de bureaux",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2937",
+    "intitule": "Dépréciations des bâtiments mis en concession",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2938",
+    "intitule": "Dépréciations des autres installations et agencements",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2939",
+    "intitule": "Dépréciations des bâtiments et installations en cours",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "294",
+    "intitule": "DÉPRÉCIATIONS DE MATÉRIEL, MOBILIER ET ACTIF BIOLOGIQUE",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2941",
+    "intitule": "Dépréciations du matériel et outillage industriel et commercial",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2942",
+    "intitule": "Dépréciations du matériel et outillage agricole",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2943",
+    "intitule": "Dépréciations du matériel d'emballage récupérable",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2944",
+    "intitule": "Dépréciations du matériel et mobilier",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2945",
+    "intitule": "Dépréciations du matériel de transport",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2946",
+    "intitule": "Dépréciations des actifs biologiques",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2947",
+    "intitule": "Dépréciations des agencements du matériel",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2948",
+    "intitule": "Dépréciations des autres matériels",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2949",
+    "intitule": "Dépréciations de matériel en cours",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "295",
+    "intitule": "DÉPRÉCIATIONS DES AVANCES ET ACOMPTES SUR IMMOBILISATIONS",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2951",
+    "intitule": "Dépréciations des avances sur immobilisations incorporelles",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2952",
+    "intitule": "Dépréciations des avances sur immobilisations corporelles",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "296",
+    "intitule": "DÉPRÉCIATIONS DES TITRES DE PARTICIPATION",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2961",
+    "intitule": "Dépréciations des titres sous contrôle exclusif",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2962",
+    "intitule": "Dépréciations des titres sous contrôle conjoint",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2963",
+    "intitule": "Dépréciations des titres conférant une influence notable",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2965",
+    "intitule": "Dépréciations des participations organismes professionnels",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2966",
+    "intitule": "Dépréciations des parts dans des GIE",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2968",
+    "intitule": "Dépréciations des autres titres de participation",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "297",
+    "intitule": "DÉPRÉCIATIONS DES AUTRES IMMOBILISATIONS FINANCIÈRES",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2971",
+    "intitule": "Dépréciations des prêts et créances",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2972",
+    "intitule": "Dépréciations des prêts au personnel",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2973",
+    "intitule": "Dépréciations des créances sur l'État",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2974",
+    "intitule": "Dépréciations des titres immobilisés",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2975",
+    "intitule": "Dépréciations des dépôts et cautionnements versés",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2977",
+    "intitule": "Dépréciations des créances rattachées à des participations",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "2978",
+    "intitule": "Dépréciations des créances financières diverses",
+    "classe": 2,
+    "type": "passif"
+  },
+  {
+    "numero": "31",
+    "intitule": "MARCHANDISES",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "311",
+    "intitule": "MARCHANDISES A",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3111",
+    "intitule": "Marchandises A1",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3112",
+    "intitule": "Marchandises A2",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "312",
+    "intitule": "MARCHANDISES B",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3121",
+    "intitule": "Marchandises B1",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3122",
+    "intitule": "Marchandises B2",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "313",
+    "intitule": "ACTIFS BIOLOGIQUES",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3131",
+    "intitule": "Animaux",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3132",
+    "intitule": "Végétaux",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "318",
+    "intitule": "MARCHANDISES HORS ACTIVITÉS ORDINAIRES (HAO)",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "32",
+    "intitule": "MATIÈRES PREMIÈRES ET FOURNITURES LIÉES",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "321",
+    "intitule": "MATIÈRES A",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "322",
+    "intitule": "MATIÈRES B",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "323",
+    "intitule": "FOURNITURES (A, B)",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "33",
+    "intitule": "AUTRES APPROVISIONNEMENTS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "331",
+    "intitule": "MATIÈRES CONSOMMABLES",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "332",
+    "intitule": "FOURNITURES D'ATELIER ET D'USINE",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "333",
+    "intitule": "FOURNITURES DE MAGASIN",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "334",
+    "intitule": "FOURNITURES DE BUREAU",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "335",
+    "intitule": "EMBALLAGES",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3351",
+    "intitule": "Emballages perdus",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3352",
+    "intitule": "Emballages récupérables non identifiables",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3353",
+    "intitule": "Emballages à usage mixte",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3358",
+    "intitule": "Autres emballages",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "338",
+    "intitule": "AUTRES MATIÈRES",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "34",
+    "intitule": "PRODUITS EN COURS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "341",
+    "intitule": "PRODUITS EN COURS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3411",
+    "intitule": "Produits en cours P1",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3412",
+    "intitule": "Produits en cours P2",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "342",
+    "intitule": "TRAVAUX EN COURS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3421",
+    "intitule": "Travaux en cours T1",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3422",
+    "intitule": "Travaux en cours T2",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "343",
+    "intitule": "PRODUITS INTERMÉDIAIRES EN COURS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3431",
+    "intitule": "Produits intermédiaires A",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3432",
+    "intitule": "Produits intermédiaires B",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "344",
+    "intitule": "PRODUITS RÉSIDUELS EN COURS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3441",
+    "intitule": "Produits résiduels A",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3442",
+    "intitule": "Produits résiduels B",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "345",
+    "intitule": "ACTIFS BIOLOGIQUES",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3451",
+    "intitule": "Animaux",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3452",
+    "intitule": "Végétaux",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "35",
+    "intitule": "SERVICES EN COURS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "351",
+    "intitule": "ÉTUDES EN COURS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3511",
+    "intitule": "Études en cours E1",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3512",
+    "intitule": "Études en cours E2",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "352",
+    "intitule": "PRESTATIONS DE SERVICES EN COURS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3521",
+    "intitule": "Prestations de services S1",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3522",
+    "intitule": "Prestations de services S2",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "36",
+    "intitule": "PRODUITS FINIS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "361",
+    "intitule": "PRODUITS FINIS A",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "362",
+    "intitule": "PRODUITS FINIS B",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "363",
+    "intitule": "ACTIFS BIOLOGIQUES",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3631",
+    "intitule": "Animaux",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3632",
+    "intitule": "Végétaux",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3638",
+    "intitule": "Autres stocks (activités annexes)",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "37",
+    "intitule": "PRODUITS INTERMÉDIAIRES ET RÉSIDUELS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "371",
+    "intitule": "PRODUITS INTERMÉDIAIRES",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3711",
+    "intitule": "Produits intermédiaires A",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3712",
+    "intitule": "Produits intermédiaires B",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "372",
+    "intitule": "PRODUITS RÉSIDUELS",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3721",
+    "intitule": "Déchets",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3722",
+    "intitule": "Rebuts",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3723",
+    "intitule": "Matières de récupération",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "373",
+    "intitule": "ACTIFS BIOLOGIQUES",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3731",
+    "intitule": "Animaux",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3732",
+    "intitule": "Végétaux",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3738",
+    "intitule": "Autres stocks (activités annexes)",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "38",
+    "intitule": "STOCKS EN COURS DE ROUTE, EN CONSIGNATION OU EN DÉPÔT",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "381",
+    "intitule": "Marchandises en cours de route",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "382",
+    "intitule": "Matières premières et fournitures liées en cours de route",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "383",
+    "intitule": "Autres approvisionnements en cours de route",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "386",
+    "intitule": "Produits finis en cours de route",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "387",
+    "intitule": "STOCK EN CONSIGNATION OU EN DÉPÔT",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3871",
+    "intitule": "Stock en consignation",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "3872",
+    "intitule": "Stock en dépôt",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "388",
+    "intitule": "Stock provenant d'immobilisations mises hors service ou au rebut",
+    "classe": 3,
+    "type": "actif"
+  },
+  {
+    "numero": "39",
+    "intitule": "DÉPRÉCIATIONS DES STOCKS ET ENCOURS DE PRODUCTION",
+    "classe": 3,
+    "type": "passif"
+  },
+  {
+    "numero": "391",
+    "intitule": "Dépréciations des stocks de marchandises",
+    "classe": 3,
+    "type": "passif"
+  },
+  {
+    "numero": "392",
+    "intitule": "Dépréciations des stocks de matières premières et fournitures liées",
+    "classe": 3,
+    "type": "passif"
+  },
+  {
+    "numero": "393",
+    "intitule": "Dépréciations des stocks d'autres approvisionnements",
+    "classe": 3,
+    "type": "passif"
+  },
+  {
+    "numero": "394",
+    "intitule": "Dépréciations des productions en cours",
+    "classe": 3,
+    "type": "passif"
+  },
+  {
+    "numero": "395",
+    "intitule": "Dépréciations des services en cours",
+    "classe": 3,
+    "type": "passif"
+  },
+  {
+    "numero": "396",
+    "intitule": "Dépréciations des stocks de produits finis",
+    "classe": 3,
+    "type": "passif"
+  },
+  {
+    "numero": "397",
+    "intitule": "Dépréciations des stocks de produits intermédiaires et résiduels",
+    "classe": 3,
+    "type": "passif"
+  },
+  {
+    "numero": "398",
+    "intitule": "Dépréciations des stocks en cours de route, en consignation ou en dépôt",
+    "classe": 3,
+    "type": "passif"
+  },
+  {
+    "numero": "40",
+    "intitule": "FOURNISSEURS ET COMPTES RATTACHÉS",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "401",
+    "intitule": "FOURNISSEURS, DETTES EN COMPTE",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4011",
+    "intitule": "Fournisseurs",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4012",
+    "intitule": "Fournisseurs Groupe",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4013",
+    "intitule": "Fournisseurs sous-traitants",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4016",
+    "intitule": "Fournisseurs, réserve de propriété",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4017",
+    "intitule": "Fournisseurs, retenues de garantie",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "402",
+    "intitule": "FOURNISSEURS, EFFETS À PAYER",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4021",
+    "intitule": "Fournisseurs, effets à payer",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4022",
+    "intitule": "Fournisseurs Groupe, effets à payer",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4023",
+    "intitule": "Fournisseurs sous-traitants, effets à payer",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "404",
+    "intitule": "FOURNISSEURS, ACQUISITIONS COURANTES D'IMMOBILISATIONS",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4041",
+    "intitule": "Fournisseurs dettes en compte, immobilisations incorporelles",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4042",
+    "intitule": "Fournisseurs dettes en compte, immobilisations corporelles",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4046",
+    "intitule": "Fournisseurs effets à payer, immobilisations incorporelles",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4047",
+    "intitule": "Fournisseurs effets à payer, immobilisations corporelles",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "408",
+    "intitule": "FOURNISSEURS, FACTURES NON PARVENUES",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4081",
+    "intitule": "Fournisseurs",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4082",
+    "intitule": "Fournisseurs Groupe",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4083",
+    "intitule": "Fournisseurs sous-traitants",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4086",
+    "intitule": "Fournisseurs, intérêts courus",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "409",
+    "intitule": "FOURNISSEURS DÉBITEURS",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4091",
+    "intitule": "Fournisseurs avances et acomptes versés",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4092",
+    "intitule": "Fournisseurs Groupe avances et acomptes versés",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4093",
+    "intitule": "Fournisseurs sous-traitants avances et acomptes versés",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4094",
+    "intitule": "Fournisseurs créances pour emballages à rendre",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4098",
+    "intitule": "Fournisseurs, rabais, remises, ristournes et autres avoirs à obtenir",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "41",
+    "intitule": "CLIENTS ET COMPTES RATTACHÉS",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "411",
+    "intitule": "CLIENTS",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4111",
+    "intitule": "Clients",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4112",
+    "intitule": "Clients Groupe",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4114",
+    "intitule": "Clients, État et Collectivités publiques",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4115",
+    "intitule": "Clients, organismes internationaux",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4116",
+    "intitule": "Clients, réserve de propriété",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4117",
+    "intitule": "Clients, retenues de garantie",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4118",
+    "intitule": "Clients, dégrèvement de TVA",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4119",
+    "intitule": "Clients — crédits microfinance",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "412",
+    "intitule": "CLIENTS, EFFETS À RECEVOIR",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4121",
+    "intitule": "Clients, effets à recevoir",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4122",
+    "intitule": "Clients Groupe, effets à recevoir",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4124",
+    "intitule": "État et Collectivités publiques, effets à recevoir",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4125",
+    "intitule": "Organismes internationaux, effets à recevoir",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "413",
+    "intitule": "CLIENTS, CHÈQUES, EFFETS ET AUTRES VALEURS IMPAYÉS",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4131",
+    "intitule": "Clients, chèques impayés",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4132",
+    "intitule": "Clients, effets impayés",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4133",
+    "intitule": "Clients, cartes de crédit impayées",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4138",
+    "intitule": "Clients, autres valeurs impayées",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "414",
+    "intitule": "CRÉANCES SUR CESSIONS COURANTES D'IMMOBILISATIONS",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4141",
+    "intitule": "Créances en compte, immobilisations incorporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4142",
+    "intitule": "Créances en compte, immobilisations corporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4146",
+    "intitule": "Effets à recevoir, immobilisations incorporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4147",
+    "intitule": "Effets à recevoir, immobilisations corporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "415",
+    "intitule": "CLIENTS, EFFETS ESCOMPTÉS NON ÉCHUS",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "416",
+    "intitule": "CRÉANCES CLIENTS LITIGIEUSES OU DOUTEUSES",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4161",
+    "intitule": "Créances litigieuses",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4162",
+    "intitule": "Créances douteuses",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "418",
+    "intitule": "CLIENTS, PRODUITS À RECEVOIR",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4181",
+    "intitule": "Clients, factures à établir",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4186",
+    "intitule": "Clients, intérêts courus",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "419",
+    "intitule": "CLIENTS CRÉDITEURS",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4191",
+    "intitule": "Clients, avances et acomptes reçus",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4192",
+    "intitule": "Clients Groupe, avances et acomptes reçus",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4194",
+    "intitule": "Clients, dettes pour emballages consignés",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4198",
+    "intitule": "Clients, rabais, remises, ristournes et avoirs à accorder",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "42",
+    "intitule": "PERSONNEL",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "421",
+    "intitule": "PERSONNEL, AVANCES ET ACOMPTES",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4211",
+    "intitule": "Personnel, avances",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4212",
+    "intitule": "Personnel, acomptes",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4213",
+    "intitule": "Frais avancés et fournitures au personnel",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "422",
+    "intitule": "PERSONNEL, RÉMUNÉRATIONS DUES",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "423",
+    "intitule": "PERSONNEL, OPPOSITIONS, SAISIES-ARRÊTS",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4231",
+    "intitule": "Personnel, oppositions",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4232",
+    "intitule": "Personnel, saisies-arrêts",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4233",
+    "intitule": "Personnel, avis à tiers détenteur",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "424",
+    "intitule": "PERSONNEL, ŒUVRES SOCIALES INTERNES",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4241",
+    "intitule": "Assistance médicale",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4242",
+    "intitule": "Allocations familiales",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4245",
+    "intitule": "Organismes sociaux rattachés à l'entité",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4248",
+    "intitule": "Autres œuvres sociales internes",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "425",
+    "intitule": "REPRÉSENTANTS DU PERSONNEL",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4251",
+    "intitule": "Délégués du personnel",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4252",
+    "intitule": "Syndicats et Comités d'entreprises",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4258",
+    "intitule": "Autres représentants du personnel",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "426",
+    "intitule": "PERSONNEL, PARTICIPATION AUX BÉNÉFICES ET AU CAPITAL",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4261",
+    "intitule": "Participation aux bénéfices",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4264",
+    "intitule": "Participation au capital",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "427",
+    "intitule": "PERSONNEL – DÉPÔTS",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "428",
+    "intitule": "PERSONNEL, CHARGES À PAYER ET PRODUITS À RECEVOIR",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4281",
+    "intitule": "Dettes provisionnées pour congés à payer",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4286",
+    "intitule": "Autres charges à payer",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4287",
+    "intitule": "Produits à recevoir",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "43",
+    "intitule": "ORGANISMES SOCIAUX",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "431",
+    "intitule": "SÉCURITÉ SOCIALE",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4311",
+    "intitule": "Prestations familiales",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4312",
+    "intitule": "Accidents de travail",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4313",
+    "intitule": "Caisse de retraite obligatoire",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4314",
+    "intitule": "Caisse de retraite facultative",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4318",
+    "intitule": "Autres cotisations sociales",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "432",
+    "intitule": "CAISSES DE RETRAITE COMPLÉMENTAIRE",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "433",
+    "intitule": "AUTRES ORGANISMES SOCIAUX",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4331",
+    "intitule": "Mutuelle",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4332",
+    "intitule": "Assurances Retraite",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4333",
+    "intitule": "Assurances et organismes de santé",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4334",
+    "intitule": "TVA facturée sur production livrée à soi-même",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4335",
+    "intitule": "TVA sur factures à établir",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "438",
+    "intitule": "ORGANISMES SOCIAUX, CHARGES À PAYER ET PRODUITS À RECEVOIR",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4381",
+    "intitule": "Charges sociales sur gratifications à payer",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4382",
+    "intitule": "Charges sociales sur congés à payer",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4386",
+    "intitule": "Autres charges à payer",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4387",
+    "intitule": "Produits à recevoir",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "44",
+    "intitule": "ÉTAT ET COLLECTIVITÉS PUBLIQUES",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "441",
+    "intitule": "ÉTAT, IMPÔT SUR LES BÉNÉFICES",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "442",
+    "intitule": "ÉTAT, AUTRES IMPÔTS ET TAXES",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4421",
+    "intitule": "Impôts et taxes d'État",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4422",
+    "intitule": "Impôts et taxes pour les collectivités publiques",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4423",
+    "intitule": "Impôts et taxes recouvrables sur des obligataires",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4424",
+    "intitule": "Impôts et taxes recouvrables sur des associés",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4426",
+    "intitule": "Droits de douane",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4428",
+    "intitule": "Autres impôts et taxes",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "443",
+    "intitule": "ÉTAT, TVA FACTURÉE",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4431",
+    "intitule": "TVA facturée sur ventes",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4432",
+    "intitule": "TVA facturée sur prestations de services",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4433",
+    "intitule": "TVA facturée sur travaux",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "444",
+    "intitule": "ÉTAT, TVA DUE OU CRÉDIT DE TVA",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4441",
+    "intitule": "État, TVA due",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4445",
+    "intitule": "État, dégrèvement TVA",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4449",
+    "intitule": "État, crédit de TVA à reporter",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "445",
+    "intitule": "ÉTAT, TVA RÉCUPÉRABLE",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4451",
+    "intitule": "TVA récupérable sur immobilisations",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4452",
+    "intitule": "TVA récupérable sur achats",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4453",
+    "intitule": "TVA récupérable sur transport",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4454",
+    "intitule": "TVA récupérable sur services extérieurs et autres charges",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4455",
+    "intitule": "TVA récupérable sur factures non parvenues",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4456",
+    "intitule": "TVA transférée par d'autres entités",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "446",
+    "intitule": "ÉTAT, AUTRES TAXES SUR LE CHIFFRE D'AFFAIRES",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "447",
+    "intitule": "ÉTAT, IMPÔTS RETENUS À LA SOURCE",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4471",
+    "intitule": "Impôt Général sur le revenu",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4472",
+    "intitule": "Impôts sur salaires",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4473",
+    "intitule": "Contribution nationale",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4474",
+    "intitule": "Contribution nationale de solidarité",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4478",
+    "intitule": "Autres impôts et contributions",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "448",
+    "intitule": "ÉTAT, CHARGES À PAYER ET PRODUITS À RECEVOIR",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4486",
+    "intitule": "Charges à payer",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4487",
+    "intitule": "Produits à recevoir",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "449",
+    "intitule": "ÉTAT, CRÉANCES ET DETTES DIVERSES",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4491",
+    "intitule": "État, obligations cautionnées",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4492",
+    "intitule": "État, avances et acomptes versés sur impôts",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4493",
+    "intitule": "État, fonds de dotation à recevoir",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4494",
+    "intitule": "État, subventions d'investissement à recevoir",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4495",
+    "intitule": "État, subventions d'exploitation à recevoir",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4496",
+    "intitule": "État, subventions d'équilibre à recevoir",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4497",
+    "intitule": "État, avances sur subventions",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4499",
+    "intitule": "État, fonds réglementé provisionné",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "45",
+    "intitule": "ORGANISMES INTERNATIONAUX",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "451",
+    "intitule": "Opérations avec les organismes africains",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "452",
+    "intitule": "Opérations avec les autres organismes internationaux",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "458",
+    "intitule": "ORGANISMES INTERNATIONAUX, FONDS DE DOTATION ET SUBVENTIONS À RECEVOIR",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4581",
+    "intitule": "Organismes internationaux, fonds de dotation à recevoir",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4582",
+    "intitule": "Organismes internationaux, subventions à recevoir",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "46",
+    "intitule": "APPORTEURS, ASSOCIÉS ET GROUPE",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "461",
+    "intitule": "APPORTEURS, OPÉRATIONS SUR LE CAPITAL",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4611",
+    "intitule": "Apporteurs, apports en nature",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4612",
+    "intitule": "Apporteurs, apports en numéraire",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4613",
+    "intitule": "Apporteurs, capital appelé, non versé",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4614",
+    "intitule": "Apporteurs, compte d'apport, opérations de restructuration",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4615",
+    "intitule": "Apporteurs, versements reçus sur augmentation de capital",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4616",
+    "intitule": "Apporteurs, versements anticipés",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4617",
+    "intitule": "Apporteurs défaillants",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4618",
+    "intitule": "Apporteurs, titres à échanger",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4619",
+    "intitule": "Apporteurs, capital à rembourser",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "462",
+    "intitule": "ASSOCIÉS, COMPTES COURANTS",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4621",
+    "intitule": "Principal",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4626",
+    "intitule": "Intérêts courus",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "463",
+    "intitule": "ASSOCIÉS, OPÉRATIONS FAITES EN COMMUN ET GIE",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4631",
+    "intitule": "Opérations courantes",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4636",
+    "intitule": "Intérêts courus",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "465",
+    "intitule": "ASSOCIÉS, DIVIDENDES À PAYER",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "466",
+    "intitule": "GROUPE, COMPTES COURANTS",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "467",
+    "intitule": "APPORTEURS RESTANT DÛ SUR CAPITAL APPELÉ",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4671",
+    "intitule": "Dépôts à vue clients",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4672",
+    "intitule": "Épargne clients",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4673",
+    "intitule": "Collecte tontine à reverser",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4678",
+    "intitule": "Commissions tontine à recevoir",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "469",
+    "intitule": "ENTITÉ, DIVIDENDES À RECEVOIR",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "47",
+    "intitule": "DÉBITEURS ET CRÉDITEURS DIVERS",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "471",
+    "intitule": "DÉBITEURS ET CRÉDITEURS DIVERS",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4711",
+    "intitule": "Débiteurs divers",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4712",
+    "intitule": "Créditeurs divers",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4713",
+    "intitule": "Obligataires",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4715",
+    "intitule": "Rémunérations d'administrateurs non associés",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4716",
+    "intitule": "Compte d'affacturage et de titrisation",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4717",
+    "intitule": "Débiteurs divers - retenues de garantie",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4718",
+    "intitule": "Apport, compte de fusion et opérations assimilées",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4719",
+    "intitule": "Bons de souscription d'actions et d'obligations",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "472",
+    "intitule": "CRÉANCES ET DETTES SUR TITRES DE PLACEMENT",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4721",
+    "intitule": "Créances sur cessions de titres de placement",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4726",
+    "intitule": "Versements restant à effectuer sur titres de placement non libérés",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "473",
+    "intitule": "INTERMÉDIAIRES - OPÉRATIONS FAITES POUR COMPTE DE TIERS",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4731",
+    "intitule": "Mandants",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4732",
+    "intitule": "Mandataires",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4733",
+    "intitule": "Commettants",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4734",
+    "intitule": "Commissionnaires",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4739",
+    "intitule": "État, Collectivités publiques, fonds global d'allocation",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "474",
+    "intitule": "COMPTE DE RÉPARTITION PÉRIODIQUE DES CHARGES ET DES PRODUITS",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4746",
+    "intitule": "Compte de répartition périodique des charges",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4747",
+    "intitule": "Compte de répartition périodique des produits",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "475",
+    "intitule": "COMPTE TRANSITOIRE, AJUSTEMENT SPÉCIAL LIÉ À LA RÉVISION DU SYSCOHADA",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4751",
+    "intitule": "Compte-actif",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4752",
+    "intitule": "Compte-passif",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "476",
+    "intitule": "CHARGES CONSTATÉES D'AVANCE",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "477",
+    "intitule": "PRODUITS CONSTATÉS D'AVANCE",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "478",
+    "intitule": "ÉCARTS DE CONVERSION - ACTIF",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4781",
+    "intitule": "Diminution des créances d'exploitation et HAO",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "47811",
+    "intitule": "Diminution des créances d'exploitation",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "47818",
+    "intitule": "Diminution des créances HAO",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4782",
+    "intitule": "Diminution des créances financières",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4783",
+    "intitule": "Augmentation des dettes d'exploitation et HAO",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "47831",
+    "intitule": "Augmentation des dettes d'exploitation",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "47838",
+    "intitule": "Augmentation des dettes HAO",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4784",
+    "intitule": "Augmentation des dettes financières",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4786",
+    "intitule": "Différences d'évaluation sur instruments de trésorerie",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4788",
+    "intitule": "Différences compensées par couverture de change",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "479",
+    "intitule": "ÉCARTS DE CONVERSION - PASSIF",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4791",
+    "intitule": "Augmentation des créances d'exploitation et HAO",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "47911",
+    "intitule": "Augmentation des créances d'exploitation",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "47918",
+    "intitule": "Augmentation des créances HAO",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4792",
+    "intitule": "Augmentation des créances financières",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4793",
+    "intitule": "Diminution des dettes d'exploitation et HAO",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "47931",
+    "intitule": "Diminution des dettes d'exploitation",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "47938",
+    "intitule": "Diminution des dettes HAO",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4794",
+    "intitule": "Diminution des dettes financières",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4797",
+    "intitule": "Différences d'évaluation sur instruments de trésorerie",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4798",
+    "intitule": "Différences compensées par couverture de change",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "48",
+    "intitule": "CRÉANCES ET DETTES HORS ACTIVITÉS ORDINAIRES (HAO)",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "481",
+    "intitule": "FOURNISSEURS D'INVESTISSEMENTS",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4811",
+    "intitule": "Immobilisations incorporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4812",
+    "intitule": "Immobilisations corporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4813",
+    "intitule": "Versements restant à effectuer sur titres de participation non libérés",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4816",
+    "intitule": "Réserve de propriété",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "48161",
+    "intitule": "Réserve de propriété - immobilisations incorporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "48162",
+    "intitule": "Réserve de propriété - immobilisations corporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4817",
+    "intitule": "Retenues de garantie",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "48171",
+    "intitule": "Retenues de garantie - immobilisations incorporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "48172",
+    "intitule": "Retenues de garantie - immobilisations corporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4818",
+    "intitule": "Factures non parvenues",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "48181",
+    "intitule": "Factures non parvenues - immobilisations incorporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "48182",
+    "intitule": "Factures non parvenues - immobilisations corporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "482",
+    "intitule": "FOURNISSEURS D'INVESTISSEMENTS, EFFETS À PAYER",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4821",
+    "intitule": "Immobilisations incorporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4822",
+    "intitule": "Immobilisations corporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "484",
+    "intitule": "AUTRES DETTES HORS ACTIVITÉS ORDINAIRES (HAO)",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "485",
+    "intitule": "CRÉANCES SUR CESSIONS D'IMMOBILISATIONS",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4851",
+    "intitule": "En compte, immobilisations incorporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4852",
+    "intitule": "En compte, immobilisations corporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4853",
+    "intitule": "Effets à recevoir, immobilisations incorporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4854",
+    "intitule": "Effets à recevoir, immobilisations corporelles",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4855",
+    "intitule": "Effets escomptés non échus",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4856",
+    "intitule": "Immobilisations financières",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4857",
+    "intitule": "Retenues de garantie",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "4858",
+    "intitule": "Factures à établir",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "488",
+    "intitule": "AUTRES CRÉANCES HORS ACTIVITÉS ORDINAIRES (HAO)",
+    "classe": 4,
+    "type": "actif"
+  },
+  {
+    "numero": "49",
+    "intitule": "DÉPRÉCIATIONS ET PROVISIONS POUR RISQUES À COURT TERME",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "490",
+    "intitule": "Dépréciations des comptes fournisseurs",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "491",
+    "intitule": "DÉPRÉCIATIONS DES COMPTES CLIENTS",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4911",
+    "intitule": "Créances litigieuses",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4912",
+    "intitule": "Créances douteuses",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "492",
+    "intitule": "Dépréciations des comptes personnel",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "493",
+    "intitule": "Dépréciations des comptes organismes sociaux",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "494",
+    "intitule": "Dépréciations des comptes État et Collectivités publiques",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "495",
+    "intitule": "Dépréciations des comptes organismes internationaux",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "496",
+    "intitule": "DÉPRÉCIATIONS DES COMPTES ASSOCIÉS ET GROUPE",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4962",
+    "intitule": "Associés, comptes courants",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4963",
+    "intitule": "Associés, opérations faites en commun et GIE",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4966",
+    "intitule": "Groupe, comptes courants",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "497",
+    "intitule": "Dépréciations des comptes débiteurs divers",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "498",
+    "intitule": "DÉPRÉCIATIONS DES COMPTES DE CRÉANCES HAO",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4985",
+    "intitule": "Créances sur cessions d'immobilisations",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4986",
+    "intitule": "Créances sur cessions de titres de placement",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4988",
+    "intitule": "Autres créances HAO",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "499",
+    "intitule": "PROVISIONS POUR RISQUES À COURT TERME",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4991",
+    "intitule": "Sur opérations d'exploitation",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "4998",
+    "intitule": "Sur opérations HAO",
+    "classe": 4,
+    "type": "passif"
+  },
+  {
+    "numero": "50",
+    "intitule": "TITRES DE PLACEMENT",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "501",
+    "intitule": "TITRES DU TRÉSOR ET BONS DE CAISSE À COURT TERME",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5011",
+    "intitule": "Titres du Trésor à court terme",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5012",
+    "intitule": "Titres d'organismes financiers",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5013",
+    "intitule": "Bons de caisse à court terme",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5016",
+    "intitule": "Frais d'acquisition des titres de Trésor et bons de caisse",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "502",
+    "intitule": "ACTIONS",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5021",
+    "intitule": "Actions ou parts propres",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5022",
+    "intitule": "Actions cotées",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5023",
+    "intitule": "Actions non cotées",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5024",
+    "intitule": "Actions démembrées (certificats d'investissement ; droits de vote)",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5025",
+    "intitule": "Autres actions",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5026",
+    "intitule": "Frais d'acquisition des actions",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "503",
+    "intitule": "OBLIGATIONS",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5031",
+    "intitule": "Obligations émises par l'entité et rachetées",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5032",
+    "intitule": "Obligations cotées",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5033",
+    "intitule": "Obligations non cotées",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5035",
+    "intitule": "Autres obligations",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5036",
+    "intitule": "Frais d'acquisition des obligations",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "504",
+    "intitule": "BONS DE SOUSCRIPTION",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5042",
+    "intitule": "Bons de souscription d'actions",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5043",
+    "intitule": "Bons de souscription d'obligations",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "505",
+    "intitule": "TITRES NÉGOCIABLES HORS RÉGION",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "506",
+    "intitule": "INTÉRÊTS COURUS",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5061",
+    "intitule": "Titres du Trésor et bons de caisse",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5062",
+    "intitule": "Actions",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5063",
+    "intitule": "Obligations",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "508",
+    "intitule": "AUTRES TITRES DE PLACEMENT ET CRÉANCES ASSIMILÉES",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "51",
+    "intitule": "VALEURS À ENCAISSER",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "511",
+    "intitule": "Effets à encaisser",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "512",
+    "intitule": "Effets à l'encaissement",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "513",
+    "intitule": "Chèques à encaisser",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "514",
+    "intitule": "Chèques à l'encaissement",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "515",
+    "intitule": "Cartes de crédit à encaisser",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "518",
+    "intitule": "AUTRES VALEURS À L'ENCAISSEMENT",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5181",
+    "intitule": "Warrants",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5182",
+    "intitule": "Billets de fonds",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5185",
+    "intitule": "Chèques de voyage",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5186",
+    "intitule": "Coupons échus",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5187",
+    "intitule": "Intérêts échus des obligations",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "52",
+    "intitule": "BANQUES",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "521",
+    "intitule": "BANQUES LOCALES",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5211",
+    "intitule": "Banques en monnaie nationale",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5215",
+    "intitule": "Banques en devises",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "522",
+    "intitule": "BANQUES AUTRES ÉTATS RÉGION",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "523",
+    "intitule": "BANQUES AUTRES ÉTATS ZONE MONÉTAIRE",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "524",
+    "intitule": "BANQUES HORS ZONE MONÉTAIRE",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "525",
+    "intitule": "BANQUES DÉPÔT À TERME",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "526",
+    "intitule": "BANQUES, INTÉRÊTS COURUS",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5261",
+    "intitule": "Banque, intérêts courus charges à payer",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5267",
+    "intitule": "Banque, intérêts courus produits à recevoir",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "53",
+    "intitule": "ÉTABLISSEMENTS FINANCIERS ET ASSIMILÉS",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "531",
+    "intitule": "Chèques postaux",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "532",
+    "intitule": "Trésor",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "533",
+    "intitule": "Sociétés de gestion et d'intermédiation (SGI)",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "536",
+    "intitule": "Établissements financiers, intérêts courus",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "538",
+    "intitule": "Autres organismes financiers",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "54",
+    "intitule": "INSTRUMENTS DE TRÉSORERIE",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "541",
+    "intitule": "Options de taux d'intérêt",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "542",
+    "intitule": "Options de taux de change",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "543",
+    "intitule": "Options de taux boursiers",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "544",
+    "intitule": "Instruments de marchés à terme",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "545",
+    "intitule": "Avoirs d'or et autres métaux précieux",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "55",
+    "intitule": "INSTRUMENTS DE MONNAIE ÉLECTRONIQUE",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "551",
+    "intitule": "Monnaie électronique - carte carburant",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "552",
+    "intitule": "Monnaie électronique - téléphone portable",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "553",
+    "intitule": "Monnaie électronique - carte péage",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "554",
+    "intitule": "Porte-monnaie électronique",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "558",
+    "intitule": "Autres instruments de monnaies électroniques",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "56",
+    "intitule": "BANQUES, CRÉDITS DE TRÉSORERIE ET D'ESCOMPTE",
+    "classe": 5,
+    "type": "passif"
+  },
+  {
+    "numero": "561",
+    "intitule": "Crédits de trésorerie",
+    "classe": 5,
+    "type": "passif"
+  },
+  {
+    "numero": "564",
+    "intitule": "Escompte de crédits de campagne",
+    "classe": 5,
+    "type": "passif"
+  },
+  {
+    "numero": "565",
+    "intitule": "Escompte de crédits ordinaires",
+    "classe": 5,
+    "type": "passif"
+  },
+  {
+    "numero": "566",
+    "intitule": "Banques, crédits de trésorerie, intérêts courus",
+    "classe": 5,
+    "type": "passif"
+  },
+  {
+    "numero": "57",
+    "intitule": "CAISSE",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "571",
+    "intitule": "CAISSE SIÈGE SOCIAL",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5711",
+    "intitule": "Caisse en monnaie nationale",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5712",
+    "intitule": "Caisse en devises",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "572",
+    "intitule": "CAISSE SUCCURSALE A",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5721",
+    "intitule": "en monnaie nationale",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5722",
+    "intitule": "en devises",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "573",
+    "intitule": "CAISSE SUCCURSALE B",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5731",
+    "intitule": "en monnaie nationale",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "5732",
+    "intitule": "en devises",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "58",
+    "intitule": "RÉGIES D'AVANCES, ACCRÉDITIFS ET VIREMENTS INTERNES",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "581",
+    "intitule": "Régies d'avance",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "582",
+    "intitule": "Accréditifs",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "585",
+    "intitule": "Virements de fonds",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "588",
+    "intitule": "Autres virements internes",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "59",
+    "intitule": "DÉPRÉCIATIONS ET PROVISIONS POUR RISQUE À COURT TERME",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "590",
+    "intitule": "Dépréciations des titres de placement",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "591",
+    "intitule": "Dépréciations des titres et valeurs à encaisser",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "592",
+    "intitule": "Dépréciations des comptes banques",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "593",
+    "intitule": "Dépréciations des comptes établissements financiers",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "594",
+    "intitule": "Dépréciations des comptes d'instruments de trésorerie",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "599",
+    "intitule": "Provisions pour risque à court terme à caractère financier",
+    "classe": 5,
+    "type": "actif"
+  },
+  {
+    "numero": "60",
+    "intitule": "ACHATS ET VARIATIONS DE STOCKS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "601",
+    "intitule": "ACHATS DE MARCHANDISES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6011",
+    "intitule": "dans la Région",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6012",
+    "intitule": "hors Région",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6013",
+    "intitule": "aux entités du groupe dans la Région",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6014",
+    "intitule": "aux entités du groupe hors Région",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6015",
+    "intitule": "frais sur achats",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6019",
+    "intitule": "Rabais, Remises et Ristournes obtenus (non ventilés)",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "602",
+    "intitule": "ACHATS DE MATIÈRES PREMIÈRES ET FOURNITURES LIÉES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6021",
+    "intitule": "dans la Région",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6022",
+    "intitule": "hors Région",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6023",
+    "intitule": "aux entités du groupe dans la Région",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6024",
+    "intitule": "aux entités du groupe hors Région",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6025",
+    "intitule": "frais sur achats",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6029",
+    "intitule": "Rabais, Remises et Ristournes obtenus (non ventilés)",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "603",
+    "intitule": "VARIATIONS DES STOCKS DE BIENS ACHETÉS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6031",
+    "intitule": "Variations des stocks de marchandises",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6032",
+    "intitule": "Variations des stocks de matières premières et fournitures liées",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6033",
+    "intitule": "Variations des stocks d'autres approvisionnements",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "604",
+    "intitule": "ACHATS STOCKÉS DE MATIÈRES ET FOURNITURES CONSOMMABLES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6041",
+    "intitule": "Matières consommables",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6042",
+    "intitule": "Matières combustibles",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6043",
+    "intitule": "Produits d'entretien",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6044",
+    "intitule": "Fournitures d'atelier et d'usine",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6045",
+    "intitule": "frais sur achats",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6046",
+    "intitule": "Fournitures de magasin",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6047",
+    "intitule": "Fournitures de bureau",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6049",
+    "intitule": "Rabais, Remises et Ristournes obtenus (non ventilés)",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "605",
+    "intitule": "AUTRES ACHATS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6051",
+    "intitule": "Fournitures non stockables – Eau",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6052",
+    "intitule": "Fournitures non stockables – Électricité",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6053",
+    "intitule": "Fournitures non stockables – Autres énergies",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6054",
+    "intitule": "Fournitures d'entretien non stockables",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6055",
+    "intitule": "Fournitures de bureau non stockables",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6056",
+    "intitule": "Achats de petit matériel et outillage",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6057",
+    "intitule": "Achats d'études et prestations de services",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6058",
+    "intitule": "Achats de travaux, matériels et équipements",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6059",
+    "intitule": "Rabais, Remises et Ristournes obtenus (non ventilés)",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "608",
+    "intitule": "ACHATS D'EMBALLAGES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6081",
+    "intitule": "Emballages perdus",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6082",
+    "intitule": "Emballages récupérables non identifiables",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6083",
+    "intitule": "Emballages à usage mixte",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6085",
+    "intitule": "frais sur achats",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6089",
+    "intitule": "Rabais, Remises et Ristournes obtenus (non ventilés)",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "61",
+    "intitule": "TRANSPORTS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "612",
+    "intitule": "Transports sur ventes",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "613",
+    "intitule": "Transports pour le compte de tiers",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "614",
+    "intitule": "Transports du personnel",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "616",
+    "intitule": "Transports de plis",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "618",
+    "intitule": "AUTRES FRAIS DE TRANSPORT",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6181",
+    "intitule": "Voyages et déplacements",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6182",
+    "intitule": "Transports entre établissements ou chantiers",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6183",
+    "intitule": "Transports administratifs",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "62",
+    "intitule": "SERVICES EXTÉRIEURS A",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "621",
+    "intitule": "SOUS-TRAITANCE GÉNÉRALE",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "622",
+    "intitule": "LOCATIONS, CHARGES LOCATIVES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6221",
+    "intitule": "Locations de terrains",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6222",
+    "intitule": "Locations de bâtiments",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6223",
+    "intitule": "Locations de matériels et outillages",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6224",
+    "intitule": "Malis sur emballages",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6225",
+    "intitule": "Locations d'emballages",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6226",
+    "intitule": "Fermages et loyers du foncier",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6228",
+    "intitule": "Locations et charges locatives diverses",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "623",
+    "intitule": "REDEVANCES DE LOCATION-ACQUISITION",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6232",
+    "intitule": "Crédit-bail immobilier",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6233",
+    "intitule": "Crédit-bail mobilier",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6234",
+    "intitule": "Location-vente",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6238",
+    "intitule": "Autres contrats de location-acquisition",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "624",
+    "intitule": "ENTRETIEN, RÉPARATIONS, REMISE EN ÉTAT ET MAINTENANCE",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6241",
+    "intitule": "Entretien et réparations des biens immobiliers",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6242",
+    "intitule": "Entretien et réparations des biens mobiliers",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6243",
+    "intitule": "Maintenance",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6244",
+    "intitule": "Charges de démantèlement et remise en état",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6248",
+    "intitule": "Autres entretiens et réparations",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "625",
+    "intitule": "PRIMES D'ASSURANCE",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6251",
+    "intitule": "Assurances multirisques",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6252",
+    "intitule": "Assurances matériel de transport",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6253",
+    "intitule": "Assurances risques d'exploitation",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6254",
+    "intitule": "Assurances responsabilité du producteur",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6255",
+    "intitule": "Assurances insolvabilité clients",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6257",
+    "intitule": "Assurances transport sur ventes",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6258",
+    "intitule": "Autres primes d'assurances",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "626",
+    "intitule": "ÉTUDES, RECHERCHES ET DOCUMENTATION",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6261",
+    "intitule": "Études et recherches",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6265",
+    "intitule": "Documentation générale",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6266",
+    "intitule": "Documentation technique",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "627",
+    "intitule": "PUBLICITÉ, PUBLICATIONS, RELATIONS PUBLIQUES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6271",
+    "intitule": "Annonces, insertions",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6272",
+    "intitule": "Catalogues, imprimés publicitaires",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6273",
+    "intitule": "Échantillons",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6274",
+    "intitule": "Foires et expositions",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6275",
+    "intitule": "Publications",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6276",
+    "intitule": "Cadeaux à la clientèle",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6277",
+    "intitule": "Frais de colloques, séminaires, conférences",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6278",
+    "intitule": "Autres charges de publicité et relations publiques",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "628",
+    "intitule": "FRAIS DE TÉLÉCOMMUNICATIONS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6281",
+    "intitule": "Frais de téléphone",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6282",
+    "intitule": "Frais de télex",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6283",
+    "intitule": "Frais de télécopie",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6288",
+    "intitule": "Autres frais de télécommunications",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "63",
+    "intitule": "AUTRES SERVICES EXTÉRIEURS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "631",
+    "intitule": "FRAIS BANCAIRES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6311",
+    "intitule": "Frais sur titres (vente, garde)",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6312",
+    "intitule": "Frais sur effets",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6313",
+    "intitule": "Location de coffres",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6314",
+    "intitule": "Commissions d'affacturage et de titrisation",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6315",
+    "intitule": "Commissions sur cartes de crédit",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6316",
+    "intitule": "Frais d'émission d'emprunts",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6317",
+    "intitule": "Frais sur instruments monnaie électronique",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6318",
+    "intitule": "Autres frais bancaires",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "632",
+    "intitule": "RÉMUNÉRATIONS D'INTERMÉDIAIRES ET DE CONSEILS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6322",
+    "intitule": "Commissions et courtages sur ventes",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6324",
+    "intitule": "Honoraires des professions réglementées",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6325",
+    "intitule": "Frais d'actes et de contentieux",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6326",
+    "intitule": "Rémunérations d'affacturage et de titrisation",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6327",
+    "intitule": "Rémunérations des autres prestataires de services",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6328",
+    "intitule": "Divers frais",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "633",
+    "intitule": "FRAIS DE FORMATION DU PERSONNEL",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "634",
+    "intitule": "REDEVANCES POUR BREVETS, LICENCES, LOGICIELS, CONCESSIONS, DROITS ET VALEURS SIMILAIRES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6342",
+    "intitule": "Redevances pour brevets, licences",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6343",
+    "intitule": "Redevances pour logiciels",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6344",
+    "intitule": "Redevances pour marques",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6345",
+    "intitule": "Redevances pour sites internet",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6346",
+    "intitule": "Redevances pour concessions, droits et valeurs similaires",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "635",
+    "intitule": "COTISATIONS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6351",
+    "intitule": "Cotisations",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6358",
+    "intitule": "Concours divers",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "637",
+    "intitule": "RÉMUNÉRATIONS DE PERSONNEL EXTÉRIEUR À L'ENTITÉ",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6371",
+    "intitule": "Personnel intérimaire",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6372",
+    "intitule": "Personnel détaché ou prêté à l'entité",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "638",
+    "intitule": "AUTRES CHARGES EXTERNES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6381",
+    "intitule": "Frais de recrutement du personnel",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6382",
+    "intitule": "Frais de déménagement",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6383",
+    "intitule": "Réceptions",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6384",
+    "intitule": "Missions",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6385",
+    "intitule": "Charges de copropriété",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6388",
+    "intitule": "Charges externes diverses",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "64",
+    "intitule": "IMPÔTS ET TAXES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "641",
+    "intitule": "IMPÔTS ET TAXES DIRECTS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6411",
+    "intitule": "Impôts fonciers et taxes annexes",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6412",
+    "intitule": "Patentes, licences et taxes annexes",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6413",
+    "intitule": "Taxes sur appointements et salaires",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6414",
+    "intitule": "Taxes d'apprentissage",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6415",
+    "intitule": "Formation professionnelle continue",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6418",
+    "intitule": "Autres impôts et taxes directs",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "645",
+    "intitule": "IMPÔTS ET TAXES INDIRECTS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "646",
+    "intitule": "DROITS D'ENREGISTREMENT",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6461",
+    "intitule": "Droits de mutation",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6462",
+    "intitule": "Droits de timbre",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6463",
+    "intitule": "Taxes sur les véhicules de société",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6464",
+    "intitule": "Vignettes",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6468",
+    "intitule": "Autres droits d'enregistrement",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "647",
+    "intitule": "PÉNALITÉS, AMENDES FISCALES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6471",
+    "intitule": "Pénalités d'assiette, impôts directs",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6472",
+    "intitule": "Pénalités d'assiette, impôts indirects",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6473",
+    "intitule": "Pénalités de recouvrement, impôts directs",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6474",
+    "intitule": "Pénalités de recouvrement, impôts indirects",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6478",
+    "intitule": "Autres pénalités et amendes fiscales",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "648",
+    "intitule": "AUTRES IMPÔTS ET TAXES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "65",
+    "intitule": "AUTRES CHARGES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "651",
+    "intitule": "PERTES SUR CRÉANCES CLIENTS ET AUTRES DÉBITEURS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6511",
+    "intitule": "Clients",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6515",
+    "intitule": "Autres débiteurs",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "652",
+    "intitule": "QUOTE-PART DE RÉSULTAT SUR OPÉRATIONS FAITES EN COMMUN",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6521",
+    "intitule": "Quote-part transférée de bénéfices (comptabilité du gérant)",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6525",
+    "intitule": "Pertes imputées par transfert (comptabilité des associés non gérants)",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "654",
+    "intitule": "VALEURS COMPTABLES DES CESSIONS COURANTES D'IMMOBILISATIONS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6541",
+    "intitule": "Immobilisations incorporelles",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6542",
+    "intitule": "Immobilisations corporelles",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "656",
+    "intitule": "PERTE DE CHANGE SUR CRÉANCES ET DETTES COMMERCIALES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "657",
+    "intitule": "PÉNALITÉS ET AMENDES PÉNALES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "658",
+    "intitule": "CHARGES DIVERSES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6581",
+    "intitule": "Indemnités de fonction et autres rémunérations d'administrateurs",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6582",
+    "intitule": "Dons",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6583",
+    "intitule": "Mécénat",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6588",
+    "intitule": "Autres charges diverses",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6589",
+    "intitule": "Manquants de caisse",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "659",
+    "intitule": "CHARGES PROVISIONNÉES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6591",
+    "intitule": "Créances irrécouvrables clients",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6594",
+    "intitule": "Valeurs comptables des cessions courantes",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6598",
+    "intitule": "Autres charges provisionnées",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "66",
+    "intitule": "CHARGES DE PERSONNEL",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "661",
+    "intitule": "APPOINTEMENTS ET SALAIRES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6611",
+    "intitule": "Appointements et salaires bruts",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6612",
+    "intitule": "Avantages en nature",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6618",
+    "intitule": "Autres appointements et salaires",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "662",
+    "intitule": "COMMISSIONS ET COURTAGES SUR ACHATS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "663",
+    "intitule": "PRIMES ET GRATIFICATIONS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "664",
+    "intitule": "CONGÉS PAYÉS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "665",
+    "intitule": "CHARGES DE MALADIE ET DE MATERNITÉ",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "666",
+    "intitule": "CHARGES SOCIALES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6661",
+    "intitule": "Charges sociales sur salaires - part employeur",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6662",
+    "intitule": "Charges sociales sur salaires - part patronale",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6668",
+    "intitule": "Autres charges sociales",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "667",
+    "intitule": "CHARGES DE RETRAITES ET DE PRÉVOYANCE",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6671",
+    "intitule": "Charges de retraites et de prévoyance - régime légal",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6672",
+    "intitule": "Charges de retraites et de prévoyance - régime complémentaire",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6678",
+    "intitule": "Autres charges de retraites et de prévoyance",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "668",
+    "intitule": "AUTRES CHARGES DE PERSONNEL",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6681",
+    "intitule": "Allocations de départ",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6682",
+    "intitule": "Indemnités de licenciement",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6683",
+    "intitule": "Formation du personnel",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6688",
+    "intitule": "Autres charges de personnel",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "67",
+    "intitule": "FRAIS FINANCIERS ET CHARGES ASSIMILÉES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "671",
+    "intitule": "INTÉRÊTS DES EMPRUNTS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6711",
+    "intitule": "Intérêts des emprunts obligataires",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6712",
+    "intitule": "Intérêts des emprunts auprès des établissements de crédit",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6714",
+    "intitule": "Intérêts des avances et comptes courants bloqués",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6716",
+    "intitule": "Intérêts des dettes de location-acquisition",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6718",
+    "intitule": "Intérêts des autres emprunts et dettes",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "672",
+    "intitule": "CHARGES SUR TITRES DE PLACEMENT",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6721",
+    "intitule": "Frais sur cessions de titres de placement",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "673",
+    "intitule": "PERTES SUR CRÉANCES LIÉES À DES PARTICIPATIONS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "674",
+    "intitule": "ESCOMPTES ACCORDÉS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "675",
+    "intitule": "PERTES DE CHANGE SUR ÉLÉMENTS FINANCIERS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "676",
+    "intitule": "PERTES SUR CESSIONS DE TITRES IMMOBILISÉS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "677",
+    "intitule": "CHARGES NETTES SUR CESSIONS DE TITRES DE PLACEMENT",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "678",
+    "intitule": "AUTRES CHARGES FINANCIÈRES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6781",
+    "intitule": "Charges sur instruments de trésorerie",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6786",
+    "intitule": "Charges d'intérêts et frais bancaires divers",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6788",
+    "intitule": "Autres charges financières",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "68",
+    "intitule": "DOTATIONS AUX AMORTISSEMENTS, PROVISIONS ET DÉPRÉCIATIONS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "681",
+    "intitule": "DOTATIONS AUX AMORTISSEMENTS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6811",
+    "intitule": "Dotations aux amortissements des frais de développement",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6812",
+    "intitule": "Dotations aux amortissements des brevets, licences",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6813",
+    "intitule": "Dotations aux amortissements des logiciels et sites internet",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6814",
+    "intitule": "Dotations aux amortissements des marques",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6815",
+    "intitule": "Dotations aux amortissements du fonds commercial",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6816",
+    "intitule": "Dotations aux amortissements du droit au bail",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6817",
+    "intitule": "Dotations aux amortissements des investissements de création",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6818",
+    "intitule": "Dotations aux amortissements des autres droits et valeurs incorporels",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "682",
+    "intitule": "DOTATIONS AUX PROVISIONS RÉGLEMENTÉES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6821",
+    "intitule": "Dotations aux amortissements dérogatoires",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6822",
+    "intitule": "Dotations aux provisions pour investissement",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6823",
+    "intitule": "Dotations aux autres provisions réglementées",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "683",
+    "intitule": "DOTATIONS AUX DÉPRÉCIATIONS",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6831",
+    "intitule": "Dotations aux dépréciations des immobilisations",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6834",
+    "intitule": "Dotations aux dépréciations des stocks",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6835",
+    "intitule": "Dotations aux dépréciations des créances",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6836",
+    "intitule": "Dotations aux dépréciations des titres de placement",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "684",
+    "intitule": "DOTATIONS AUX PROVISIONS POUR RISQUES ET CHARGES",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6841",
+    "intitule": "Dotations aux provisions pour litiges",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6842",
+    "intitule": "Dotations aux provisions pour garanties clients",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6843",
+    "intitule": "Dotations aux provisions pour pertes sur marchés",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6844",
+    "intitule": "Dotations aux provisions pour pertes de change",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6845",
+    "intitule": "Dotations aux provisions pour impôts",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6846",
+    "intitule": "Dotations aux provisions pour pensions",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6847",
+    "intitule": "Dotations aux provisions pour restructuration",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "6848",
+    "intitule": "Dotations aux autres provisions",
+    "classe": 6,
+    "type": "charge"
+  },
+  {
+    "numero": "70",
+    "intitule": "VENTES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "701",
+    "intitule": "VENTES DE MARCHANDISES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7011",
+    "intitule": "Ventes de marchandises dans la Région",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7012",
+    "intitule": "Ventes de marchandises hors Région",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7013",
+    "intitule": "Ventes de marchandises aux entités du groupe dans la Région",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7014",
+    "intitule": "Ventes de marchandises aux entités du groupe hors Région",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "702",
+    "intitule": "VENTES DE PRODUITS FINIS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7021",
+    "intitule": "dans la Région",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7022",
+    "intitule": "hors Région",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7023",
+    "intitule": "aux entités du groupe dans la Région",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7024",
+    "intitule": "aux entités du groupe hors Région",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "703",
+    "intitule": "VENTES DE PRODUITS INTERMÉDIAIRES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "704",
+    "intitule": "VENTES DE PRODUITS RÉSIDUELS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "705",
+    "intitule": "TRAVAUX FACTURÉS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "706",
+    "intitule": "SERVICES VENDUS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7061",
+    "intitule": "Commissions sur tontine",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7062",
+    "intitule": "Commissions et frais de dossier",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "707",
+    "intitule": "PRODUITS ACCESSOIRES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7071",
+    "intitule": "Vente de carnets tontine",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "708",
+    "intitule": "PRODUITS DES ACTIVITÉS ANNEXES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "709",
+    "intitule": "RABAIS, REMISES ET RISTOURNES ACCORDÉS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7091",
+    "intitule": "sur ventes de marchandises",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7092",
+    "intitule": "sur ventes de produits finis",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7095",
+    "intitule": "sur travaux et services",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7098",
+    "intitule": "sur autres ventes",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "71",
+    "intitule": "SUBVENTIONS D'EXPLOITATION",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "711",
+    "intitule": "SUBVENTIONS D'EXPLOITATION",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7111",
+    "intitule": "Subventions reçues de l'État",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7112",
+    "intitule": "Subventions reçues des collectivités publiques",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7118",
+    "intitule": "Subventions reçues d'autres organismes",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "712",
+    "intitule": "AUTRES SUBVENTIONS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "72",
+    "intitule": "PRODUCTION IMMOBILISÉE",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "721",
+    "intitule": "IMMOBILISATIONS INCORPORELLES PRODUITES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "722",
+    "intitule": "IMMOBILISATIONS CORPORELLES PRODUITES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "73",
+    "intitule": "VARIATIONS DE STOCKS DE BIENS ET SERVICES PRODUITS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "731",
+    "intitule": "Variations de stocks de produits finis",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "732",
+    "intitule": "Variations de stocks de produits intermédiaires",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "733",
+    "intitule": "Variations de stocks de produits résiduels",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "734",
+    "intitule": "Variations en-cours de production de biens",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "735",
+    "intitule": "Variations en-cours de production de services",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "74",
+    "intitule": "PRODUITS ACCESSOIRES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "741",
+    "intitule": "REVENUS DES IMMEUBLES NON AFFECTÉS À DES ACTIVITÉS PROFESSIONNELLES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "742",
+    "intitule": "BONIS SUR REPRISES D'EMBALLAGES CONSIGNÉS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "743",
+    "intitule": "JETONS DE PRÉSENCE ET RÉMUNÉRATIONS D'ADMINISTRATEURS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "744",
+    "intitule": "REVENUS DES BREVETS, LICENCES ET DROITS SIMILAIRES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "745",
+    "intitule": "REVENUS DU PORTEFEUILLE TITRES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "746",
+    "intitule": "GAINS DE CHANGE COMMERCIAUX",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "748",
+    "intitule": "REVENUS DIVERS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "75",
+    "intitule": "AUTRES PRODUITS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "751",
+    "intitule": "QUOTES-PARTS DE RÉSULTAT SUR OPÉRATIONS FAITES EN COMMUN",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7511",
+    "intitule": "Quotes-parts reçues de bénéfices (comptabilité des associés non gérants)",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7515",
+    "intitule": "Bénéfices imputés par transfert (comptabilité du gérant)",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "752",
+    "intitule": "TRAVAUX EFFECTUÉS PAR L'ENTITÉ POUR ELLE-MÊME",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "753",
+    "intitule": "PRODUITS SUR CRÉANCES RECOUVRÉES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "754",
+    "intitule": "PRODUITS SUR CESSIONS COURANTES D'IMMOBILISATIONS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7541",
+    "intitule": "Immobilisations incorporelles",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7542",
+    "intitule": "Immobilisations corporelles",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "755",
+    "intitule": "GAINS DE CHANGE",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "756",
+    "intitule": "INTÉRÊTS DE RETARD SUR CRÉANCES CLIENTS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "758",
+    "intitule": "PRODUITS DIVERS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7581",
+    "intitule": "Subventions reçues",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7582",
+    "intitule": "Libéralités reçues",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7583",
+    "intitule": "Indemnités reçues",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7588",
+    "intitule": "Autres produits divers",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7589",
+    "intitule": "Surplus de caisse",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "76",
+    "intitule": "REPRISES DE DÉPRÉCIATIONS, PROVISIONS ET CHARGES PROVISIONNÉES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "761",
+    "intitule": "REPRISES DE DÉPRÉCIATIONS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7611",
+    "intitule": "Reprises de dépréciations des immobilisations incorporelles",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7612",
+    "intitule": "Reprises de dépréciations des immobilisations corporelles",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7613",
+    "intitule": "Reprises de dépréciations des immobilisations financières",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7614",
+    "intitule": "Reprises de dépréciations des stocks",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7615",
+    "intitule": "Reprises de dépréciations des créances",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7616",
+    "intitule": "Reprises de dépréciations des titres de placement",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "762",
+    "intitule": "REPRISES DE PROVISIONS RÉGLEMENTÉES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7621",
+    "intitule": "Reprises d'amortissements dérogatoires",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7622",
+    "intitule": "Reprises de provisions pour investissement",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7623",
+    "intitule": "Reprises d'autres provisions réglementées",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "763",
+    "intitule": "REPRISES DE PROVISIONS POUR RISQUES ET CHARGES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7631",
+    "intitule": "Reprises de provisions pour litiges",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7632",
+    "intitule": "Reprises de provisions pour garanties clients",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7633",
+    "intitule": "Reprises de provisions pour pertes sur marchés",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7634",
+    "intitule": "Reprises de provisions pour pertes de change",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7635",
+    "intitule": "Reprises de provisions pour impôts",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7636",
+    "intitule": "Reprises de provisions pour pensions",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7637",
+    "intitule": "Reprises de provisions pour restructuration",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7638",
+    "intitule": "Reprises d'autres provisions",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "764",
+    "intitule": "REPRISES DE CHARGES PROVISIONNÉES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "77",
+    "intitule": "REVENUS FINANCIERS ET PRODUITS ASSIMILÉS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "771",
+    "intitule": "INTÉRÊTS DE PRÊTS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7711",
+    "intitule": "Intérêts des prêts aux associés",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7712",
+    "intitule": "Intérêts des prêts au personnel",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7713",
+    "intitule": "Intérêts des créances sur l'État",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7714",
+    "intitule": "Intérêts des titres immobilisés",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7715",
+    "intitule": "Intérêts des dépôts et cautionnements",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7718",
+    "intitule": "Intérêts des autres prêts et créances",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "772",
+    "intitule": "REVENUS DES TITRES DE PLACEMENT",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "773",
+    "intitule": "REVENUS DES CRÉANCES LIÉES À DES PARTICIPATIONS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "774",
+    "intitule": "REVENUS DES TITRES DE PARTICIPATION",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7741",
+    "intitule": "Dividendes",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7748",
+    "intitule": "Autres revenus",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "775",
+    "intitule": "ESCOMPTES OBTENUS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "776",
+    "intitule": "GAINS DE CHANGE SUR ÉLÉMENTS FINANCIERS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "777",
+    "intitule": "GAINS NETS SUR CESSIONS DE TITRES DE PLACEMENT",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "778",
+    "intitule": "AUTRES REVENUS FINANCIERS",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7781",
+    "intitule": "Produits sur instruments de trésorerie",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7786",
+    "intitule": "Produits d'intérêts et revenus bancaires divers",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7788",
+    "intitule": "Autres revenus financiers",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "78",
+    "intitule": "TRANSFERTS DE CHARGES D'EXPLOITATION",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "781",
+    "intitule": "TRANSFERTS DE CHARGES D'EXPLOITATION",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7811",
+    "intitule": "Charges immobilisées — frais de développement",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7812",
+    "intitule": "Charges immobilisées — frais de prospection",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7813",
+    "intitule": "Charges immobilisées — coûts d'obtention du contrat",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "7818",
+    "intitule": "Autres charges immobilisées",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "782",
+    "intitule": "TRANSFERTS DE CHARGES DE PERSONNEL",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "783",
+    "intitule": "TRANSFERTS DE CHARGES FINANCIÈRES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "784",
+    "intitule": "TRANSFERTS DE CHARGES HAO",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "788",
+    "intitule": "AUTRES TRANSFERTS DE CHARGES",
+    "classe": 7,
+    "type": "produit"
+  },
+  {
+    "numero": "81",
+    "intitule": "VALEURS COMPTABLES DES CESSIONS D'IMMOBILISATIONS HAO",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "811",
+    "intitule": "VALEURS COMPTABLES DES CESSIONS D'IMMOBILISATIONS",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8111",
+    "intitule": "Valeurs comptables des immobilisations incorporelles cédées",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8112",
+    "intitule": "Valeurs comptables des immobilisations corporelles cédées",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8114",
+    "intitule": "Valeurs comptables des titres de participation cédés",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8115",
+    "intitule": "Valeurs comptables des autres immobilisations financières cédées",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "82",
+    "intitule": "PRODUITS DES CESSIONS D'IMMOBILISATIONS HAO",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "821",
+    "intitule": "PRODUITS DES CESSIONS D'IMMOBILISATIONS",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8211",
+    "intitule": "Produits des cessions d'immobilisations incorporelles",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8212",
+    "intitule": "Produits des cessions d'immobilisations corporelles",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8214",
+    "intitule": "Produits des cessions de titres de participation",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8215",
+    "intitule": "Produits des cessions des autres immobilisations financières",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "83",
+    "intitule": "PARTICIPATION DES TRAVAILLEURS",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "831",
+    "intitule": "PARTICIPATION DES TRAVAILLEURS AUX BÉNÉFICES",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "84",
+    "intitule": "IMPÔTS SUR LE RÉSULTAT",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "841",
+    "intitule": "IMPÔTS SUR LE RÉSULTAT",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8411",
+    "intitule": "Impôts sur les bénéfices - État",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8412",
+    "intitule": "Impôts sur les bénéfices - Collectivités",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8418",
+    "intitule": "Autres impôts sur les bénéfices",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "842",
+    "intitule": "IMPÔTS DIFFÉRÉS",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8421",
+    "intitule": "Impôts différés actifs",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "8422",
+    "intitule": "Impôts différés passifs",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "85",
+    "intitule": "DOTATIONS AUX AMORTISSEMENTS DÉROGATOIRES ET AUX PROVISIONS RÉGLEMENTÉES HAO",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "851",
+    "intitule": "Dotations aux amortissements dérogatoires (HAO)",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "855",
+    "intitule": "Dotations aux provisions réglementées (HAO)",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "857",
+    "intitule": "Dotations pour restructuration",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "858",
+    "intitule": "Autres dotations aux provisions réglementées (HAO)",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "86",
+    "intitule": "REPRISES DE PROVISIONS RÉGLEMENTÉES HAO",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "861",
+    "intitule": "Reprises d'amortissements dérogatoires (HAO)",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "865",
+    "intitule": "Reprises de provisions réglementées (HAO)",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "867",
+    "intitule": "Reprises de provisions pour restructuration",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "868",
+    "intitule": "Reprises d'autres provisions réglementées (HAO)",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "87",
+    "intitule": "PLUS-VALUES ET MOINS-VALUES SUR CESSIONS D'IMMOBILISATIONS",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "871",
+    "intitule": "PLUS-VALUES SUR CESSIONS D'IMMOBILISATIONS",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "872",
+    "intitule": "MOINS-VALUES SUR CESSIONS D'IMMOBILISATIONS",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "88",
+    "intitule": "SUBVENTIONS D'ÉQUILIBRE",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "881",
+    "intitule": "SUBVENTIONS D'ÉQUILIBRE REÇUES",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "89",
+    "intitule": "RÉSULTAT DE L'EXERCICE",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "891",
+    "intitule": "RÉSULTAT DE L'EXERCICE : BÉNÉFICE",
+    "classe": 8,
+    "type": "hors"
+  },
+  {
+    "numero": "892",
+    "intitule": "RÉSULTAT DE L'EXERCICE : PERTE",
+    "classe": 8,
+    "type": "hors"
+  }
 ]

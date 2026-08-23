@@ -22,19 +22,19 @@ JOURNAUX_DEFAUT = [
 
 # type opération métier -> (journal, compte débit, compte crédit, libellé)
 MAPPINGS_DEFAUT = [
-    ("depot_compte", "CAISSE", "571", "4711", "Dépôt compte client"),
-    ("depot_compte_epargne", "CAISSE", "571", "4712", "Dépôt épargne client"),
-    ("retrait_compte", "CAISSE", "4711", "571", "Retrait compte client"),
-    ("retrait_compte_epargne", "CAISSE", "4712", "571", "Retrait épargne client"),
-    ("mise_tontine", "CAISSE", "571", "4721", "Cotisation tontine"),
-    ("retrait_tontine", "CAISSE", "4721", "571", "Retrait cycle tontine"),
+    ("depot_compte", "CAISSE", "571", "4671", "Dépôt compte client"),
+    ("depot_compte_epargne", "CAISSE", "571", "4672", "Dépôt épargne client"),
+    ("retrait_compte", "CAISSE", "4671", "571", "Retrait compte client"),
+    ("retrait_compte_epargne", "CAISSE", "4672", "571", "Retrait épargne client"),
+    ("mise_tontine", "CAISSE", "571", "4673", "Cotisation tontine"),
+    ("retrait_tontine", "CAISSE", "4673", "571", "Retrait cycle tontine"),
     ("commission_tontine", "CAISSE", "571", "7061", "Commission tontine"),
     ("vente_carnet", "CAISSE", "571", "7071", "Vente de carnet"),
-    ("octroi_credit", "CAISSE", "4111", "571", "Octroi de crédit"),
-    ("remboursement_credit", "CAISSE", "571", "4111", "Remboursement de crédit"),
+    ("octroi_credit", "CAISSE", "4119", "571", "Octroi de crédit"),
+    ("remboursement_credit", "CAISSE", "571", "4119", "Remboursement de crédit"),
     ("alimenter_caisse", "OD", "571", "521", "Alimentation de caisse depuis banque"),
-    ("manquant_caisse", "OD", "6581", "571", "Manquant de caisse"),
-    ("surplus_caisse", "OD", "571", "7581", "Surplus de caisse"),
+    ("manquant_caisse", "OD", "6589", "571", "Manquant de caisse"),
+    ("surplus_caisse", "OD", "571", "7589", "Surplus de caisse"),
 ]
 
 
@@ -51,21 +51,29 @@ def _today() -> str:
 
 
 def ensure_comptabilite_seed(db: Session) -> None:
-    """Seed plan, journaux, mappings et exercice courant si absents."""
-    if db.query(m.CompteComptable).count() == 0:
-        path = PLAN_PATH if PLAN_PATH.exists() else settings.demo_seed_path.parent / "plan-comptable-syscohada.json"
+    """Seed / synchronise plan, journaux, mappings et exercice courant."""
+    path = PLAN_PATH if PLAN_PATH.exists() else settings.demo_seed_path.parent / "plan-comptable-syscohada.json"
+    if path.exists():
         comptes = json.loads(path.read_text(encoding="utf-8"))
+        existants = {c.numero: c for c in db.query(m.CompteComptable).all()}
         for c in comptes:
-            db.add(
-                m.CompteComptable(
-                    id=_uid("cc"),
-                    numero=c["numero"],
-                    intitule=c["intitule"],
-                    classe=int(c["classe"]),
-                    type=c["type"],
-                    actif=True,
+            num = str(c["numero"])
+            if num in existants:
+                row = existants[num]
+                row.intitule = c["intitule"]
+                row.classe = int(c["classe"])
+                row.type = c["type"]
+            else:
+                db.add(
+                    m.CompteComptable(
+                        id=_uid("cc"),
+                        numero=num,
+                        intitule=c["intitule"],
+                        classe=int(c["classe"]),
+                        type=c["type"],
+                        actif=True,
+                    )
                 )
-            )
 
     if db.query(m.JournalComptable).count() == 0:
         for code, libelle in JOURNAUX_DEFAUT:
@@ -84,6 +92,27 @@ def ensure_comptabilite_seed(db: Session) -> None:
                     actif=True,
                 )
             )
+    else:
+        # Met à jour les mappings connus (comptes microfinance réalignés)
+        for typ, jcode, deb, cred, lib in MAPPINGS_DEFAUT:
+            row = db.query(m.MappingEcriture).filter_by(type_operation=typ).first()
+            if row:
+                row.journal_code = jcode
+                row.compte_debit = deb
+                row.compte_credit = cred
+                row.libelle_modele = lib
+            else:
+                db.add(
+                    m.MappingEcriture(
+                        id=_uid("mp"),
+                        type_operation=typ,
+                        journal_code=jcode,
+                        compte_debit=deb,
+                        compte_credit=cred,
+                        libelle_modele=lib,
+                        actif=True,
+                    )
+                )
 
     year = datetime.now(timezone.utc).year
     if db.query(m.ExerciceComptable).filter_by(annee=year).first() is None:

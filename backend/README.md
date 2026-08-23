@@ -4,6 +4,8 @@ FastAPI + SQLite. Données dans `data/app.db`. Configuration via `backend/.env` 
 
 Sur la branche **`dev`**, `SEED_DEMO_ON_STARTUP=true` par défaut (charge `demo-seed.json` si la base est vide).
 
+Plan comptable : `data/plan-comptable-syscohada.json` (liste SYSCOHADA révisée d’après [LeFisk](https://lefisk.cm/blog/plan-comptable-syscohada-revise-liste-comptes), + comptes analytiques microfinance). Régénération : `python scripts/generate_plan_syscohada.py`.
+
 ## Prérequis
 
 Python **3.12** recommandé (`py -3.12`).
