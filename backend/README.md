@@ -1,8 +1,6 @@
 # Backend API — DON DE DIEU
 
-FastAPI + SQLite. Données dans `data/app.db`.
-
-**Branche `prod`** : aucun chargement automatique des données de démo au démarrage (`seed_demo_on_startup=False`). Base vide jusqu’à import CSV ou création manuelle des comptes.
+FastAPI + SQLite. Données dans `data/app.db`, seed depuis `data/demo-seed.json` au démarrage si la base est vide (`seed_demo_on_startup=True` sur `dev`).
 
 ## Prérequis
 

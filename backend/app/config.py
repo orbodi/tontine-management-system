@@ -21,8 +21,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:4173",
     ]
     demo_seed_path: Path = DATA_DIR / "demo-seed.json"
-    # False en prod : pas de chargement automatique des données de démo
-    seed_demo_on_startup: bool = False
+    # True sur dev : charge demo-seed.json si la base est vide
+    seed_demo_on_startup: bool = True
 
 
 settings = Settings()
