@@ -22,6 +22,7 @@ TOUS_DROITS = [
     "voir_rapports",
     "gerer_agences",
     "gerer_zones",
+    "gerer_comptabilite",
 ]
 
 
@@ -225,10 +226,12 @@ def run_mutation(db: Session, current_user_id: str, action: str, payload: dict) 
         if err:
             return {"erreur": err}
         data = _persist(db, new_d)
+        _sync_compta(db, new_d, u)
         return {"ok": True, "data": data, **(extra or {})}
 
     if isinstance(result, dict) and "data" in result:
         data = _persist(db, result["data"])
+        _sync_compta(db, result["data"], u)
         out = {"ok": True, "data": data}
         for k, v in result.items():
             if k not in ("data", "erreur"):
@@ -237,9 +240,21 @@ def run_mutation(db: Session, current_user_id: str, action: str, payload: dict) 
 
     # handler returned new state dict directly
     if isinstance(result, dict) and "employes" in result:
-        return {"ok": True, "data": _persist(db, result)}
+        data = _persist(db, result)
+        _sync_compta(db, result, u)
+        return {"ok": True, "data": data}
 
     return {"erreur": "Resultat de mutation invalide."}
+
+
+def _sync_compta(db: Session, state: dict, user: dict) -> None:
+    try:
+        from .comptabilite import sync_auto_from_state
+
+        sync_auto_from_state(db, state, user)
+    except Exception:  # noqa: BLE001
+        # Ne bloque pas l'opération métier si la compta échoue
+        pass
 
 
 # ---- Actions ----

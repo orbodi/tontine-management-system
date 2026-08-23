@@ -289,3 +289,83 @@ class CompteurOrdreZone(Base):
     __tablename__ = "compteurs_ordre_zone"
     zone_id: Mapped[str] = mapped_column(String, primary_key=True)
     valeur: Mapped[int] = mapped_column(Integer, default=0)
+
+
+# ---------- Comptabilité générale (SYSCOHADA) ----------
+
+
+class ExerciceComptable(Base):
+    __tablename__ = "exercices_comptables"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    annee: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    date_debut: Mapped[str] = mapped_column(String)
+    date_fin: Mapped[str] = mapped_column(String)
+    statut: Mapped[str] = mapped_column(String, default="ouvert")  # ouvert | cloture
+    bilan_valide: Mapped[bool] = mapped_column(Boolean, default=False)
+    date_cloture: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class CompteComptable(Base):
+    __tablename__ = "comptes_comptables"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    numero: Mapped[str] = mapped_column(String, unique=True, index=True)
+    intitule: Mapped[str] = mapped_column(String)
+    classe: Mapped[int] = mapped_column(Integer)
+    type: Mapped[str] = mapped_column(String)  # actif | passif | charge | produit | hors
+    actif: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class JournalComptable(Base):
+    __tablename__ = "journaux_comptables"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    code: Mapped[str] = mapped_column(String, unique=True, index=True)
+    libelle: Mapped[str] = mapped_column(String)
+    actif: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class EcritureComptable(Base):
+    __tablename__ = "ecritures_comptables"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    exercice_id: Mapped[str] = mapped_column(String, index=True)
+    journal_id: Mapped[str] = mapped_column(String, index=True)
+    date: Mapped[str] = mapped_column(String, index=True)
+    numero_piece: Mapped[str] = mapped_column(String)
+    libelle: Mapped[str] = mapped_column(String)
+    source: Mapped[str] = mapped_column(String, default="manuel")  # manuel | auto | ouverture | anouveaux
+    source_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    auteur_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    auteur_nom: Mapped[str | None] = mapped_column(String, nullable=True)
+    date_creation: Mapped[str] = mapped_column(String)
+
+
+class LigneEcriture(Base):
+    __tablename__ = "lignes_ecriture"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    ecriture_id: Mapped[str] = mapped_column(String, index=True)
+    compte_id: Mapped[str] = mapped_column(String, index=True)
+    compte_numero: Mapped[str] = mapped_column(String)
+    libelle: Mapped[str | None] = mapped_column(String, nullable=True)
+    debit: Mapped[float] = mapped_column(Float, default=0)
+    credit: Mapped[float] = mapped_column(Float, default=0)
+
+
+class BilanInitialLigne(Base):
+    __tablename__ = "bilan_initial_lignes"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    exercice_id: Mapped[str] = mapped_column(String, index=True)
+    compte_id: Mapped[str] = mapped_column(String, index=True)
+    compte_numero: Mapped[str] = mapped_column(String)
+    sens: Mapped[str] = mapped_column(String)  # actif | passif
+    montant: Mapped[float] = mapped_column(Float, default=0)
+
+
+class MappingEcriture(Base):
+    __tablename__ = "mappings_ecriture"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    type_operation: Mapped[str] = mapped_column(String, unique=True, index=True)
+    journal_code: Mapped[str] = mapped_column(String)
+    compte_debit: Mapped[str] = mapped_column(String)
+    compte_credit: Mapped[str] = mapped_column(String)
+    libelle_modele: Mapped[str] = mapped_column(String)
+    actif: Mapped[bool] = mapped_column(Boolean, default=True)

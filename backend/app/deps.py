@@ -22,6 +22,7 @@ TOUS_DROITS = [
     "voir_rapports",
     "gerer_agences",
     "gerer_zones",
+    "gerer_comptabilite",
 ]
 
 

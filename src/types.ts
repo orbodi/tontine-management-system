@@ -95,6 +95,7 @@ export type Droit =
   | 'voir_rapports'
   | 'gerer_agences'
   | 'gerer_zones'
+  | 'gerer_comptabilite'
 
 export interface Employe {
   id: string
@@ -373,6 +374,100 @@ export interface Transaction {
   operateurId: string
   /** Agence de l'opérateur au moment de l'opération. */
   agenceId: string
+}
+
+// ---------- Comptabilité générale ----------
+
+export type StatutExercice = 'ouvert' | 'cloture'
+export type TypeCompteComptable = 'actif' | 'passif' | 'charge' | 'produit' | 'hors'
+export type SensBilan = 'actif' | 'passif'
+
+export interface ExerciceComptable {
+  id: string
+  annee: number
+  dateDebut: string
+  dateFin: string
+  statut: StatutExercice
+  bilanValide: boolean
+  dateCloture?: string | null
+}
+
+export interface CompteComptable {
+  id: string
+  numero: string
+  intitule: string
+  classe: number
+  type: TypeCompteComptable
+  actif: boolean
+}
+
+export interface JournalComptable {
+  id: string
+  code: string
+  libelle: string
+  actif: boolean
+}
+
+export interface LigneEcriture {
+  id: string
+  compteId: string
+  compteNumero: string
+  libelle?: string | null
+  debit: number
+  credit: number
+}
+
+export interface EcritureComptable {
+  id: string
+  exerciceId: string
+  journalId: string
+  journalCode: string
+  date: string
+  numeroPiece: string
+  libelle: string
+  source: string
+  sourceType?: string | null
+  sourceId?: string | null
+  auteurId?: string | null
+  auteurNom?: string | null
+  dateCreation: string
+  lignes: LigneEcriture[]
+  totalDebit: number
+  totalCredit: number
+}
+
+export interface BilanInitialLigne {
+  id: string
+  exerciceId: string
+  compteId: string
+  compteNumero: string
+  sens: SensBilan
+  montant: number
+}
+
+export interface LigneBalance {
+  compteNumero: string
+  intitule: string
+  classe: number
+  totalDebit: number
+  totalCredit: number
+  soldeDebiteur: number
+  soldeCrediteur: number
+}
+
+export interface CompteGrandLivre {
+  compteNumero: string
+  intitule: string
+  mouvements: {
+    date: string
+    numeroPiece: string
+    libelle: string
+    debit: number
+    credit: number
+    solde: number
+    ecritureId: string
+  }[]
+  soldeFinal: number
 }
 
 // ---------- Racine ----------

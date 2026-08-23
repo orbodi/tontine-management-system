@@ -4,6 +4,7 @@ import {
   ArrowLeftRight,
   Banknote,
   Building2,
+  Calculator,
   ClipboardList,
   Download,
   FileBarChart,
@@ -58,6 +59,9 @@ export default function Layout() {
         ]
       : []),
     ...(estAdmin ? [{ to: '/employes', label: 'Employés', icon: ShieldCheck }] : []),
+    ...(estAdmin || aDroit('gerer_comptabilite') || aDroit('voir_rapports')
+      ? [{ to: '/comptabilite', label: 'Comptabilité', icon: Calculator }]
+      : []),
     ...(estAdmin ? [{ to: '/audit', label: 'Audit', icon: ClipboardList }] : []),
   ]
 

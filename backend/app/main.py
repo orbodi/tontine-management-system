@@ -9,15 +9,17 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import Base, SessionLocal, engine
 from . import models  # noqa: F401
-from .routers import auth_router, data_router
+from .routers import auth_router, data_router, comptabilite_router
 
 
 def _ensure_startup_data() -> None:
     db: Session = SessionLocal()
     try:
         from .seed import ensure_startup_data
+        from .comptabilite import ensure_comptabilite_seed
 
         ensure_startup_data(db)
+        ensure_comptabilite_seed(db)
     finally:
         db.close()
 
@@ -40,6 +42,7 @@ def create_app() -> FastAPI:
     )
     application.include_router(auth_router, prefix="/api")
     application.include_router(data_router, prefix="/api")
+    application.include_router(comptabilite_router, prefix="/api")
 
     @application.get("/api/health")
     def health():

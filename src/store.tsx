@@ -35,6 +35,7 @@ export const LIBELLES_DROIT: Record<Droit, string> = {
   voir_rapports: 'Consulter les rapports',
   gerer_agences: 'Gérer les agences',
   gerer_zones: 'Gérer les zones',
+  gerer_comptabilite: 'Gérer la comptabilité',
 }
 
 export const TOUS_DROITS = Object.keys(LIBELLES_DROIT) as Droit[]

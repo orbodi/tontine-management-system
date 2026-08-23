@@ -19,6 +19,12 @@ import Agences from './pages/Agences'
 import Zones from './pages/Zones'
 import CompteZoneTontinePage from './pages/CompteZoneTontine'
 import Audit from './pages/Audit'
+import ComptabiliteAccueil from './pages/comptabilite/Accueil'
+import PlanComptablePage from './pages/comptabilite/PlanComptable'
+import BilanInitialPage from './pages/comptabilite/BilanInitial'
+import JournauxPage from './pages/comptabilite/Journaux'
+import GrandLivrePage from './pages/comptabilite/GrandLivre'
+import BalancePage from './pages/comptabilite/Balance'
 
 export default function App() {
   const { employeConnecte, estAdmin, aDroit, chargement } = useStore()
@@ -32,6 +38,8 @@ export default function App() {
   }
 
   if (!employeConnecte) return <Connexion />
+
+  const accesCompta = estAdmin || aDroit('gerer_comptabilite') || aDroit('voir_rapports')
 
   return (
     <Routes>
@@ -56,6 +64,12 @@ export default function App() {
         )}
         {estAdmin && <Route path="/employes" element={<Employes />} />}
         {estAdmin && <Route path="/audit" element={<Audit />} />}
+        {accesCompta && <Route path="/comptabilite" element={<ComptabiliteAccueil />} />}
+        {accesCompta && <Route path="/comptabilite/plan" element={<PlanComptablePage />} />}
+        {accesCompta && <Route path="/comptabilite/bilan" element={<BilanInitialPage />} />}
+        {accesCompta && <Route path="/comptabilite/journaux" element={<JournauxPage />} />}
+        {accesCompta && <Route path="/comptabilite/grand-livre" element={<GrandLivrePage />} />}
+        {accesCompta && <Route path="/comptabilite/balance" element={<BalancePage />} />}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
