@@ -1,19 +1,44 @@
 import { useMemo, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, Download, Search } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Download, Pencil, Search } from 'lucide-react'
 import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
-import type { TypeTransaction } from '../types'
+import type { Transaction, TypeTransaction } from '../types'
 import { estOperationCaisse, LIBELLES_TYPE, TYPES_SORTIE } from '../metier'
 import { exporterCsv, formatDateHeure, formatMontant } from '../utils'
-import { EnTetePage, EtatVide } from '../components/ui'
+import { EnTetePage, EtatVide, Modale } from '../components/ui'
+import { useConfirmation } from '../components/Confirmation'
+
+const TYPES_MODIFIABLES = new Set<TypeTransaction>([
+  'depot_compte',
+  'retrait_compte',
+  'mise_tontine',
+  'retrait_tontine',
+  'commission_tontine',
+  'complement_mise',
+  'remboursement_credit',
+  'part_sociale',
+  'droit_adhesion',
+])
 
 export default function Transactions() {
-  const { data, employeConnecte, estAdmin, estChefAgence, estCaissier, agenceFiltreOperations } =
-    useStore()
+  const {
+    data,
+    employeConnecte,
+    estAdmin,
+    estChefAgence,
+    estCaissier,
+    agenceFiltreOperations,
+    corrigerMontantTransaction,
+  } = useStore()
+  const { alerter } = useConfirmation()
   const [recherche, setRecherche] = useState('')
   const [typeFiltre, setTypeFiltre] = useState<'tous' | TypeTransaction>('tous')
   const [dateDebut, setDateDebut] = useState('')
   const [dateFin, setDateFin] = useState('')
+  const [txEdition, setTxEdition] = useState<Transaction | null>(null)
+  const [nouveauMontant, setNouveauMontant] = useState('')
+  const [motif, setMotif] = useState('')
+  const [erreur, setErreur] = useState('')
 
   const perimetre =
     estAdmin
@@ -21,6 +46,15 @@ export default function Transactions() {
       : estChefAgence
         ? 'caisses de votre agence'
         : 'vos opérations uniquement'
+
+  const peutCorriger = (t: Transaction) => {
+    if (!TYPES_MODIFIABLES.has(t.type)) return false
+    if (estAdmin) return true
+    if ((estChefAgence || estCaissier) && employeConnecte && t.operateurId === employeConnecte.id) {
+      return true
+    }
+    return false
+  }
 
   const transactionsFiltrees = useMemo(() => {
     const q = recherche.trim().toLowerCase()
@@ -79,6 +113,38 @@ export default function Transactions() {
     ])
   }
 
+  const ouvrirCorrection = (t: Transaction) => {
+    setTxEdition(t)
+    setNouveauMontant(String(t.montant))
+    setMotif('')
+    setErreur('')
+  }
+
+  const validerCorrection = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!txEdition) return
+    const montant = Number(nouveauMontant)
+    if (!Number.isFinite(montant) || montant <= 0) {
+      setErreur('Montant invalide.')
+      return
+    }
+    if (montant === txEdition.montant) {
+      setErreur('Saisissez un montant différent.')
+      return
+    }
+    const err = await corrigerMontantTransaction(txEdition.id, montant, motif.trim() || undefined)
+    if (err) {
+      setErreur(err)
+      await alerter('Correction impossible', err)
+      return
+    }
+    setTxEdition(null)
+    await alerter(
+      'Transaction corrigée',
+      `Montant passé de ${formatMontant(txEdition.montant)} à ${formatMontant(montant)}.`,
+    )
+  }
+
   return (
     <div>
       <EnTetePage
@@ -123,7 +189,7 @@ export default function Transactions() {
         <EtatVide titre="Aucune transaction" description="Modifiez vos filtres." />
       ) : (
         <div className="card overflow-x-auto !p-0">
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="w-full min-w-[780px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-5 py-3.5">Date</th>
@@ -131,6 +197,7 @@ export default function Transactions() {
                 <th className="px-5 py-3.5">Description</th>
                 <th className="px-5 py-3.5">Opérateur</th>
                 <th className="px-5 py-3.5 text-right">Montant</th>
+                <th className="px-5 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -153,6 +220,19 @@ export default function Transactions() {
                         {formatMontant(t.montant)}
                       </span>
                     </td>
+                    <td className="px-5 py-3 text-right">
+                      {peutCorriger(t) && (
+                        <button
+                          type="button"
+                          className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                          title="Corriger le montant"
+                          onClick={() => ouvrirCorrection(t)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Corriger
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
@@ -160,6 +240,62 @@ export default function Transactions() {
           </table>
         </div>
       )}
+
+      <Modale
+        titre="Corriger le montant"
+        ouverte={txEdition !== null}
+        onFermer={() => setTxEdition(null)}
+      >
+        {txEdition && (
+          <form onSubmit={validerCorrection} className="space-y-4">
+            <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+              <p>
+                <span className="text-slate-500">Type :</span> {LIBELLES_TYPE[txEdition.type]}
+              </p>
+              <p className="mt-1 truncate">
+                <span className="text-slate-500">Opération :</span> {txEdition.description}
+              </p>
+              <p className="mt-1">
+                Montant actuel : <strong>{formatMontant(txEdition.montant)}</strong>
+              </p>
+            </div>
+            <div>
+              <label className="label">Nouveau montant (FCFA) *</label>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                required
+                autoFocus
+                value={nouveauMontant}
+                onChange={(e) => setNouveauMontant(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                Ex. corriger 30 000 en 3 000. La caisse et les soldes liés sont recalculés.
+              </p>
+            </div>
+            <div>
+              <label className="label">Motif (facultatif)</label>
+              <input
+                className="input"
+                value={motif}
+                onChange={(e) => setMotif(e.target.value)}
+                placeholder="Erreur de saisie…"
+              />
+            </div>
+            {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-secondary" onClick={() => setTxEdition(null)}>
+                Annuler
+              </button>
+              <button type="submit" className="btn-primary">
+                <Pencil className="h-4 w-4" />
+                Enregistrer
+              </button>
+            </div>
+          </form>
+        )}
+      </Modale>
     </div>
   )
 }

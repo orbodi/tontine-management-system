@@ -128,6 +128,11 @@ interface StoreApi {
   deposerCompte: (compteId: string, montant: number, note?: string) => Promise<string | null>
   retirerCompte: (compteId: string, montant: number, note?: string) => Promise<string | null>
   basculerVerrouCompte: (id: string) => Promise<void>
+  corrigerMontantTransaction: (
+    transactionId: string,
+    nouveauMontant: number,
+    motif?: string,
+  ) => Promise<string | null>
   demanderCredit: (c: {
     clientId: string
     montant: number
@@ -383,6 +388,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       async basculerVerrouCompte(id) {
         await muter('basculerVerrouCompte', { id })
+      },
+      async corrigerMontantTransaction(transactionId, nouveauMontant, motif) {
+        const res = await muter('corrigerMontantTransaction', {
+          transactionId,
+          nouveauMontant,
+          motif,
+        })
+        return res.erreur ?? null
       },
       async demanderCredit(c) {
         await muter('demanderCredit', c)

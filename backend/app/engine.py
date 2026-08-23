@@ -1611,6 +1611,297 @@ def regulariser_cumul_compte_caisse(d, u, p):
     return (None, d, {})
 
 
+TYPES_TX_MODIFIABLES = {
+    "depot_compte",
+    "retrait_compte",
+    "mise_tontine",
+    "retrait_tontine",
+    "commission_tontine",
+    "complement_mise",
+    "remboursement_credit",
+    "part_sociale",
+    "droit_adhesion",
+}
+
+
+def corriger_montant_transaction(d, u, p):
+    """Corrige le montant d'une transaction (ex. 30000 → 3000) et ajuste caisse / soldes liés."""
+    tx_id = p.get("transactionId") or p.get("id")
+    nouveau = float(p.get("nouveauMontant") or 0)
+    motif = (p.get("motif") or "").strip()
+    if nouveau <= 0:
+        return {"erreur": "Nouveau montant invalide."}
+
+    d = copy.deepcopy(d)
+    tx = next((t for t in d["transactions"] if t["id"] == tx_id), None)
+    if not tx:
+        return {"erreur": "Transaction introuvable."}
+    if tx["type"] not in TYPES_TX_MODIFIABLES:
+        return {"erreur": f"Ce type d'opération ({tx['type']}) ne peut pas être modifié."}
+
+    # Droits : admin = toutes ; chef / caissier = uniquement les leurs
+    if _est_admin(u):
+        pass
+    elif _est_chef(u) or _est_caissier(u):
+        if tx.get("operateurId") != u["id"]:
+            return {"erreur": "Vous ne pouvez modifier que vos propres transactions."}
+        err = _verif_caisse(d, u)
+        if err:
+            return {"erreur": err}
+        jour_tx = (tx.get("date") or "")[:10]
+        if jour_tx and M.arret_caisse_du_jour(d["arretsCaisse"], u["id"], jour_tx):
+            return {"erreur": "Impossible : la journée de caisse de cette opération est déjà clôturée."}
+    else:
+        return {"erreur": "Droit insuffisant."}
+
+    ancien = float(tx["montant"])
+    if abs(nouveau - ancien) < 0.005:
+        return {"erreur": "Le montant est identique."}
+
+    diff = nouveau - ancien
+    typ = tx["type"]
+    client_id = tx.get("clientId")
+    date_tx = tx.get("date")
+
+    # Contrôles préalables selon le type
+    if typ in ("retrait_compte", "retrait_tontine") and diff > 0 and not _est_admin(u):
+        err2 = _verif_solde_sortie(d, u, diff)
+        if err2:
+            return {"erreur": err2}
+
+    if typ in ("mise_tontine", "commission_tontine"):
+        carnets = [c for c in d["carnets"] if c.get("clientId") == client_id]
+        ok_multiple = False
+        for carnet in carnets:
+            mise_unit = float(carnet["mise"])
+            if mise_unit > 0 and abs(nouveau % mise_unit) <= 1e-6:
+                ok_multiple = True
+                break
+        if carnets and not ok_multiple:
+            return {"erreur": "Le nouveau montant doit être un multiple de la mise du carnet."}
+
+    # Ajustement caisse via le mouvement lié
+    delta_ancien = M.delta_solde_operation_caisse(tx["type"], ancien)
+    delta_nouveau = M.delta_solde_operation_caisse(tx["type"], nouveau)
+    delta_caisse = delta_nouveau - delta_ancien
+
+    if delta_caisse != 0 and tx.get("operateurId"):
+        d = _ouvrir_compte_caisse_si_besoin(d, tx["operateurId"])
+        compte_caisse = M.compte_caisse_de(d["comptesCaisse"], tx["operateurId"])
+        if compte_caisse:
+            solde_apres = compte_caisse["solde"] + delta_caisse
+            if solde_apres < -0.005 and not _est_admin(u):
+                return {"erreur": "Correction impossible : solde de caisse insuffisant."}
+            d["comptesCaisse"] = [
+                {**c, "solde": solde_apres} if c["id"] == compte_caisse["id"] else c
+                for c in d["comptesCaisse"]
+            ]
+            mvt = next(
+                (
+                    m
+                    for m in d.get("mouvementsCompteCaisse") or []
+                    if m.get("transactionId") == tx_id
+                ),
+                None,
+            )
+            if mvt:
+                d["mouvementsCompteCaisse"] = [
+                    {
+                        **m,
+                        "montant": abs(delta_nouveau),
+                        "sens": "credit" if delta_nouveau >= 0 else "debit",
+                        "type": "entree_operation" if delta_nouveau >= 0 else "sortie_operation",
+                        "soldeApres": solde_apres,
+                        "description": (
+                            f"{m.get('description') or tx.get('description') or ''} "
+                            f"[corrigé {int(ancien)}→{int(nouveau)}]"
+                        ).strip(),
+                    }
+                    if m.get("transactionId") == tx_id
+                    else m
+                    for m in d["mouvementsCompteCaisse"]
+                ]
+            else:
+                d["mouvementsCompteCaisse"] = [
+                    {
+                        "id": uid(),
+                        "compteCaisseId": compte_caisse["id"],
+                        "employeId": tx["operateurId"],
+                        "type": "entree_operation" if delta_caisse > 0 else "sortie_operation",
+                        "montant": abs(delta_caisse),
+                        "sens": "credit" if delta_caisse > 0 else "debit",
+                        "soldeApres": solde_apres,
+                        "date": M.maintenant(),
+                        "description": f"Correction transaction ({int(ancien)}→{int(nouveau)})",
+                        "transactionId": tx_id,
+                        "operateurId": u["id"],
+                        "operateurNom": u["nomComplet"],
+                    },
+                    *d["mouvementsCompteCaisse"],
+                ]
+
+    # Effets métier par type
+    if typ in ("depot_compte", "droit_adhesion"):
+        comptes_client = [c for c in d["comptes"] if c.get("clientId") == client_id]
+        cible = None
+        for c in comptes_client:
+            for mv in d["mouvements"]:
+                if (
+                    mv["compteId"] == c["id"]
+                    and mv.get("date") == date_tx
+                    and abs(float(mv["montant"]) - ancien) < 0.005
+                    and mv["type"] == "depot"
+                ):
+                    cible = c
+                    break
+            if cible:
+                break
+        if not cible and comptes_client:
+            cible = next((c for c in comptes_client if c["type"] == "courant"), comptes_client[0])
+        if cible:
+            nouveau_solde = float(cible["solde"]) + diff
+            if nouveau_solde < -0.005:
+                return {"erreur": "Correction impossible : solde du compte client insuffisant."}
+            d["comptes"] = [
+                {**c, "solde": nouveau_solde} if c["id"] == cible["id"] else c for c in d["comptes"]
+            ]
+            d["mouvements"] = [
+                {
+                    **mv,
+                    "montant": nouveau,
+                    "note": ((mv.get("note") or "") + f" [corrigé {int(ancien)}→{int(nouveau)}]").strip(),
+                }
+                if (
+                    mv["compteId"] == cible["id"]
+                    and mv.get("date") == date_tx
+                    and abs(float(mv["montant"]) - ancien) < 0.005
+                    and mv["type"] == "depot"
+                )
+                else mv
+                for mv in d["mouvements"]
+            ]
+
+    elif typ == "retrait_compte":
+        comptes_client = [c for c in d["comptes"] if c.get("clientId") == client_id]
+        cible = None
+        for c in comptes_client:
+            for mv in d["mouvements"]:
+                if (
+                    mv["compteId"] == c["id"]
+                    and mv.get("date") == date_tx
+                    and abs(float(mv["montant"]) - ancien) < 0.005
+                    and mv["type"] == "retrait"
+                ):
+                    cible = c
+                    break
+            if cible:
+                break
+        if not cible and comptes_client:
+            cible = comptes_client[0]
+        if cible:
+            nouveau_solde = float(cible["solde"]) - diff
+            if nouveau_solde < -0.005:
+                return {"erreur": "Correction impossible : solde du compte client insuffisant."}
+            d["comptes"] = [
+                {**c, "solde": nouveau_solde} if c["id"] == cible["id"] else c for c in d["comptes"]
+            ]
+            d["mouvements"] = [
+                {**mv, "montant": nouveau}
+                if (
+                    mv["compteId"] == cible["id"]
+                    and mv.get("date") == date_tx
+                    and abs(float(mv["montant"]) - ancien) < 0.005
+                    and mv["type"] == "retrait"
+                )
+                else mv
+                for mv in d["mouvements"]
+            ]
+
+    elif typ in ("mise_tontine", "commission_tontine", "complement_mise"):
+        carnets = [c for c in d["carnets"] if c.get("clientId") == client_id]
+        mise_cible = None
+        for carnet in carnets:
+            for mi in d["mises"]:
+                if (
+                    mi["carnetId"] == carnet["id"]
+                    and mi.get("date") == date_tx
+                    and abs(float(mi["montant"]) - ancien) < 0.005
+                    and float(mi["nombreMises"]) >= 0
+                ):
+                    mise_cible = (carnet, mi)
+                    break
+            if mise_cible:
+                break
+        if mise_cible:
+            carnet, mi = mise_cible
+            if typ == "complement_mise":
+                d["mises"] = [
+                    {**m, "montant": nouveau} if m["id"] == mi["id"] else m for m in d["mises"]
+                ]
+            else:
+                mise_unit = float(carnet["mise"])
+                n = int(round(nouveau / mise_unit)) if mise_unit else 0
+                if n <= 0:
+                    return {"erreur": "Nombre de carreaux invalide."}
+                d["mises"] = [
+                    {**m, "montant": nouveau, "nombreMises": n} if m["id"] == mi["id"] else m
+                    for m in d["mises"]
+                ]
+
+    elif typ == "retrait_tontine":
+        carnets = [c for c in d["carnets"] if c.get("clientId") == client_id]
+        mise_cible = None
+        for carnet in carnets:
+            for mi in d["mises"]:
+                if (
+                    mi["carnetId"] == carnet["id"]
+                    and mi.get("date") == date_tx
+                    and abs(float(mi["montant"]) + ancien) < 0.005
+                    and float(mi["nombreMises"]) < 0
+                ):
+                    mise_cible = (carnet, mi)
+                    break
+            if mise_cible:
+                break
+        if mise_cible:
+            carnet, mi = mise_cible
+            mise_unit = float(carnet["mise"])
+            n = int(round(nouveau / mise_unit)) if mise_unit else 0
+            if n <= 0:
+                return {"erreur": "Nombre de carreaux invalide."}
+            d["mises"] = [
+                {**m, "montant": -nouveau, "nombreMises": -n} if m["id"] == mi["id"] else m
+                for m in d["mises"]
+            ]
+
+    elif typ == "remboursement_credit":
+        remb = next(
+            (
+                r
+                for r in d["remboursements"]
+                if r.get("date") == date_tx and abs(float(r["montant"]) - ancien) < 0.005
+            ),
+            None,
+        )
+        if remb:
+            d["remboursements"] = [
+                {**r, "montant": nouveau} if r["id"] == remb["id"] else r for r in d["remboursements"]
+            ]
+
+    note_corr = f" [corrigé {int(ancien)}→{int(nouveau)}" + (f" — {motif}" if motif else "") + "]"
+    d["transactions"] = [
+        {
+            **t,
+            "montant": nouveau,
+            "description": (t.get("description") or "") + note_corr,
+        }
+        if t["id"] == tx_id
+        else t
+        for t in d["transactions"]
+    ]
+    return (None, d, {"ancienMontant": ancien, "nouveauMontant": nouveau})
+
+
 ACTIONS = {
     "ajouterAgence": ajouter_agence,
     "modifierAgence": modifier_agence,
@@ -1637,6 +1928,7 @@ ACTIONS = {
     "deposerCompte": deposer_compte,
     "retirerCompte": retirer_compte,
     "basculerVerrouCompte": basculer_verrou_compte,
+    "corrigerMontantTransaction": corriger_montant_transaction,
     "demanderCredit": demander_credit,
     "approuverCredit": approuver_credit,
     "rejeterCredit": rejeter_credit,

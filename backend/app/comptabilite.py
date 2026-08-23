@@ -294,23 +294,53 @@ def poster_transaction_auto(
     return err
 
 
+def actualiser_ecriture_transaction(db: Session, tx: dict[str, Any]) -> None:
+    """Met à jour le montant d'une écriture auto liée à une transaction corrigée."""
+    ensure_comptabilite_seed(db)
+    exist = (
+        db.query(m.EcritureComptable)
+        .filter_by(source_type="transaction", source_id=tx.get("id"))
+        .first()
+    )
+    if not exist:
+        return
+    montant = float(tx.get("montant") or 0)
+    if montant <= 0:
+        return
+    exist.libelle = (tx.get("description") or exist.libelle or "")[:500]
+    lignes = db.query(m.LigneEcriture).filter_by(ecriture_id=exist.id).all()
+    for lig in lignes:
+        if float(lig.debit or 0) > 0:
+            lig.debit = montant
+            lig.credit = 0
+        elif float(lig.credit or 0) > 0:
+            lig.credit = montant
+            lig.debit = 0
+    db.commit()
+
+
 def sync_auto_from_state(db: Session, data: dict[str, Any], user: dict[str, Any] | None = None) -> None:
     """Poste les transactions / mouvements caisse non encore comptabilisés."""
     ensure_comptabilite_seed(db)
-    comptes_by_id = {c["id"]: c for c in data.get("comptes", [])}
     for tx in data.get("transactions", []):
         exist = (
             db.query(m.EcritureComptable)
             .filter_by(source_type="transaction", source_id=tx["id"])
             .first()
         )
-        if exist:
-            continue
         type_compte = None
-        # Heuristique : si description mentionne épargne ou client a un compte épargne lié
         desc = (tx.get("description") or "").lower()
         if "épargne" in desc or "epargne" in desc:
             type_compte = "epargne"
+        if exist:
+            montant = float(tx.get("montant") or 0)
+            total_d = sum(
+                float(l.debit or 0)
+                for l in db.query(m.LigneEcriture).filter_by(ecriture_id=exist.id).all()
+            )
+            if abs(total_d - montant) > 0.005:
+                actualiser_ecriture_transaction(db, tx)
+            continue
         poster_transaction_auto(
             db,
             tx,
