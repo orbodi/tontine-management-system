@@ -9,19 +9,15 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import Base, SessionLocal, engine
 from . import models  # noqa: F401
-from .repository import get_employe_by_identifiant
 from .routers import auth_router, data_router
 
 
-def _ensure_seed() -> None:
-    if not settings.seed_demo_on_startup:
-        return
+def _ensure_startup_data() -> None:
     db: Session = SessionLocal()
     try:
-        if get_employe_by_identifiant(db, "admin") is None:
-            from .seed import seed_database
+        from .seed import ensure_startup_data
 
-            seed_database(db)
+        ensure_startup_data(db)
     finally:
         db.close()
 
@@ -29,7 +25,7 @@ def _ensure_seed() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    _ensure_seed()
+    _ensure_startup_data()
     yield
 
 
@@ -37,7 +33,7 @@ def create_app() -> FastAPI:
     application = FastAPI(title=settings.app_name, lifespan=lifespan)
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=settings.cors_origin_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -47,7 +43,12 @@ def create_app() -> FastAPI:
 
     @application.get("/api/health")
     def health():
-        return {"ok": True, "service": settings.app_name}
+        return {
+            "ok": True,
+            "service": settings.app_name,
+            "seed_demo_on_startup": settings.seed_demo_on_startup,
+            "create_default_accounts": settings.create_default_accounts,
+        }
 
     return application
 

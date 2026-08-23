@@ -61,7 +61,8 @@ npm run preview
 
 ## Notes techniques
 
-- **Persistance** : SQLite (`backend/data/app.db`), seed automatique au premier démarrage
+- **Config** : `backend/.env` (copier depuis `backend/.env.example`) — seed démo, comptes par défaut, `SECRET_KEY`, etc.
+- **Persistance** : SQLite (`backend/data/app.db`)
 - **Auth** : JWT Bearer, mots de passe hashés (bcrypt)
-- **Branche** : développement API sur `dev`
-- Le bouton « Réinitialiser les données de démo » (admin) appelle `POST /api/admin/reinitialiser-demo`
+- **Branches** : `dev` (seed démo possible) · `prod` (comptes par défaut sans jeu démo)
+- Réinit démo admin : `POST /api/admin/reinitialiser-demo`

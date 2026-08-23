@@ -1,0 +1,32 @@
+Gestion de la comptabilité de l'entrprise
+
+La gestion  comptable doit permat d'enregistrer les operations effectuer
+ie les entrées et les sortie durant un exercice comptable(une année), doit 
+gerer la comptabilité generale, les epargnes, les tonines, etc
+
+La comptabilité generale est composé comme suit :
+- le Bilan initial : Bilan du debut d'exercice (actif entrée)
+exemple :
+actif                                           montant         Passif          montan
+- Immobilisation                                                Capitaux propore
+- Matériel informatique                                             - capital social
+- Mobilisation de bureau                                            - reserve
+- Logiciel de gestion
+- etc
+
+Total actif
+
+
+N.B : Total actif doit etre egal au total passif
+
+
+- Plan comptable
+
+- Journaux comptables:
+    - Journal de caisse
+    - journal de banque
+    - journal de achat et charge
+    - journal des opérations diverses
+
+- le grang livre
+- la balance generale
