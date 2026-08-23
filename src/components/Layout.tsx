@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { useMemo, useRef, useState } from 'react'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
   ArrowLeftRight,
   Banknote,
@@ -22,6 +22,12 @@ import {
 } from 'lucide-react'
 import { MODULE_CREDITS_ACTIF, LOGO_URL, NOM_APPLICATION, SOUS_TITRE_APPLICATION } from '../config'
 import { LIBELLES_ROLE, useStore } from '../store'
+import {
+  aujourdHuiIso,
+  messageBlocageCaisseJournaliere,
+  ouvertureCaisseDuJour,
+  arretCaisseDuJour,
+} from '../metier'
 import { useConfirmation } from './Confirmation'
 
 export default function Layout() {
@@ -29,11 +35,47 @@ export default function Layout() {
   const [exportEnCours, setExportEnCours] = useState(false)
   const [importEnCours, setImportEnCours] = useState(false)
   const inputImportRef = useRef<HTMLInputElement>(null)
-  const { data, employeConnecte, deconnexion, estAdmin, estChefAgence, aDroit, exporterSauvegardeCsv, importerSauvegardeCsv } =
-    useStore()
+  const {
+    data,
+    employeConnecte,
+    deconnexion,
+    estAdmin,
+    estChefAgence,
+    estCaissier,
+    aDroit,
+    agenceFiltreOperations,
+    exporterSauvegardeCsv,
+    importerSauvegardeCsv,
+  } = useStore()
   const { alerter, confirmer } = useConfirmation()
 
   const agence = data.agences.find((a) => a.id === employeConnecte?.agenceId)
+  const aujourdhui = aujourdHuiIso()
+
+  const caissesSansOuvertureJour = useMemo(() => {
+    return data.employes
+      .filter((e) => e.actif && (e.role === 'caissier' || e.role === 'chef_agence'))
+      .filter((e) => !agenceFiltreOperations || e.agenceId === agenceFiltreOperations)
+      .filter((e) => {
+        const ouverte = !!ouvertureCaisseDuJour(data.ouverturesCaisse ?? [], e.id, aujourdhui)
+        const cloturee = !!arretCaisseDuJour(data.arretsCaisse, e.id, aujourdhui)
+        return !ouverte && !cloturee
+      })
+      .sort((a, b) => a.nomComplet.localeCompare(b.nomComplet))
+  }, [data.employes, data.ouverturesCaisse, data.arretsCaisse, agenceFiltreOperations, aujourdhui])
+
+  const monBlocageCaisse =
+    employeConnecte && (estCaissier || estChefAgence)
+      ? messageBlocageCaisseJournaliere(
+          employeConnecte.id,
+          data.transactions,
+          data.arretsCaisse,
+          data.ouverturesCaisse ?? [],
+        )
+      : null
+
+  const afficherAlerteCaisse =
+    !!monBlocageCaisse || ((estAdmin || estChefAgence) && caissesSansOuvertureJour.length > 0)
 
   const liens = [
     { to: '/', label: 'Tableau de bord', icon: LayoutDashboard },
@@ -248,6 +290,33 @@ export default function Layout() {
       {/* Contenu */}
       <main className="flex-1 lg:ml-64 print:ml-0">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
+          {afficherAlerteCaisse && (
+            <div className="mb-6 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950 ring-1 ring-amber-200 print:hidden">
+              <p className="font-semibold">Ouverture de journée de caisse requise</p>
+              <p className="mt-1">
+                Les dépôts tontine, opérations de compte et autres encaissements ne sont possibles
+                pour un caissier (ou chef d’agence) qu’après ouverture de sa journée de caisse par
+                l’admin ou le chef d’agence.
+              </p>
+              {monBlocageCaisse && (
+                <p className="mt-2 font-medium text-rose-800">{monBlocageCaisse}</p>
+              )}
+              {(estAdmin || estChefAgence) && caissesSansOuvertureJour.length > 0 && (
+                <p className="mt-2">
+                  Caisse(s) non ouverte(s) aujourd’hui ({aujourdhui}) :{' '}
+                  <strong>
+                    {caissesSansOuvertureJour.map((e) => e.nomComplet).join(', ')}
+                  </strong>
+                </p>
+              )}
+              <Link
+                to="/caisse"
+                className="mt-2 inline-flex font-semibold text-brand-700 hover:text-brand-800"
+              >
+                {estAdmin || estChefAgence ? 'Ouvrir les caisses →' : 'Voir ma caisse →'}
+              </Link>
+            </div>
+          )}
           <Outlet />
         </div>
       </main>
