@@ -142,6 +142,9 @@ class Compte(Base):
     solde: Mapped[float] = mapped_column(Float, default=0)
     date_ouverture: Mapped[str] = mapped_column(String)
     verrouille: Mapped[bool] = mapped_column(Boolean, default=False)
+    part_sociale: Mapped[float] = mapped_column(Float, default=0)
+    droit_adhesion: Mapped[float] = mapped_column(Float, default=0)
+    promotion: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class MouvementCompte(Base):

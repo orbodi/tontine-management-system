@@ -22,6 +22,19 @@ def get_data(
     return load_state(db, include_password_hashes=False)
 
 
+@router.get("/parametres/ouverture-compte")
+def parametres_ouverture_compte(
+    user: Annotated[dict[str, Any], Depends(current_employe)],
+) -> dict[str, Any]:
+    from ..config import settings
+
+    return {
+        "partSociale": settings.part_sociale_montant,
+        "droitAdhesion": settings.droit_adhesion_montant,
+        "droitAdhesionPromo": settings.droit_adhesion_promo_montant,
+    }
+
+
 class MutationBody(BaseModel):
     payload: dict[str, Any] = {}
 

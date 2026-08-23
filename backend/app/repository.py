@@ -201,6 +201,9 @@ def replace_state(db: Session, data: dict[str, Any], *, hash_plain_passwords: bo
                 solde=c.get("solde", 0),
                 date_ouverture=c["dateOuverture"],
                 verrouille=c.get("verrouille", False),
+                part_sociale=float(c.get("partSociale") or 0),
+                droit_adhesion=float(c.get("droitAdhesion") or 0),
+                promotion=bool(c.get("promotion") or False),
             )
         )
 
@@ -520,6 +523,9 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "solde": c.solde,
                 "dateOuverture": c.date_ouverture,
                 "verrouille": c.verrouille,
+                "partSociale": getattr(c, "part_sociale", 0) or 0,
+                "droitAdhesion": getattr(c, "droit_adhesion", 0) or 0,
+                "promotion": bool(getattr(c, "promotion", False)),
             }
             for c in db.query(m.Compte).all()
         ],

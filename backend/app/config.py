@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     caisse_password: str = "caisse123"
     caisse_nom: str = "Caissier"
 
+    # Frais d'ouverture compte courant / épargne (FCFA)
+    part_sociale_montant: float = 5000
+    droit_adhesion_montant: float = 2500
+    droit_adhesion_promo_montant: float = 500
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def cors_origin_list(self) -> list[str]:

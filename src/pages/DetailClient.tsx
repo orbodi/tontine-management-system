@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -50,10 +50,32 @@ export default function DetailClient() {
   const [mise, setMise] = useState('')
   const [frequence, setFrequence] = useState<FrequenceMise>('journaliere')
   const [typeCompte, setTypeCompte] = useState<TypeCompte>('courant')
+  const [promoCompte, setPromoCompte] = useState(false)
+  const [fraisCompte, setFraisCompte] = useState({
+    partSociale: 5000,
+    droitAdhesion: 2500,
+    droitAdhesionPromo: 500,
+  })
   const [erreur, setErreur] = useState('')
 
   const client = data.clients.find((c) => c.id === id)
   const peutOperer = aDroit('operer_comptes')
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { apiFetch } = await import('../api/client')
+        const p = await apiFetch<{
+          partSociale: number
+          droitAdhesion: number
+          droitAdhesionPromo: number
+        }>('/api/parametres/ouverture-compte')
+        setFraisCompte(p)
+      } catch {
+        /* gardes les défauts */
+      }
+    })()
+  }, [])
 
   const activite = useMemo(() => {
     if (!client) return null
@@ -136,7 +158,7 @@ export default function DetailClient() {
 
   const creerCompte = async (e: React.FormEvent) => {
     e.preventDefault()
-    const resultat = await ouvrirCompte(client.id, typeCompte)
+    const resultat = await ouvrirCompte(client.id, typeCompte, promoCompte)
     if ('erreur' in resultat) {
       setErreur(resultat.erreur)
       await alerter('Ouverture impossible', resultat.erreur)
@@ -144,9 +166,14 @@ export default function DetailClient() {
     }
     setModaleCompte(false)
     setErreur('')
+    setPromoCompte(false)
+    const droit = promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion
     await alerter(
       'Compte ouvert',
-      `Le compte ${resultat.numero} (${typeCompte === 'courant' ? 'courant' : 'épargne'}) a été ouvert pour ${client.prenom} ${client.nom}.`,
+      `Compte ${resultat.numero} (${typeCompte === 'courant' ? 'courant' : 'épargne'}).\n` +
+        `Part sociale : ${formatMontant(fraisCompte.partSociale)} (microfinance)\n` +
+        `Droit d'adhésion : ${formatMontant(droit)} (crédité sur le compte)\n` +
+        `Total encaissé : ${formatMontant(fraisCompte.partSociale + droit)}`,
     )
   }
 
@@ -182,6 +209,7 @@ export default function DetailClient() {
                 onClick={() => {
                   setErreur('')
                   setTypeCompte('courant')
+                  setPromoCompte(false)
                   setModaleCompte(true)
                 }}
               >
@@ -543,6 +571,37 @@ export default function DetailClient() {
               <option value="courant">Compte courant (n° Bxxxx)</option>
               <option value="epargne">Compte épargne (n° Bxxxx)</option>
             </select>
+          </div>
+          <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={promoCompte}
+              onChange={(e) => setPromoCompte(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium text-slate-900">Promotion — droit d’adhésion réduit</span>
+              <span className="mt-0.5 block text-xs text-slate-500">
+                {formatMontant(fraisCompte.droitAdhesionPromo)} au lieu de {formatMontant(fraisCompte.droitAdhesion)}
+              </span>
+            </span>
+          </label>
+          <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+            <p className="font-medium text-slate-900">À encaisser en caisse</p>
+            <ul className="mt-2 space-y-1 text-xs">
+              <li>Part sociale (microfinance) : {formatMontant(fraisCompte.partSociale)}</li>
+              <li>
+                Droit d’adhésion (crédité sur le compte) :{' '}
+                {formatMontant(promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion)}
+              </li>
+              <li className="font-semibold text-slate-900">
+                Total :{' '}
+                {formatMontant(
+                  fraisCompte.partSociale +
+                    (promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion),
+                )}
+              </li>
+            </ul>
           </div>
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
           <div className="flex justify-end gap-2">

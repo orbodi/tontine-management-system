@@ -28,6 +28,8 @@ export const LIBELLES_TYPE: Record<TypeTransaction, string> = {
   retrait_compte: 'Retrait',
   octroi_credit: 'Octroi de crédit',
   remboursement_credit: 'Remboursement crédit',
+  part_sociale: 'Part sociale',
+  droit_adhesion: "Droit d'adhésion",
 }
 
 export const TYPES_SORTIE: TypeTransaction[] = ['retrait_tontine', 'retrait_compte', 'octroi_credit']
@@ -42,6 +44,8 @@ export const TYPES_OPERATION_CAISSE: TypeTransaction[] = [
   'retrait_compte',
   'octroi_credit',
   'remboursement_credit',
+  'part_sociale',
+  'droit_adhesion',
 ]
 
 export function estOperationCaisse(type: TypeTransaction): boolean {

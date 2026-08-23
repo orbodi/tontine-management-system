@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowDownToLine,
@@ -48,6 +48,12 @@ export default function Comptes() {
   const [modaleOuverture, setModaleOuverture] = useState(false)
   const [clientPourCompte, setClientPourCompte] = useState('')
   const [typeNouveauCompte, setTypeNouveauCompte] = useState<TypeCompte>('courant')
+  const [promoCompte, setPromoCompte] = useState(false)
+  const [fraisCompte, setFraisCompte] = useState({
+    partSociale: 5000,
+    droitAdhesion: 2500,
+    droitAdhesionPromo: 500,
+  })
   const [operation, setOperation] = useState<Operation | null>(null)
   const [montantOp, setMontantOp] = useState('')
   const [noteOp, setNoteOp] = useState('')
@@ -56,6 +62,22 @@ export default function Comptes() {
   const { confirmer, alerter } = useConfirmation()
   const peutOperer = aDroit('operer_comptes')
   const peutVerrouiller = aDroit('verrouiller_comptes')
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { apiFetch } = await import('../api/client')
+        const p = await apiFetch<{
+          partSociale: number
+          droitAdhesion: number
+          droitAdhesionPromo: number
+        }>('/api/parametres/ouverture-compte')
+        setFraisCompte(p)
+      } catch {
+        /* défauts */
+      }
+    })()
+  }, [])
 
   const clientDuCompte = (c: Compte) => data.clients.find((x) => x.id === c.clientId)
 
@@ -326,16 +348,23 @@ export default function Comptes() {
             onSubmit={async (e) => {
               e.preventDefault()
               if (!clientPourCompte) return
-              const resultat = await ouvrirCompte(clientPourCompte, typeNouveauCompte)
+              const resultat = await ouvrirCompte(clientPourCompte, typeNouveauCompte, promoCompte)
               if ('erreur' in resultat) {
                 setErreur(resultat.erreur)
                 await alerter('Ouverture impossible', resultat.erreur)
                 return
               }
+              const droit = promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion
               setModaleOuverture(false)
               setClientPourCompte('')
+              setPromoCompte(false)
               setErreur('')
-              await alerter('Compte ouvert', `Le compte ${resultat.numero} a été ouvert avec succès.`)
+              await alerter(
+                'Compte ouvert',
+                `Compte ${resultat.numero}.\nPart sociale : ${formatMontant(fraisCompte.partSociale)}\n` +
+                  `Droit d'adhésion : ${formatMontant(droit)} (crédité)\n` +
+                  `Total encaissé : ${formatMontant(fraisCompte.partSociale + droit)}`,
+              )
             }}
             className="space-y-4"
           >
@@ -369,7 +398,40 @@ export default function Comptes() {
                 ))}
               </select>
               <p className="mt-1 text-xs text-slate-400">
-                Un client peut avoir plusieurs comptes courant ou épargne.
+                Frais dus à chaque ouverture (part sociale + droit d’adhésion).
+              </p>
+            </div>
+            <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={promoCompte}
+                onChange={(e) => setPromoCompte(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium text-slate-900">Promotion — droit d’adhésion réduit</span>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  {formatMontant(fraisCompte.droitAdhesionPromo)} au lieu de{' '}
+                  {formatMontant(fraisCompte.droitAdhesion)}
+                </span>
+              </span>
+            </label>
+            <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-700">
+              <p>
+                Part sociale (microfinance) : <strong>{formatMontant(fraisCompte.partSociale)}</strong>
+              </p>
+              <p>
+                Droit d’adhésion (sur le compte) :{' '}
+                <strong>
+                  {formatMontant(promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion)}
+                </strong>
+              </p>
+              <p className="mt-1 font-semibold">
+                Total caisse :{' '}
+                {formatMontant(
+                  fraisCompte.partSociale +
+                    (promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion),
+                )}
               </p>
             </div>
             {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}

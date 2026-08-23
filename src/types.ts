@@ -193,6 +193,11 @@ export interface Compte {
   solde: number
   dateOuverture: string
   verrouille: boolean
+  /** Part sociale versée à la microfinance à l'ouverture. */
+  partSociale?: number
+  /** Droit d'adhésion crédité sur le compte. */
+  droitAdhesion?: number
+  promotion?: boolean
 }
 
 export type TypeMouvement = 'depot' | 'retrait'
@@ -362,6 +367,8 @@ export type TypeTransaction =
   | 'retrait_compte'
   | 'octroi_credit'
   | 'remboursement_credit'
+  | 'part_sociale'
+  | 'droit_adhesion'
 
 export interface Transaction {
   id: string

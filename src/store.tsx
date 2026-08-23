@@ -114,6 +114,7 @@ interface StoreApi {
   ouvrirCompte: (
     clientId: string,
     type: TypeCompte,
+    promotion?: boolean,
   ) => Promise<{ id: string; numero: string } | { erreur: string }>
   deposerCompte: (compteId: string, montant: number, note?: string) => Promise<string | null>
   retirerCompte: (compteId: string, montant: number, note?: string) => Promise<string | null>
@@ -333,10 +334,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const res = await muter('basculerRetraitCarnetAdmin', { id })
         return res.erreur ?? null
       },
-      async ouvrirCompte(clientId, type) {
-        const res = await muter('ouvrirCompte', { clientId, type })
+      async ouvrirCompte(clientId, type, promotion = false) {
+        const res = await muter('ouvrirCompte', { clientId, type, promotion })
         if (res.erreur) return { erreur: res.erreur }
-        if (res.id && res.numero) return { id: res.id, numero: res.numero }
+        if (res.id && res.numero) return { id: res.id, numero: res.numero, ...res }
         return { erreur: 'Ouverture impossible.' }
       },
       async deposerCompte(compteId, montant, note) {

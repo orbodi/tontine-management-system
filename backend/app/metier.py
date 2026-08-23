@@ -14,6 +14,8 @@ TYPES_OPERATION_CAISSE = [
     "retrait_compte",
     "octroi_credit",
     "remboursement_credit",
+    "part_sociale",
+    "droit_adhesion",
 ]
 CARNETS_RETRAIT_6_MOIS = ["carte_enfants", "carte_bloquee"]
 PRIX_CARNET = 300

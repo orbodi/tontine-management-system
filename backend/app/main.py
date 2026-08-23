@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .db import Base, SessionLocal, engine
+from .db import Base, SessionLocal, engine, migrate_schema
 from . import models  # noqa: F401
 from .routers import auth_router, data_router, comptabilite_router
 
@@ -27,6 +27,7 @@ def _ensure_startup_data() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    migrate_schema()
     _ensure_startup_data()
     yield
 

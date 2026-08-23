@@ -35,6 +35,9 @@ MAPPINGS_DEFAUT = [
     ("alimenter_caisse", "OD", "571", "521", "Alimentation de caisse depuis banque"),
     ("manquant_caisse", "OD", "6589", "571", "Manquant de caisse"),
     ("surplus_caisse", "OD", "571", "7589", "Surplus de caisse"),
+    ("part_sociale", "CAISSE", "571", "1013", "Part sociale adhérent"),
+    ("droit_adhesion", "CAISSE", "571", "4671", "Droit d'adhésion crédité compte client"),
+    ("droit_adhesion_epargne", "CAISSE", "571", "4672", "Droit d'adhésion crédité compte épargne"),
 ]
 
 
@@ -260,6 +263,8 @@ def poster_transaction_auto(
         typ = "depot_compte_epargne"
     elif typ == "retrait_compte" and type_compte == "epargne":
         typ = "retrait_compte_epargne"
+    elif typ == "droit_adhesion" and type_compte == "epargne":
+        typ = "droit_adhesion_epargne"
 
     mapping = db.query(m.MappingEcriture).filter_by(type_operation=typ, actif=True).first()
     if not mapping:

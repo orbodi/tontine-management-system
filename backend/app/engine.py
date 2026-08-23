@@ -801,8 +801,18 @@ def basculer_retrait_carnet_admin(d, u, p):
 def ouvrir_compte(d, u, p):
     if _est_caissier(u):
         return {"erreur": "Un caissier ne peut pas ouvrir un compte courant ou epargne."}
+    err = _verif_caisse(d, u)
+    if err:
+        return {"erreur": err}
     client_id = p["clientId"]
     type_ = p.get("type", "courant")
+    promotion = bool(p.get("promotion") or False)
+    from .config import settings
+
+    part_sociale = float(settings.part_sociale_montant)
+    droit = float(
+        settings.droit_adhesion_promo_montant if promotion else settings.droit_adhesion_montant
+    )
     client = next((c for c in d["clients"] if c["id"] == client_id), None)
     if not client:
         return {"erreur": "Client introuvable."}
@@ -810,6 +820,7 @@ def ouvrir_compte(d, u, p):
     ordre = int(d["compteurs"].get("compte", 0)) + 1
     cid = uid()
     numero = numero_compte_solde(ordre)
+    date = M.maintenant()
     d["compteurs"] = {**d["compteurs"], "compte": ordre}
     d["comptes"].append(
         {
@@ -817,12 +828,56 @@ def ouvrir_compte(d, u, p):
             "clientId": client_id,
             "type": type_,
             "numero": numero,
-            "solde": 0,
-            "dateOuverture": M.maintenant(),
+            "solde": droit,
+            "dateOuverture": date,
             "verrouille": False,
+            "partSociale": part_sociale,
+            "droitAdhesion": droit,
+            "promotion": promotion,
         }
     )
-    return {"data": d, "id": cid, "numero": numero}
+    d["mouvements"].append(
+        {
+            "id": uid(),
+            "compteId": cid,
+            "type": "depot",
+            "montant": droit,
+            "date": date,
+            "note": f"Droit d'adhésion{' (promo)' if promotion else ''}",
+        }
+    )
+    txs = [
+        _mk_tx(
+            u,
+            {
+                "type": "part_sociale",
+                "clientId": client_id,
+                "montant": part_sociale,
+                "date": date,
+                "description": f"Part sociale ouverture {numero} ({type_}) — {_nom_client(d, client_id)}",
+            },
+        ),
+        _mk_tx(
+            u,
+            {
+                "type": "droit_adhesion",
+                "clientId": client_id,
+                "montant": droit,
+                "date": date,
+                "description": f"Droit d'adhésion{' promo' if promotion else ''} {numero} ({type_}) — {_nom_client(d, client_id)} (crédité sur le compte)",
+            },
+        ),
+    ]
+    d = _enregistrer_tx(d, txs)
+    return {
+        "data": d,
+        "id": cid,
+        "numero": numero,
+        "partSociale": part_sociale,
+        "droitAdhesion": droit,
+        "totalEncaisse": part_sociale + droit,
+        "promotion": promotion,
+    }
 
 
 def deposer_compte(d, u, p):
