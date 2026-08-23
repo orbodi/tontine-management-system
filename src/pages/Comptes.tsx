@@ -39,6 +39,8 @@ export default function Comptes() {
     estCaissier,
     employeConnecte,
     ouvrirCompte,
+    validerOuvertureCompte,
+    refuserOuvertureCompte,
     deposerCompte,
     retirerCompte,
     basculerVerrouCompte,
@@ -47,6 +49,7 @@ export default function Comptes() {
   const [typeFiltre, setTypeFiltre] = useState<'tous' | TypeCompte>('tous')
   const [modaleOuverture, setModaleOuverture] = useState(false)
   const [clientPourCompte, setClientPourCompte] = useState('')
+  const [caissierPourCompte, setCaissierPourCompte] = useState('')
   const [typeNouveauCompte, setTypeNouveauCompte] = useState<TypeCompte>('courant')
   const [promoCompte, setPromoCompte] = useState(false)
   const [fraisCompte, setFraisCompte] = useState({
@@ -97,6 +100,22 @@ export default function Comptes() {
   }, [data.comptes, data.clients, recherche, typeFiltre])
 
   const clientsActifs = () => data.clients.filter((c) => c.actif)
+
+  const caissiersDisponibles = useMemo(() => {
+    const client = data.clients.find((c) => c.id === clientPourCompte)
+    return data.employes
+      .filter((e) => e.actif && (e.role === 'caissier' || e.role === 'chef_agence'))
+      .filter((e) => !client?.agenceId || e.agenceId === client.agenceId)
+      .sort((a, b) => a.nomComplet.localeCompare(b.nomComplet))
+  }, [data.employes, data.clients, clientPourCompte])
+
+  const demandesEnAttente = useMemo(
+    () =>
+      (data.demandesOuvertureCompte ?? [])
+        .filter((d) => d.statut === 'en_attente')
+        .sort((a, b) => b.dateDemande.localeCompare(a.dateDemande)),
+    [data.demandesOuvertureCompte],
+  )
 
   const totalCourant = data.comptes.filter((c) => c.type === 'courant').reduce((s, c) => s + c.solde, 0)
   const totalEpargne = data.comptes.filter((c) => c.type === 'epargne').reduce((s, c) => s + c.solde, 0)
@@ -174,7 +193,17 @@ export default function Comptes() {
           action={
             peutOperer &&
             !estCaissier && (
-              <button className="btn-primary" onClick={() => setModaleOuverture(true)}>
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  setErreur('')
+                  setClientPourCompte('')
+                  setCaissierPourCompte('')
+                  setPromoCompte(false)
+                  setTypeNouveauCompte('courant')
+                  setModaleOuverture(true)
+                }}
+              >
                 <Plus className="h-4 w-4" />
                 Ouvrir un compte
               </button>
@@ -208,6 +237,88 @@ export default function Comptes() {
             ))}
           </div>
         </div>
+
+        {demandesEnAttente.length > 0 && !estCaissier && (
+          <div className="card mb-6 border-amber-200 bg-amber-50/50">
+            <h3 className="mb-3 font-semibold text-slate-900">
+              Ouvertures en attente de validation caisse ({demandesEnAttente.length})
+            </h3>
+            <div className="space-y-2">
+              {demandesEnAttente.map((d) => {
+                const client = data.clients.find((c) => c.id === d.clientId)
+                const caissier = data.employes.find((e) => e.id === d.caissierId)
+                const estAssigne = employeConnecte?.id === d.caissierId
+                return (
+                  <div
+                    key={d.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white px-3 py-2 text-sm ring-1 ring-amber-100"
+                  >
+                    <div>
+                      <p className="font-medium text-slate-900">
+                        {client ? `${client.prenom} ${client.nom}` : 'Client'} —{' '}
+                        {LIBELLES_COMPTE[d.type]}
+                        {d.promotion ? ' (promo)' : ''}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Caisse : {caissier?.nomComplet ?? '—'} — total{' '}
+                        {formatMontant(d.partSociale + d.droitAdhesion)} —{' '}
+                        {formatDateHeure(d.dateDemande)}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {estAssigne && (
+                        <button
+                          type="button"
+                          className="btn-primary !py-1.5 text-xs"
+                          onClick={async () => {
+                            const total = d.partSociale + d.droitAdhesion
+                            const ok = await confirmer({
+                              titre: 'Valider l’ouverture',
+                              message: `Confirmez l’encaissement de ${formatMontant(total)}. Le compte sera créé.`,
+                              labelValider: 'Valider et créer',
+                            })
+                            if (!ok) return
+                            const err = await validerOuvertureCompte(d.id)
+                            if (err) await alerter('Validation impossible', err)
+                            else
+                              await alerter(
+                                'Compte ouvert',
+                                `Compte créé. Total encaissé : ${formatMontant(total)}.`,
+                              )
+                          }}
+                        >
+                          Valider
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn-secondary !py-1.5 text-xs"
+                        onClick={async () => {
+                          const ok = await confirmer({
+                            titre: estAssigne ? 'Refuser la demande' : 'Annuler la demande',
+                            message: estAssigne
+                              ? 'Refuser cette demande d’ouverture ?'
+                              : 'Refuser / annuler cette demande d’ouverture ?',
+                            labelValider: estAssigne ? 'Refuser' : 'Annuler la demande',
+                            danger: true,
+                          })
+                          if (!ok) return
+                          const err = await refuserOuvertureCompte(
+                            d.id,
+                            estAssigne ? 'Refusée en caisse' : 'Annulée par le demandeur',
+                          )
+                          if (err) await alerter('Action impossible', err)
+                        }}
+                      >
+                        {estAssigne ? 'Refuser' : 'Annuler'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {comptesFiltres.length === 0 ? (
           <EtatVide
@@ -348,22 +459,35 @@ export default function Comptes() {
             onSubmit={async (e) => {
               e.preventDefault()
               if (!clientPourCompte) return
-              const resultat = await ouvrirCompte(clientPourCompte, typeNouveauCompte, promoCompte)
+              if (!caissierPourCompte) {
+                setErreur('Indiquez la caisse qui encaissera part sociale et droit d’adhésion.')
+                return
+              }
+              const resultat = await ouvrirCompte(
+                clientPourCompte,
+                typeNouveauCompte,
+                promoCompte,
+                caissierPourCompte,
+              )
               if ('erreur' in resultat) {
                 setErreur(resultat.erreur)
-                await alerter('Ouverture impossible', resultat.erreur)
+                await alerter('Demande impossible', resultat.erreur)
                 return
               }
               const droit = promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion
+              const caissier = data.employes.find((x) => x.id === caissierPourCompte)
               setModaleOuverture(false)
               setClientPourCompte('')
+              setCaissierPourCompte('')
               setPromoCompte(false)
               setErreur('')
               await alerter(
-                'Compte ouvert',
-                `Compte ${resultat.numero}.\nPart sociale : ${formatMontant(fraisCompte.partSociale)}\n` +
-                  `Droit d'adhésion : ${formatMontant(droit)} (crédité)\n` +
-                  `Total encaissé : ${formatMontant(fraisCompte.partSociale + droit)}`,
+                'Demande envoyée',
+                `Demande d’ouverture enregistrée.\n` +
+                  `Le compte sera créé après encaissement et validation par ${caissier?.nomComplet ?? 'le caissier'}.\n` +
+                  `Part sociale : ${formatMontant(fraisCompte.partSociale)}\n` +
+                  `Droit d'adhésion : ${formatMontant(droit)}\n` +
+                  `Total à encaisser : ${formatMontant(fraisCompte.partSociale + droit)}`,
               )
             }}
             className="space-y-4"
@@ -388,7 +512,10 @@ export default function Comptes() {
                 className="input"
                 required
                 value={clientPourCompte}
-                onChange={(e) => setClientPourCompte(e.target.value)}
+                onChange={(e) => {
+                  setClientPourCompte(e.target.value)
+                  setCaissierPourCompte('')
+                }}
               >
                 <option value="">— Choisir un client —</option>
                 {clientsActifs().map((c) => (
@@ -398,7 +525,28 @@ export default function Comptes() {
                 ))}
               </select>
               <p className="mt-1 text-xs text-slate-400">
-                Frais dus à chaque ouverture (part sociale + droit d’adhésion).
+                Frais dus à chaque ouverture (part sociale + droit d’adhésion), encaissés en caisse après
+                validation.
+              </p>
+            </div>
+            <div>
+              <label className="label">Caisse (encaissement) *</label>
+              <select
+                className="input"
+                required
+                value={caissierPourCompte}
+                onChange={(e) => setCaissierPourCompte(e.target.value)}
+                disabled={!clientPourCompte}
+              >
+                <option value="">— Choisir le caissier —</option>
+                {caissiersDisponibles.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nomComplet} ({e.role === 'chef_agence' ? 'chef agence' : 'caissier'})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-400">
+                Le compte n’est créé qu’après validation et encaissement par ce caissier.
               </p>
             </div>
             <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
@@ -445,7 +593,7 @@ export default function Comptes() {
               </button>
               <button type="submit" className="btn-primary">
                 <Wallet className="h-4 w-4" />
-                Ouvrir le compte
+                Envoyer la demande
               </button>
             </div>
           </form>

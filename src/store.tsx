@@ -51,6 +51,7 @@ const DATA_VIDE: AppData = {
   carnets: [],
   mises: [],
   comptes: [],
+  demandesOuvertureCompte: [],
   mouvements: [],
   credits: [],
   remboursements: [],
@@ -115,7 +116,10 @@ interface StoreApi {
     clientId: string,
     type: TypeCompte,
     promotion?: boolean,
-  ) => Promise<{ id: string; numero: string } | { erreur: string }>
+    caissierId?: string,
+  ) => Promise<{ id?: string; numero?: string; demandeId?: string; enAttente?: boolean } | { erreur: string }>
+  validerOuvertureCompte: (demandeId: string) => Promise<string | null>
+  refuserOuvertureCompte: (demandeId: string, motif?: string) => Promise<string | null>
   deposerCompte: (compteId: string, montant: number, note?: string) => Promise<string | null>
   retirerCompte: (compteId: string, montant: number, note?: string) => Promise<string | null>
   basculerVerrouCompte: (id: string) => Promise<void>
@@ -164,7 +168,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [chargement, setChargement] = useState(true)
 
   const appliquerData = useCallback((next: AppData) => {
-    setData(next)
+    setData({
+      ...DATA_VIDE,
+      ...next,
+      demandesOuvertureCompte: next.demandesOuvertureCompte ?? [],
+    })
     setEmployeConnecte((prev) => {
       if (!prev) return prev
       return next.employes.find((e) => e.id === prev.id && e.actif) ?? null
@@ -189,7 +197,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const next = await apiFetch<AppData>('/api/data')
         if (!cancelled) {
           setEmployeConnecte(me)
-          setData(next)
+          appliquerData(next)
         }
       } catch {
         setToken(null)
@@ -251,7 +259,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setToken(res.access_token)
           setEmployeConnecte(res.employe)
           const next = await apiFetch<AppData>('/api/data')
-          setData(next)
+          appliquerData(next)
           return true
         } catch {
           return false
@@ -334,11 +342,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const res = await muter('basculerRetraitCarnetAdmin', { id })
         return res.erreur ?? null
       },
-      async ouvrirCompte(clientId, type, promotion = false) {
-        const res = await muter('ouvrirCompte', { clientId, type, promotion })
+      async ouvrirCompte(clientId, type, promotion = false, caissierId) {
+        const res = await muter('ouvrirCompte', { clientId, type, promotion, caissierId })
         if (res.erreur) return { erreur: res.erreur }
-        if (res.id && res.numero) return { id: res.id, numero: res.numero, ...res }
-        return { erreur: 'Ouverture impossible.' }
+        return res as {
+          id?: string
+          numero?: string
+          demandeId?: string
+          enAttente?: boolean
+        }
+      },
+      async validerOuvertureCompte(demandeId) {
+        const res = await muter('validerOuvertureCompte', { demandeId })
+        return res.erreur ?? null
+      },
+      async refuserOuvertureCompte(demandeId, motif) {
+        const res = await muter('refuserOuvertureCompte', { demandeId, motif })
+        return res.erreur ?? null
       },
       async deposerCompte(compteId, montant, note) {
         const res = await muter('deposerCompte', { compteId, montant, note })

@@ -24,6 +24,7 @@ LIST_KEYS = [
     "carnets",
     "mises",
     "comptes",
+    "demandesOuvertureCompte",
     "mouvements",
     "credits",
     "remboursements",

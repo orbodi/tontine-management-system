@@ -51,6 +51,7 @@ export default function DetailClient() {
   const [frequence, setFrequence] = useState<FrequenceMise>('journaliere')
   const [typeCompte, setTypeCompte] = useState<TypeCompte>('courant')
   const [promoCompte, setPromoCompte] = useState(false)
+  const [caissierPourCompte, setCaissierPourCompte] = useState('')
   const [fraisCompte, setFraisCompte] = useState({
     partSociale: 5000,
     droitAdhesion: 2500,
@@ -158,24 +159,36 @@ export default function DetailClient() {
 
   const creerCompte = async (e: React.FormEvent) => {
     e.preventDefault()
-    const resultat = await ouvrirCompte(client.id, typeCompte, promoCompte)
-    if ('erreur' in resultat) {
-      setErreur(resultat.erreur)
-      await alerter('Ouverture impossible', resultat.erreur)
+    if (!caissierPourCompte) {
+      setErreur('Indiquez la caisse qui encaissera part sociale et droit d’adhésion.')
       return
     }
+    const resultat = await ouvrirCompte(client.id, typeCompte, promoCompte, caissierPourCompte)
+    if ('erreur' in resultat) {
+      setErreur(resultat.erreur)
+      await alerter('Demande impossible', resultat.erreur)
+      return
+    }
+    const caissier = data.employes.find((x) => x.id === caissierPourCompte)
     setModaleCompte(false)
     setErreur('')
     setPromoCompte(false)
+    setCaissierPourCompte('')
     const droit = promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion
     await alerter(
-      'Compte ouvert',
-      `Compte ${resultat.numero} (${typeCompte === 'courant' ? 'courant' : 'épargne'}).\n` +
-        `Part sociale : ${formatMontant(fraisCompte.partSociale)} (microfinance)\n` +
-        `Droit d'adhésion : ${formatMontant(droit)} (crédité sur le compte)\n` +
-        `Total encaissé : ${formatMontant(fraisCompte.partSociale + droit)}`,
+      'Demande envoyée',
+      `Demande d’ouverture enregistrée pour ${client.prenom} ${client.nom}.\n` +
+        `Le compte sera créé après encaissement et validation par ${caissier?.nomComplet ?? 'le caissier'}.\n` +
+        `Part sociale : ${formatMontant(fraisCompte.partSociale)}\n` +
+        `Droit d'adhésion : ${formatMontant(droit)}\n` +
+        `Total à encaisser : ${formatMontant(fraisCompte.partSociale + droit)}`,
     )
   }
+
+  const caissiersDisponibles = data.employes
+    .filter((e) => e.actif && (e.role === 'caissier' || e.role === 'chef_agence'))
+    .filter((e) => !client.agenceId || e.agenceId === client.agenceId)
+    .sort((a, b) => a.nomComplet.localeCompare(b.nomComplet))
 
   return (
     <div>
@@ -210,6 +223,7 @@ export default function DetailClient() {
                   setErreur('')
                   setTypeCompte('courant')
                   setPromoCompte(false)
+                  setCaissierPourCompte('')
                   setModaleCompte(true)
                 }}
               >
@@ -586,6 +600,25 @@ export default function DetailClient() {
               </span>
             </span>
           </label>
+          <div>
+            <label className="label">Caisse (encaissement) *</label>
+            <select
+              className="input"
+              required
+              value={caissierPourCompte}
+              onChange={(e) => setCaissierPourCompte(e.target.value)}
+            >
+              <option value="">— Choisir le caissier —</option>
+              {caissiersDisponibles.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nomComplet} ({e.role === 'chef_agence' ? 'chef agence' : 'caissier'})
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">
+              Le compte n’est créé qu’après validation et encaissement par ce caissier.
+            </p>
+          </div>
           <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
             <p className="font-medium text-slate-900">À encaisser en caisse</p>
             <ul className="mt-2 space-y-1 text-xs">
@@ -610,7 +643,7 @@ export default function DetailClient() {
             </button>
             <button type="submit" className="btn-primary">
               <Wallet className="h-4 w-4" />
-              Ouvrir le compte
+              Envoyer la demande
             </button>
           </div>
         </form>

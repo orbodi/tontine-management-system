@@ -23,6 +23,7 @@ def _clear_all(db: Session) -> None:
         m.Credit,
         m.MouvementCompte,
         m.Compte,
+        m.DemandeOuvertureCompte,
         m.Mise,
         m.Carnet,
         m.Client,
@@ -204,6 +205,26 @@ def replace_state(db: Session, data: dict[str, Any], *, hash_plain_passwords: bo
                 part_sociale=float(c.get("partSociale") or 0),
                 droit_adhesion=float(c.get("droitAdhesion") or 0),
                 promotion=bool(c.get("promotion") or False),
+            )
+        )
+
+    for dmd in data.get("demandesOuvertureCompte", []):
+        db.add(
+            m.DemandeOuvertureCompte(
+                id=dmd["id"],
+                client_id=dmd["clientId"],
+                type=dmd["type"],
+                promotion=bool(dmd.get("promotion") or False),
+                part_sociale=float(dmd.get("partSociale") or 0),
+                droit_adhesion=float(dmd.get("droitAdhesion") or 0),
+                caissier_id=dmd["caissierId"],
+                demandeur_id=dmd["demandeurId"],
+                demandeur_nom=dmd["demandeurNom"],
+                date_demande=dmd["dateDemande"],
+                statut=dmd.get("statut", "en_attente"),
+                date_traitement=dmd.get("dateTraitement"),
+                compte_id=dmd.get("compteId"),
+                motif_refus=dmd.get("motifRefus"),
             )
         )
 
@@ -528,6 +549,25 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "promotion": bool(getattr(c, "promotion", False)),
             }
             for c in db.query(m.Compte).all()
+        ],
+        "demandesOuvertureCompte": [
+            {
+                "id": d.id,
+                "clientId": d.client_id,
+                "type": d.type,
+                "promotion": d.promotion,
+                "partSociale": d.part_sociale,
+                "droitAdhesion": d.droit_adhesion,
+                "caissierId": d.caissier_id,
+                "demandeurId": d.demandeur_id,
+                "demandeurNom": d.demandeur_nom,
+                "dateDemande": d.date_demande,
+                "statut": d.statut,
+                "dateTraitement": d.date_traitement,
+                "compteId": d.compte_id,
+                "motifRefus": d.motif_refus,
+            }
+            for d in db.query(m.DemandeOuvertureCompte).all()
         ],
         "mouvements": [
             {

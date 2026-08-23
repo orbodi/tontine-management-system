@@ -65,6 +65,7 @@ def _empty_app_data() -> dict:
         "carnets": [],
         "mises": [],
         "comptes": [],
+        "demandesOuvertureCompte": [],
         "mouvementsComptes": [],
         "credits": [],
         "remboursements": [],

@@ -147,6 +147,24 @@ class Compte(Base):
     promotion: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class DemandeOuvertureCompte(Base):
+    __tablename__ = "demandes_ouverture_compte"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    client_id: Mapped[str] = mapped_column(String, index=True)
+    type: Mapped[str] = mapped_column(String)
+    promotion: Mapped[bool] = mapped_column(Boolean, default=False)
+    part_sociale: Mapped[float] = mapped_column(Float, default=0)
+    droit_adhesion: Mapped[float] = mapped_column(Float, default=0)
+    caissier_id: Mapped[str] = mapped_column(String, index=True)
+    demandeur_id: Mapped[str] = mapped_column(String)
+    demandeur_nom: Mapped[str] = mapped_column(String)
+    date_demande: Mapped[str] = mapped_column(String)
+    statut: Mapped[str] = mapped_column(String, default="en_attente")  # en_attente | validee | refusee
+    date_traitement: Mapped[str | None] = mapped_column(String, nullable=True)
+    compte_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    motif_refus: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class MouvementCompte(Base):
     __tablename__ = "mouvements"
     id: Mapped[str] = mapped_column(String, primary_key=True)

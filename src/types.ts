@@ -200,6 +200,26 @@ export interface Compte {
   promotion?: boolean
 }
 
+export type StatutDemandeOuvertureCompte = 'en_attente' | 'validee' | 'refusee'
+
+/** Demande d'ouverture créée par admin/chef ; validée par le caissier désigné. */
+export interface DemandeOuvertureCompte {
+  id: string
+  clientId: string
+  type: TypeCompte
+  promotion: boolean
+  partSociale: number
+  droitAdhesion: number
+  caissierId: string
+  demandeurId: string
+  demandeurNom: string
+  dateDemande: string
+  statut: StatutDemandeOuvertureCompte
+  dateTraitement?: string | null
+  compteId?: string | null
+  motifRefus?: string | null
+}
+
 export type TypeMouvement = 'depot' | 'retrait'
 
 export interface MouvementCompte {
@@ -490,6 +510,7 @@ export interface AppData {
   carnets: CarnetTontine[]
   mises: MiseTontine[]
   comptes: Compte[]
+  demandesOuvertureCompte: DemandeOuvertureCompte[]
   mouvements: MouvementCompte[]
   credits: Credit[]
   remboursements: Remboursement[]

@@ -14,6 +14,7 @@ import type { Employe } from '../types'
 import { formatDate, formatDateHeure, formatMontant } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
 import { TableauArretsCaisse } from '../components/TableauArretsCaisse'
+import { useConfirmation } from '../components/Confirmation'
 
 function BadgeEcart({ ecart }: { ecart: number }) {
   if (ecart === 0) return <span className="badge bg-emerald-100 text-emerald-700">Juste</span>
@@ -86,11 +87,29 @@ function ListeTransactions({
 
 /** Vue pilotage : admin (toutes agences) / chef (son agence). */
 function VueGlobaleCaisses() {
-  const { data, estAdmin, agenceFiltreOperations } = useStore()
+  const {
+    data,
+    estAdmin,
+    agenceFiltreOperations,
+    employeConnecte,
+    validerOuvertureCompte,
+    refuserOuvertureCompte,
+  } = useStore()
+  const { confirmer, alerter } = useConfirmation()
   const [dateJournal, setDateJournal] = useState(aujourdHuiIso())
   const [filtreStatut, setFiltreStatut] = useState<
     'tous' | 'a_arreter' | 'retard' | 'arretee' | 'non_ouverte'
   >('tous')
+
+  const mesDemandesAValider = useMemo(
+    () =>
+      employeConnecte
+        ? (data.demandesOuvertureCompte ?? []).filter(
+            (d) => d.statut === 'en_attente' && d.caissierId === employeConnecte.id,
+          )
+        : [],
+    [data.demandesOuvertureCompte, employeConnecte],
+  )
 
   const caisses = useMemo(() => {
     return data.employes
@@ -173,6 +192,81 @@ function VueGlobaleCaisses() {
             : 'Caisses de votre agence — vous validez les arrêts de caisse'
         }
       />
+
+      {mesDemandesAValider.length > 0 && (
+        <div className="card mb-6 border-amber-200 bg-amber-50/40">
+          <h3 className="mb-1 font-semibold text-slate-900">
+            Ouvertures assignées à votre caisse ({mesDemandesAValider.length})
+          </h3>
+          <p className="mb-4 text-xs text-slate-600">
+            Validez après encaissement de la part sociale et du droit d’adhésion.
+          </p>
+          <div className="space-y-3">
+            {mesDemandesAValider.map((d) => {
+              const client = data.clients.find((c) => c.id === d.clientId)
+              const total = d.partSociale + d.droitAdhesion
+              return (
+                <div
+                  key={d.id}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-xl bg-white px-4 py-3 text-sm ring-1 ring-amber-100"
+                >
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      {client ? `${client.prenom} ${client.nom}` : 'Client'} —{' '}
+                      {d.type === 'epargne' ? 'épargne' : 'courant'}
+                      {d.promotion ? ' (promo)' : ''}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {d.demandeurNom} — {formatDateHeure(d.dateDemande)} — total{' '}
+                      {formatMontant(total)}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="btn-primary !py-2 text-xs"
+                      onClick={async () => {
+                        const ok = await confirmer({
+                          titre: 'Valider l’ouverture',
+                          message: `Confirmez l’encaissement de ${formatMontant(total)}. Le compte sera créé.`,
+                          labelValider: 'Valider et créer',
+                        })
+                        if (!ok) return
+                        const err = await validerOuvertureCompte(d.id)
+                        if (err) await alerter('Validation impossible', err)
+                        else
+                          await alerter(
+                            'Compte ouvert',
+                            `Compte créé. Total encaissé : ${formatMontant(total)}.`,
+                          )
+                      }}
+                    >
+                      Valider
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary !py-2 text-xs"
+                      onClick={async () => {
+                        const ok = await confirmer({
+                          titre: 'Refuser la demande',
+                          message: 'Refuser cette demande d’ouverture ?',
+                          labelValider: 'Refuser',
+                          danger: true,
+                        })
+                        if (!ok) return
+                        const err = await refuserOuvertureCompte(d.id, 'Refusée en caisse')
+                        if (err) await alerter('Refus impossible', err)
+                      }}
+                    >
+                      Refuser
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <label className="text-sm text-slate-600">Journée</label>
@@ -363,7 +457,8 @@ function VueGlobaleCaisses() {
 
 /** Vue caissier : consultation de sa caisse (l’arrêt est fait par admin / chef). */
 function VueCaisseCaissier({ employe }: { employe: Employe }) {
-  const { data } = useStore()
+  const { data, validerOuvertureCompte, refuserOuvertureCompte } = useStore()
+  const { confirmer, alerter } = useConfirmation()
   const [detailOuvert, setDetailOuvert] = useState(false)
 
   const maCaisse = useMemo(
@@ -397,6 +492,14 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
     [data.arretsCaisse, employe.id],
   )
 
+  const demandesAValider = useMemo(
+    () =>
+      (data.demandesOuvertureCompte ?? [])
+        .filter((d) => d.statut === 'en_attente' && d.caissierId === employe.id)
+        .sort((a, b) => a.dateDemande.localeCompare(b.dateDemande)),
+    [data.demandesOuvertureCompte, employe.id],
+  )
+
   const enRetard = maCaisse.journeesEnRetard.length > 0
 
   return (
@@ -405,6 +508,90 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
         titre="Ma caisse"
         sousTitre={`Consultation — opérations de votre caisse uniquement — ${employe.nomComplet}`}
       />
+
+      {demandesAValider.length > 0 && (
+        <div className="card mb-6 border-amber-200 bg-amber-50/40">
+          <h3 className="mb-1 font-semibold text-slate-900">
+            Ouvertures de compte à valider ({demandesAValider.length})
+          </h3>
+          <p className="mb-4 text-xs text-slate-600">
+            Encaisser part sociale + droit d’adhésion, puis valider. Le compte n’existe qu’après
+            validation.
+          </p>
+          <div className="space-y-3">
+            {demandesAValider.map((d) => {
+              const client = data.clients.find((c) => c.id === d.clientId)
+              const total = d.partSociale + d.droitAdhesion
+              return (
+                <div
+                  key={d.id}
+                  className="rounded-xl bg-white px-4 py-3 text-sm ring-1 ring-amber-100"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {client ? `${client.prenom} ${client.nom}` : 'Client'} — compte{' '}
+                        {d.type === 'epargne' ? 'épargne' : 'courant'}
+                        {d.promotion ? ' (promo)' : ''}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Demandé par {d.demandeurNom} — {formatDateHeure(d.dateDemande)}
+                      </p>
+                      <ul className="mt-2 space-y-0.5 text-xs text-slate-700">
+                        <li>Part sociale : {formatMontant(d.partSociale)}</li>
+                        <li>Droit d’adhésion : {formatMontant(d.droitAdhesion)}</li>
+                        <li className="font-semibold">Total à encaisser : {formatMontant(total)}</li>
+                      </ul>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn-primary !py-2 text-xs"
+                        onClick={async () => {
+                          const ok = await confirmer({
+                            titre: 'Valider l’ouverture',
+                            message: `Confirmez l’encaissement de ${formatMontant(total)} (part sociale + droit d’adhésion) pour ${
+                              client ? `${client.prenom} ${client.nom}` : 'ce client'
+                            }. Le compte sera créé immédiatement.`,
+                            labelValider: 'Valider et créer',
+                          })
+                          if (!ok) return
+                          const err = await validerOuvertureCompte(d.id)
+                          if (err) await alerter('Validation impossible', err)
+                          else
+                            await alerter(
+                              'Compte ouvert',
+                              `Compte créé. Total encaissé : ${formatMontant(total)}.`,
+                            )
+                        }}
+                      >
+                        Valider
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary !py-2 text-xs"
+                        onClick={async () => {
+                          const ok = await confirmer({
+                            titre: 'Refuser la demande',
+                            message: 'Refuser cette demande d’ouverture de compte ?',
+                            labelValider: 'Refuser',
+                            danger: true,
+                          })
+                          if (!ok) return
+                          const err = await refuserOuvertureCompte(d.id, 'Refusée en caisse')
+                          if (err) await alerter('Refus impossible', err)
+                        }}
+                      >
+                        Refuser
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="card mb-6 border-brand-200 bg-brand-50/40">
         <div className="text-xs font-medium uppercase tracking-wide text-brand-700">

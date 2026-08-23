@@ -799,14 +799,18 @@ def basculer_retrait_carnet_admin(d, u, p):
 
 
 def ouvrir_compte(d, u, p):
+    """Admin / chef : crée une demande ; le caissier désigné valide ensuite."""
     if _est_caissier(u):
-        return {"erreur": "Un caissier ne peut pas ouvrir un compte courant ou epargne."}
-    err = _verif_caisse(d, u)
-    if err:
-        return {"erreur": err}
+        return {"erreur": "Un caissier ne peut pas ouvrir un compte : validez les demandes qui vous sont assignées."}
+    if not (_est_admin(u) or _est_chef(u)):
+        return {"erreur": "Droit insuffisant."}
     client_id = p["clientId"]
     type_ = p.get("type", "courant")
     promotion = bool(p.get("promotion") or False)
+    caissier_id = p.get("caissierId") or ""
+    if not caissier_id:
+        return {"erreur": "Indiquez la caisse (caissier) qui encaissera part sociale et droit d'adhésion."}
+
     from .config import settings
 
     part_sociale = float(settings.part_sociale_montant)
@@ -816,7 +820,63 @@ def ouvrir_compte(d, u, p):
     client = next((c for c in d["clients"] if c["id"] == client_id), None)
     if not client:
         return {"erreur": "Client introuvable."}
+    caissier = next((e for e in d["employes"] if e["id"] == caissier_id and e.get("actif")), None)
+    if not caissier or not _employe_a_compte_caisse(caissier["role"]):
+        return {"erreur": "Caissier / titulaire de caisse introuvable."}
+    if _est_chef(u) and caissier["agenceId"] != u["agenceId"]:
+        return {"erreur": "Le caissier doit appartenir à votre agence."}
+    if _est_chef(u) and client["agenceId"] != u["agenceId"]:
+        return {"erreur": "Client hors de votre agence."}
+
+    # Une seule demande en attente par client+type
+    if any(
+        x.get("statut") == "en_attente"
+        and x.get("clientId") == client_id
+        and x.get("type") == type_
+        for x in d.get("demandesOuvertureCompte") or []
+    ):
+        return {"erreur": "Une demande d'ouverture de ce type est déjà en attente pour ce client."}
+
     d = copy.deepcopy(d)
+    if "demandesOuvertureCompte" not in d:
+        d["demandesOuvertureCompte"] = []
+    did = uid()
+    d["demandesOuvertureCompte"].append(
+        {
+            "id": did,
+            "clientId": client_id,
+            "type": type_,
+            "promotion": promotion,
+            "partSociale": part_sociale,
+            "droitAdhesion": droit,
+            "caissierId": caissier_id,
+            "demandeurId": u["id"],
+            "demandeurNom": u.get("nomComplet") or u.get("identifiant") or "",
+            "dateDemande": M.maintenant(),
+            "statut": "en_attente",
+            "dateTraitement": None,
+            "compteId": None,
+            "motifRefus": None,
+        }
+    )
+    return {
+        "data": d,
+        "demandeId": did,
+        "partSociale": part_sociale,
+        "droitAdhesion": droit,
+        "totalEncaisse": part_sociale + droit,
+        "promotion": promotion,
+        "enAttente": True,
+    }
+
+
+def _appliquer_ouverture_compte_validee(d, operateur, demande):
+    """Crée le compte + encaissements sur la caisse de l'opérateur (caissier)."""
+    client_id = demande["clientId"]
+    type_ = demande["type"]
+    promotion = bool(demande.get("promotion"))
+    part_sociale = float(demande.get("partSociale") or 0)
+    droit = float(demande.get("droitAdhesion") or 0)
     ordre = int(d["compteurs"].get("compte", 0)) + 1
     cid = uid()
     numero = numero_compte_solde(ordre)
@@ -848,7 +908,7 @@ def ouvrir_compte(d, u, p):
     )
     txs = [
         _mk_tx(
-            u,
+            operateur,
             {
                 "type": "part_sociale",
                 "clientId": client_id,
@@ -858,7 +918,7 @@ def ouvrir_compte(d, u, p):
             },
         ),
         _mk_tx(
-            u,
+            operateur,
             {
                 "type": "droit_adhesion",
                 "clientId": client_id,
@@ -869,15 +929,77 @@ def ouvrir_compte(d, u, p):
         ),
     ]
     d = _enregistrer_tx(d, txs)
+    return d, cid, numero
+
+
+def valider_ouverture_compte(d, u, p):
+    """Caissier désigné : encaissement + création du compte."""
+    demande_id = p.get("demandeId")
+    d = copy.deepcopy(d)
+    demandes = d.get("demandesOuvertureCompte") or []
+    demande = next((x for x in demandes if x["id"] == demande_id), None)
+    if not demande:
+        return {"erreur": "Demande introuvable."}
+    if demande.get("statut") != "en_attente":
+        return {"erreur": "Cette demande a déjà été traitée."}
+    if demande.get("caissierId") != u["id"] and not _est_admin(u):
+        return {"erreur": "Cette demande est assignée à un autre caissier."}
+    # L'encaissement se fait sur la caisse du caissier (même si admin valide à sa place, on exige la caisse du destinataire)
+    caissier = next((e for e in d["employes"] if e["id"] == demande["caissierId"] and e.get("actif")), None)
+    if not caissier:
+        return {"erreur": "Caissier assigné introuvable."}
+    err = M.message_blocage_caisse_journaliere(
+        caissier["id"], d["transactions"], d["arretsCaisse"], d.get("ouverturesCaisse") or []
+    )
+    if err:
+        return {"erreur": f"Caisse du caissier : {err}"}
+
+    operateur = caissier if demande.get("caissierId") == caissier["id"] else caissier
+    d, cid, numero = _appliquer_ouverture_compte_validee(d, operateur, demande)
+    d["demandesOuvertureCompte"] = [
+        {
+            **x,
+            "statut": "validee",
+            "dateTraitement": M.maintenant(),
+            "compteId": cid,
+        }
+        if x["id"] == demande_id
+        else x
+        for x in d["demandesOuvertureCompte"]
+    ]
     return {
         "data": d,
         "id": cid,
         "numero": numero,
-        "partSociale": part_sociale,
-        "droitAdhesion": droit,
-        "totalEncaisse": part_sociale + droit,
-        "promotion": promotion,
+        "partSociale": demande.get("partSociale"),
+        "droitAdhesion": demande.get("droitAdhesion"),
+        "totalEncaisse": float(demande.get("partSociale") or 0) + float(demande.get("droitAdhesion") or 0),
     }
+
+
+def refuser_ouverture_compte(d, u, p):
+    demande_id = p.get("demandeId")
+    motif = (p.get("motif") or "").strip()
+    d = copy.deepcopy(d)
+    demande = next((x for x in (d.get("demandesOuvertureCompte") or []) if x["id"] == demande_id), None)
+    if not demande:
+        return {"erreur": "Demande introuvable."}
+    if demande.get("statut") != "en_attente":
+        return {"erreur": "Cette demande a déjà été traitée."}
+    if demande.get("caissierId") != u["id"] and not _est_admin(u) and demande.get("demandeurId") != u["id"]:
+        return {"erreur": "Droit insuffisant pour refuser."}
+    d["demandesOuvertureCompte"] = [
+        {
+            **x,
+            "statut": "refusee",
+            "dateTraitement": M.maintenant(),
+            "motifRefus": motif or None,
+        }
+        if x["id"] == demande_id
+        else x
+        for x in d["demandesOuvertureCompte"]
+    ]
+    return (None, d, {})
 
 
 def deposer_compte(d, u, p):
@@ -1398,6 +1520,8 @@ ACTIONS = {
     "basculerVerrouCarnet": basculer_verrou_carnet,
     "basculerRetraitCarnetAdmin": basculer_retrait_carnet_admin,
     "ouvrirCompte": ouvrir_compte,
+    "validerOuvertureCompte": valider_ouverture_compte,
+    "refuserOuvertureCompte": refuser_ouverture_compte,
     "deposerCompte": deposer_compte,
     "retirerCompte": retirer_compte,
     "basculerVerrouCompte": basculer_verrou_compte,
