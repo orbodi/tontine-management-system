@@ -564,6 +564,32 @@ def basculer_actif_client(d, u, p):
     return d
 
 
+def supprimer_client(d, u, p):
+    if not _est_admin(u):
+        return {"erreur": "Seul l'administrateur peut supprimer un client."}
+    id_ = p["id"]
+    client = next((c for c in d["clients"] if c["id"] == id_), None)
+    if not client:
+        return {"erreur": "Client introuvable."}
+    if any(c["clientId"] == id_ for c in d["carnets"]):
+        return {"erreur": "Impossible de supprimer : le client a des carnets tontine."}
+    if any(c["clientId"] == id_ for c in d["comptes"]):
+        return {"erreur": "Impossible de supprimer : le client a des comptes."}
+    if any(c["clientId"] == id_ for c in d["credits"]):
+        return {"erreur": "Impossible de supprimer : le client a des crédits."}
+    if any(
+        x.get("clientId") == id_ and x.get("statut") == "en_attente"
+        for x in d.get("demandesOuvertureCompte") or []
+    ):
+        return {"erreur": "Impossible de supprimer : une demande d'ouverture de compte est en attente."}
+    d = copy.deepcopy(d)
+    d["clients"] = [c for c in d["clients"] if c["id"] != id_]
+    d["demandesOuvertureCompte"] = [
+        x for x in (d.get("demandesOuvertureCompte") or []) if x.get("clientId") != id_
+    ]
+    return (None, d, {})
+
+
 def ouvrir_carnet(d, u, p):
     err = _verif_caisse(d, u)
     if err:
@@ -1514,6 +1540,7 @@ ACTIONS = {
     "ajouterClient": ajouter_client,
     "modifierClient": modifier_client,
     "basculerActifClient": basculer_actif_client,
+    "supprimerClient": supprimer_client,
     "ouvrirCarnet": ouvrir_carnet,
     "encaisserCotisation": encaisser_cotisation,
     "retraitCycle": retrait_cycle,

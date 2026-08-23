@@ -102,6 +102,7 @@ interface StoreApi {
   ) => Promise<boolean>
   modifierClient: (id: string, patch: Partial<Client>) => Promise<string | null>
   basculerActifClient: (id: string) => Promise<void>
+  supprimerClient: (id: string) => Promise<string | null>
   ouvrirCarnet: (
     clientId: string,
     typeCarnet: TypeCarnet,
@@ -320,6 +321,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       async basculerActifClient(id) {
         await muter('basculerActifClient', { id })
+      },
+      async supprimerClient(id) {
+        const res = await muter('supprimerClient', { id })
+        return res.erreur ?? null
       },
       async ouvrirCarnet(clientId, typeCarnet, mise, frequence) {
         const res = await muter('ouvrirCarnet', { clientId, typeCarnet, mise, frequence })

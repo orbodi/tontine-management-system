@@ -7,6 +7,7 @@ import {
   HandCoins,
   PiggyBank,
   Plus,
+  Trash2,
   UserCheck,
   UserX,
   Wallet,
@@ -39,9 +40,9 @@ const LIBELLES_FREQUENCE: Record<FrequenceMise, string> = {
 export default function DetailClient() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { data, aDroit, estCaissier, employeConnecte, basculerActifClient, ouvrirCarnet, ouvrirCompte } =
+  const { data, aDroit, estAdmin, estCaissier, employeConnecte, basculerActifClient, supprimerClient, ouvrirCarnet, ouvrirCompte } =
     useStore()
-  const { alerter } = useConfirmation()
+  const { alerter, confirmer } = useConfirmation()
   const [modaleMessage, setModaleMessage] = useState(false)
   const [texteMessage, setTexteMessage] = useState('')
   const [modaleCarnet, setModaleCarnet] = useState(false)
@@ -244,6 +245,29 @@ export default function DetailClient() {
               {client.actif ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
               {client.actif ? 'Désactiver' : 'Réactiver'}
             </button>
+            {estAdmin && (
+              <button
+                className="btn-danger"
+                onClick={async () => {
+                  const ok = await confirmer({
+                    titre: 'Supprimer le client',
+                    message: `Supprimer définitivement ${client.prenom} ${client.nom} (${client.codeClient}) ? Impossible s’il a déjà des carnets, comptes ou crédits.`,
+                    labelValider: 'Supprimer',
+                    danger: true,
+                  })
+                  if (!ok) return
+                  const err = await supprimerClient(client.id)
+                  if (err) {
+                    await alerter('Suppression impossible', err)
+                    return
+                  }
+                  navigate('/clients')
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+                Supprimer
+              </button>
+            )}
           </div>
         }
       />
