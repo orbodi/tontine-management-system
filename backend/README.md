@@ -33,12 +33,15 @@ Variables utiles dans `.env` :
 ## Démarrage
 
 ```bash
-# depuis backend/
-uvicorn app.main:app --reload --port 8000
+# depuis backend/ — écoute localhost + réseau local
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API : http://127.0.0.1:8000/api/health  
+API locale : http://127.0.0.1:8000/api/health  
+API réseau : http://<IP-LAN>:8000/api/health  
 Docs : http://127.0.0.1:8000/docs
+
+Le CORS autorise aussi les origines du réseau privé (192.168 / 10 / 172.16–31).
 
 ## Comptes par défaut (valeurs `.env`)
 

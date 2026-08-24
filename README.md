@@ -38,7 +38,7 @@ cd backend
 py -3.12 -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Voir aussi [backend/README.md](backend/README.md).
@@ -50,7 +50,10 @@ npm install
 npm run dev
 ```
 
-Ouvrir http://localhost:5173 — le proxy Vite redirige `/api` vers `http://127.0.0.1:8000`.
+Ouvrir http://localhost:5173 (ou l’URL **Network** affichée par Vite, ex. `http://192.168.x.x:5173`).  
+Le proxy Vite redirige `/api` vers `http://127.0.0.1:8000` sur la machine hôte.
+
+API directe sur le LAN : `http://192.168.x.x:8000`.
 
 ## Build front
 

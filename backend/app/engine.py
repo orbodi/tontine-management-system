@@ -1200,6 +1200,29 @@ def basculer_verrou_compte(d, u, p):
     return d
 
 
+def supprimer_compte(d, u, p):
+    """Supprime un compte client (admin uniquement). Solde doit être à zéro."""
+    if not _est_admin(u):
+        return {"erreur": "Seul l'administrateur peut supprimer un compte."}
+    id_ = p.get("id") or p.get("compteId")
+    compte = next((c for c in d["comptes"] if c["id"] == id_), None)
+    if not compte:
+        return {"erreur": "Compte introuvable."}
+    if abs(float(compte.get("solde") or 0)) > 0.005:
+        return {
+            "erreur": "Impossible de supprimer : le solde du compte n'est pas nul. "
+            "Effectuez d'abord un retrait du solde restant."
+        }
+    d = copy.deepcopy(d)
+    d["comptes"] = [c for c in d["comptes"] if c["id"] != id_]
+    d["mouvements"] = [m for m in d.get("mouvements") or [] if m.get("compteId") != id_]
+    d["demandesOuvertureCompte"] = [
+        {**x, "compteId": None} if x.get("compteId") == id_ else x
+        for x in (d.get("demandesOuvertureCompte") or [])
+    ]
+    return (None, d, {})
+
+
 def demander_credit(d, u, p):
     d = copy.deepcopy(d)
     numero = int(d["compteurs"].get("credit", 0)) + 1
@@ -2168,6 +2191,7 @@ ACTIONS = {
     "deposerCompte": deposer_compte,
     "retirerCompte": retirer_compte,
     "basculerVerrouCompte": basculer_verrou_compte,
+    "supprimerCompte": supprimer_compte,
     "corrigerMontantTransaction": corriger_montant_transaction,
     "demanderCredit": demander_credit,
     "approuverCredit": approuver_credit,

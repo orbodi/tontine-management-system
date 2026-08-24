@@ -10,7 +10,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "preview:open": "vite preview --open",
-    "api": "cd backend && .venv\\Scripts\\uvicorn.exe app.main:app --reload --port 8000",
+    "api": "cd backend && .venv\\Scripts\\uvicorn.exe app.main:app --reload --host 0.0.0.0 --port 8000",
     "api:install": "cd backend && py -3.12 -m venv .venv && .venv\\Scripts\\pip.exe install -r requirements.txt"
   },
   "dependencies": {

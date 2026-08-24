@@ -2,8 +2,9 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-set "API_HOST=127.0.0.1"
+set "API_HOST=0.0.0.0"
 set "API_PORT=8000"
+set "API_CHECK=127.0.0.1"
 
 echo ========================================
 echo  DON DE DIEU — demarrage API + Front
@@ -77,22 +78,29 @@ if not exist "backend\.venv\Scripts\uvicorn.exe" (
 
 REM --- API deja joignable ? ---
 set "API_READY=0"
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing -Uri 'http://%API_HOST%:%API_PORT%/api/health' -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing -Uri 'http://%API_CHECK%:%API_PORT%/api/health' -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
 if not errorlevel 1 (
   set "API_READY=1"
-  echo [API] Deja demarree sur http://%API_HOST%:%API_PORT% — reutilisation.
+  echo [API] Deja demarree sur le port %API_PORT% — reutilisation.
 ) else (
   call :free_port %API_PORT%
-  echo [API] Demarrage FastAPI sur http://%API_HOST%:%API_PORT% ...
+  echo [API] Demarrage FastAPI sur 0.0.0.0:%API_PORT% (localhost + reseau local)...
   start "DON DE DIEU - API" /D "%~dp0backend" cmd /k ".venv\Scripts\uvicorn.exe app.main:app --reload --host %API_HOST% --port %API_PORT%"
   timeout /t 3 /nobreak >nul
 )
 
 echo [Front] Demarrage Vite ^(navigateur^)...
 echo.
-echo Front : http://localhost:5173
-echo API   : http://%API_HOST%:%API_PORT%/api/health
-echo Docs  : http://%API_HOST%:%API_PORT%/docs
+for /f "tokens=2 delims=:" %%A in ('ipconfig ^| findstr /C:"IPv4"') do (
+  for /f "tokens=*" %%B in ("%%A") do set "LAN_IP=%%B"
+)
+echo Front local  : http://localhost:5173
+if defined LAN_IP (
+  echo Front reseau : http://%LAN_IP%:5173
+  echo API reseau   : http://%LAN_IP%:%API_PORT%/api/health
+)
+echo API local    : http://%API_CHECK%:%API_PORT%/api/health
+echo Docs         : http://%API_CHECK%:%API_PORT%/docs
 echo.
 echo Fermez cette fenetre ou Ctrl+C pour arreter le front.
 echo La fenetre "DON DE DIEU - API" reste ouverte pour le backend.

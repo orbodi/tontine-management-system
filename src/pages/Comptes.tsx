@@ -8,6 +8,7 @@ import {
   Plus,
   Printer,
   Search,
+  Trash2,
   Wallet,
 } from 'lucide-react'
 import { useStore } from '../store'
@@ -36,6 +37,7 @@ export default function Comptes() {
   const {
     data,
     aDroit,
+    estAdmin,
     estCaissier,
     employeConnecte,
     ouvrirCompte,
@@ -44,6 +46,7 @@ export default function Comptes() {
     deposerCompte,
     retirerCompte,
     basculerVerrouCompte,
+    supprimerCompte,
   } = useStore()
   const [recherche, setRecherche] = useState('')
   const [typeFiltre, setTypeFiltre] = useState<'tous' | TypeCompte>('tous')
@@ -441,6 +444,27 @@ export default function Comptes() {
                         ) : (
                           <Lock className="h-4 w-4" />
                         )}
+                      </button>
+                    )}
+                    {estAdmin && (
+                      <button
+                        className="btn-danger !px-3 !py-2 text-xs"
+                        title="Supprimer le compte"
+                        onClick={async () => {
+                          const ok = await confirmer({
+                            titre: 'Supprimer le compte',
+                            message:
+                              `Supprimer définitivement le compte ${c.numero} de ${client.prenom} ${client.nom} ? ` +
+                              `Le solde doit être nul. Les mouvements du compte seront effacés.`,
+                            labelValider: 'Supprimer',
+                            danger: true,
+                          })
+                          if (!ok) return
+                          const err = await supprimerCompte(c.id)
+                          if (err) await alerter('Suppression impossible', err)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     )}
                   </div>

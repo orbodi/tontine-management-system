@@ -14,6 +14,16 @@ _DEFAULT_CORS = (
     "http://localhost:4173,http://127.0.0.1:4173"
 )
 
+# Origines LAN (192.168/10/172.16-31) — front Vite / preview
+_CORS_LAN_REGEX = (
+    r"https?://("
+    r"localhost|127\.0\.0\.1|"
+    r"192\.168\.\d{1,3}\.\d{1,3}|"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+    r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}"
+    r")(:\d+)?"
+)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -64,6 +74,11 @@ class Settings(BaseSettings):
             parsed = json.loads(raw)
             return [str(x).strip() for x in parsed if str(x).strip()]
         return [part.strip() for part in raw.split(",") if part.strip()]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cors_origin_regex(self) -> str:
+        return _CORS_LAN_REGEX
 
 
 settings = Settings()

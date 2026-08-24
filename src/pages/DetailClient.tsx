@@ -40,7 +40,7 @@ const LIBELLES_FREQUENCE: Record<FrequenceMise, string> = {
 export default function DetailClient() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { data, aDroit, estAdmin, estCaissier, employeConnecte, basculerActifClient, supprimerClient, ouvrirCarnet, ouvrirCompte } =
+  const { data, aDroit, estAdmin, estCaissier, employeConnecte, basculerActifClient, supprimerClient, supprimerCompte, ouvrirCarnet, ouvrirCompte } =
     useStore()
   const { alerter, confirmer } = useConfirmation()
   const [modaleMessage, setModaleMessage] = useState(false)
@@ -437,7 +437,31 @@ export default function DetailClient() {
                   </span>
                   {c.verrouille && <span className="badge ml-2 bg-rose-100 text-rose-700">Verrouillé</span>}
                 </div>
-                <span className="font-bold text-slate-900">{formatMontant(c.solde)}</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-slate-900">{formatMontant(c.solde)}</span>
+                  {estAdmin && (
+                    <button
+                      type="button"
+                      className="btn-danger !px-2 !py-1.5 text-xs"
+                      title="Supprimer le compte"
+                      onClick={async () => {
+                        const ok = await confirmer({
+                          titre: 'Supprimer le compte',
+                          message:
+                            `Supprimer définitivement le compte ${c.numero} ? ` +
+                            `Le solde doit être nul. Les mouvements du compte seront effacés.`,
+                          labelValider: 'Supprimer',
+                          danger: true,
+                        })
+                        if (!ok) return
+                        const err = await supprimerCompte(c.id)
+                        if (err) await alerter('Suppression impossible', err)
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
             {activite.carnets.map((carnet) => {
