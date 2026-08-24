@@ -550,11 +550,110 @@ def ajouter_client(d, u, p):
 def modifier_client(d, u, p):
     if _est_caissier(u):
         return {"erreur": "Un caissier ne peut pas modifier un client."}
+    if not _a_droit(u, "gerer_clients") and not _est_admin(u):
+        return {"erreur": "Droit insuffisant."}
     id_ = p["id"]
-    patch = p.get("patch") or {}
+    patch = dict(p.get("patch") or {})
     d = copy.deepcopy(d)
-    d["clients"] = [{**c, **patch} if c["id"] == id_ else c for c in d["clients"]]
+    client = next((c for c in d["clients"] if c["id"] == id_), None)
+    if not client:
+        return {"erreur": "Client introuvable."}
+
+    champs_simples = {
+        "nom",
+        "prenom",
+        "telephone",
+        "email",
+        "sexe",
+        "profession",
+        "adresse",
+        "pieceIdentite",
+    }
+    simple = {k: v for k, v in patch.items() if k in champs_simples}
+
+    new_zone_id = patch.get("zoneId")
+    if new_zone_id is not None and new_zone_id != client["zoneId"]:
+        zone = next((z for z in d["zones"] if z["id"] == new_zone_id), None)
+        if not zone:
+            return {"erreur": "Zone introuvable."}
+        if not zone.get("actif"):
+            return {"erreur": "La zone de destination est inactive."}
+        err = _appliquer_changement_zone_client(d, client_id=id_, zone=zone)
+        if err:
+            return {"erreur": err}
+
+    if simple:
+        d["clients"] = [{**c, **simple} if c["id"] == id_ else c for c in d["clients"]]
     return (None, d, {})
+
+
+def _appliquer_changement_zone_client(d: dict, *, client_id: str, zone: dict) -> str | None:
+    """Change la zone/agence d'un client et recalcule ordreZone + numéros de carnets."""
+    client = next((c for c in d["clients"] if c["id"] == client_id), None)
+    if not client:
+        return "Client introuvable."
+
+    zone_id = zone["id"]
+    compteurs = dict(d.get("compteursOrdreZone") or {})
+    ordres_existants = [
+        int(c["ordreZone"])
+        for c in d["clients"]
+        if c.get("zoneId") == zone_id and c["id"] != client_id
+    ]
+    base = max([int(compteurs.get(zone_id, 0)), *ordres_existants], default=0)
+    new_ordre = base + 1
+
+    numeros_pris = {c["numero"] for c in d["carnets"]}
+    for carnet in d["carnets"]:
+        if carnet.get("clientId") == client_id:
+            numeros_pris.discard(carnet["numero"])
+
+    carnets_client = [c for c in d["carnets"] if c.get("clientId") == client_id]
+    ordre_carnet = new_ordre
+    numeros_carnets: list[str] = []
+    for _ in carnets_client:
+        num = numero_carnet(zone["code"], ordre_carnet)
+        while num in numeros_pris:
+            ordre_carnet += 1
+            num = numero_carnet(zone["code"], ordre_carnet)
+        numeros_pris.add(num)
+        numeros_carnets.append(num)
+        ordre_carnet += 1
+
+    d["clients"] = [
+        {
+            **c,
+            "zoneId": zone_id,
+            "agenceId": zone["agenceId"],
+            "ordreZone": new_ordre,
+        }
+        if c["id"] == client_id
+        else c
+        for c in d["clients"]
+    ]
+    max_ordre_utilise = (ordre_carnet - 1) if carnets_client else new_ordre
+    d["compteursOrdreZone"] = {
+        **compteurs,
+        zone_id: max(int(compteurs.get(zone_id, 0)), max_ordre_utilise),
+    }
+
+    idx = 0
+    nouveaux_carnets = []
+    for carnet in d["carnets"]:
+        if carnet.get("clientId") != client_id:
+            nouveaux_carnets.append(carnet)
+            continue
+        nouveaux_carnets.append(
+            {
+                **carnet,
+                "numero": numeros_carnets[idx],
+                "zoneId": zone_id,
+                "agenceId": zone["agenceId"],
+            }
+        )
+        idx += 1
+    d["carnets"] = nouveaux_carnets
+    return None
 
 
 def basculer_actif_client(d, u, p):

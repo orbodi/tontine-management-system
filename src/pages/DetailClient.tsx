@@ -103,12 +103,14 @@ export default function DetailClient() {
     return { carnets, comptes, credits, transactions, soldeTontine, soldeEpargne, detteCredits }
   }, [client, data, estCaissier, employeConnecte])
 
+  const retourClients = client ? `/clients/zone/${client.zoneId}` : '/clients'
+
   if (!client || !activite) {
     return (
       <div>
         <Link to="/clients" className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700">
           <ArrowLeft className="h-4 w-4" />
-          Retour aux clients
+          Retour aux zones
         </Link>
         <p className="text-slate-600">Client introuvable.</p>
       </div>
@@ -193,9 +195,9 @@ export default function DetailClient() {
 
   return (
     <div>
-      <Link to="/clients" className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700">
+      <Link to={retourClients} className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700">
         <ArrowLeft className="h-4 w-4" />
-        Retour aux clients
+        Retour à la zone
       </Link>
 
       <EnTetePage
@@ -261,7 +263,7 @@ export default function DetailClient() {
                     await alerter('Suppression impossible', err)
                     return
                   }
-                  navigate('/clients')
+                  navigate(retourClients)
                 }}
               >
                 <Trash2 className="h-4 w-4" />

@@ -5,6 +5,7 @@ import { useStore } from './store'
 import Connexion from './pages/Connexion'
 import TableauDeBord from './pages/TableauDeBord'
 import Clients from './pages/Clients'
+import ClientsZone from './pages/ClientsZone'
 import DetailClient from './pages/DetailClient'
 import Tontines from './pages/Tontines'
 import DetailTontine from './pages/DetailTontine'
@@ -46,6 +47,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<TableauDeBord />} />
         <Route path="/clients" element={<Clients />} />
+        <Route path="/clients/zone/:zoneId" element={<ClientsZone />} />
         <Route path="/clients/:id" element={<DetailClient />} />
         <Route path="/tontines" element={<Tontines />} />
         <Route path="/tontines/:id" element={<DetailTontine />} />
