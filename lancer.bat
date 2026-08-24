@@ -84,7 +84,7 @@ if not errorlevel 1 (
   echo [API] Deja demarree sur le port %API_PORT% — reutilisation.
 ) else (
   call :free_port %API_PORT%
-  echo [API] Demarrage FastAPI sur 0.0.0.0:%API_PORT% (localhost + reseau local)...
+  echo [API] Demarrage FastAPI sur 0.0.0.0:%API_PORT% ^(localhost + reseau local^)...
   start "DON DE DIEU - API" /D "%~dp0backend" cmd /k ".venv\Scripts\uvicorn.exe app.main:app --reload --host %API_HOST% --port %API_PORT%"
   timeout /t 3 /nobreak >nul
 )
