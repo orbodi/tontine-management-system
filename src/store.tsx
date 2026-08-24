@@ -18,7 +18,7 @@ import type {
   TypeCompte,
   Zone,
 } from './types'
-import { apiFetch, ApiError, getToken, setToken } from './api/client'
+import { apiFetch, ApiError, apiUrl, getToken, setToken } from './api/client'
 
 export const LIBELLES_ROLE: Record<Role, string> = {
   admin: 'Administrateur',
@@ -70,7 +70,7 @@ interface StoreApi {
   data: AppData
   chargement: boolean
   employeConnecte: Employe | null
-  connexion: (identifiant: string, motDePasse: string) => Promise<boolean>
+  connexion: (identifiant: string, motDePasse: string) => Promise<string | null>
   deconnexion: () => Promise<void>
   estAdmin: boolean
   estChefAgence: boolean
@@ -271,9 +271,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setEmployeConnecte(res.employe)
           const next = await apiFetch<AppData>('/api/data')
           appliquerData(next)
-          return true
-        } catch {
-          return false
+          return null
+        } catch (e) {
+          setToken(null)
+          setEmployeConnecte(null)
+          if (e instanceof ApiError) {
+            if (e.status === 401) return 'Identifiant ou mot de passe incorrect.'
+            return e.message
+          }
+          return 'Impossible de joindre l’API. Vérifiez que le backend tourne sur le port 8000.'
         }
       },
 
@@ -450,7 +456,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       async exporterSauvegardeCsv() {
         const token = getToken()
-        const res = await fetch('/api/admin/export-csv', {
+        const res = await fetch(apiUrl('/api/admin/export-csv'), {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         })
         if (!res.ok) {
@@ -482,7 +488,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const token = getToken()
         const form = new FormData()
         form.append('fichier', fichier)
-        const res = await fetch('/api/admin/import-csv', {
+        const res = await fetch(apiUrl('/api/admin/import-csv'), {
           method: 'POST',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: form,

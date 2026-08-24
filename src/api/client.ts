@@ -1,6 +1,21 @@
-/** Client HTTP vers l'API FastAPI (proxy Vite `/api`). */
+/** Client HTTP vers l'API FastAPI (proxy Vite `/api` en local, URL directe en LAN). */
 
 const TOKEN_KEY = 'microfinance-token-v1'
+const API_PORT = import.meta.env.VITE_API_PORT ?? '8000'
+
+/** URL complète d'un chemin `/api/...` (proxy localhost, direct en IP LAN). */
+export function apiUrl(path: string): string {
+  const p = path.startsWith('/api') ? path : `/api${path}`
+  const override = import.meta.env.VITE_API_URL?.replace(/\/$/, '')
+  if (override) return `${override}${p}`
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    const host = window.location.hostname
+    if (host !== 'localhost' && host !== '127.0.0.1') {
+      return `http://${host}:${API_PORT}${p}`
+    }
+  }
+  return p
+}
 
 export function getToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY)
@@ -44,7 +59,7 @@ export async function apiFetch<T>(
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const res = await fetch(path.startsWith('/api') ? path : `/api${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...options,
     headers,
     body: options.json !== undefined ? JSON.stringify(options.json) : options.body,

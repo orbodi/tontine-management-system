@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Download } from 'lucide-react'
 import { comptaApi } from '../../api/comptabilite'
-import { getToken } from '../../api/client'
+import { apiUrl, getToken } from '../../api/client'
 import { EnTetePage } from '../../components/ui'
 import { formatMontant } from '../../utils'
 import { useConfirmation } from '../../components/Confirmation'
@@ -27,7 +27,7 @@ export default function BalancePage() {
   const exporter = async () => {
     try {
       const token = getToken()
-      const res = await fetch('/api/comptabilite/balance.csv', {
+      const res = await fetch(apiUrl('/api/comptabilite/balance.csv'), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
       if (!res.ok) throw new Error('Export impossible')
