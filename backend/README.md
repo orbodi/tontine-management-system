@@ -43,6 +43,29 @@ Docs : http://127.0.0.1:8000/docs
 
 Le CORS autorise aussi les origines du réseau privé (192.168 / 10 / 172.16–31).
 
+## Migrations (schéma + données)
+
+Pas d’Alembic : le fichier SQLite est petit, et `replace_state` réécrit l’AppData. Les évolutions passent par un registre Python dans `app/migrations.py`, journalisé en table `schema_migrations` (hors AppData, donc conservé après réinit démo / import CSV).
+
+Ordre au démarrage :
+
+1. `create_all` — crée les tables neuves
+2. migrations **schéma** encore absentes (`001_…`, `002_…`)
+3. seed si la base est vide
+4. migrations **données** encore absentes (`003_…`) — copie de `app.db` dans `data/backups/` juste avant
+
+Chaque id s’applique **une fois**. Les fonctions restent idempotentes. Après import d’une ancienne sauvegarde CSV, le réalignement des numéros est relancé sans réécrire le journal.
+
+| Id | Type | Effet |
+|----|------|--------|
+| `001_comptes_frais_ouverture` | schéma | colonnes part sociale / adhésion |
+| `002_carnets_unicite_numero_type` | schéma | unicité `(numero, type_carnet)` |
+| `003_numeros_clients_zzxxxx` | données | N° client/carnet `ZZxxxx` |
+| `004_caisse_unique_agence` | données | Une caisse par agence |
+| `005_realigner_numeros_zzxxxx` | données | Réapplique `ZZxxxx` si l’ancien format 4 chiffres est encore là |
+
+`GET /api/health` liste les ids déjà appliqués (`migrations`). Pour ajouter une évolution : une entrée dans `MIGRATIONS` (jamais modifier un id déjà livré). Les copies `data/backups/app-avant-*.db` ne sont pas purgées automatiquement.
+
 ## Comptes par défaut (valeurs `.env`)
 
 | Rôle | Identifiant | Mot de passe |

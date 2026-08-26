@@ -1,11 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Banknote, DoorOpen, Scale } from 'lucide-react'
-import { LIBELLES_ROLE, useStore } from '../store'
+import { useStore } from '../store'
 import {
   aujourdHuiIso,
-  compteCaisseDe,
-  journeesOuvertesEnAttenteCloture,
+  compteCaissePourEmploye,
   situationCaisse,
   type SituationCaisse,
 } from '../metier'
@@ -25,9 +24,6 @@ function BadgeEcart({ ecart }: { ecart: number }) {
 }
 
 function BadgeStatutCaisse({ situation }: { situation: SituationCaisse }) {
-  if (situation.journeesEnRetard.length > 0) {
-    return <span className="badge bg-rose-100 text-rose-700">Retard</span>
-  }
   if (situation.cloturee) {
     return <span className="badge bg-emerald-100 text-emerald-700">Clôturée</span>
   }
@@ -68,12 +64,23 @@ export default function DetailCaisse() {
   const [montantRegulariser, setMontantRegulariser] = useState('')
   const [motifRegulariser, setMotifRegulariser] = useState('')
   const [erreurRegulariser, setErreurRegulariser] = useState('')
+  const [jourCibleCloture, setJourCibleCloture] = useState(aujourdHuiIso)
 
   const employe = data.employes.find((e) => e.id === employeId)
-  const agence = employe ? data.agences.find((a) => a.id === employe.agenceId) : undefined
+  const titulaireCaisse =
+    employe?.role === 'chef_agence'
+      ? data.employes.find(
+          (e) => e.actif && e.role === 'caissier' && e.agenceId === employe.agenceId,
+        )
+      : employe
+  const agence = titulaireCaisse
+    ? data.agences.find((a) => a.id === titulaireCaisse.agenceId)
+    : undefined
   const peutGerer = estAdmin || estChefAgence
 
-  const compteCaisse = employe ? compteCaisseDe(data.comptesCaisse, employe.id) : undefined
+  const compteCaisse = titulaireCaisse
+    ? compteCaissePourEmploye(data.comptesCaisse, titulaireCaisse.id, data.employes)
+    : undefined
 
   const accesOk =
     !!employe &&
@@ -92,6 +99,7 @@ export default function DetailCaisse() {
             data.comptesCaisse,
             data.mouvementsCompteCaisse,
             data.ouverturesCaisse ?? [],
+            data.employes,
           )
         : null,
     [
@@ -101,22 +109,25 @@ export default function DetailCaisse() {
       data.comptesCaisse,
       data.mouvementsCompteCaisse,
       data.ouverturesCaisse,
+      data.employes,
     ],
   )
 
-  const jourATraiter = situationJour?.journeesEnRetard[0] ?? aujourdHuiIso()
+  const jourOuverture = aujourdHuiIso()
+  const joursRattrapage = situationJour?.journeesEnRetard ?? []
 
-  const caisseATraiter = useMemo(
+  const caisseACloturer = useMemo(
     () =>
       employe
         ? situationCaisse(
             employe.id,
             data.transactions,
             data.arretsCaisse,
-            jourATraiter,
+            jourCibleCloture,
             data.comptesCaisse,
             data.mouvementsCompteCaisse,
             data.ouverturesCaisse ?? [],
+            data.employes,
           )
         : null,
     [
@@ -126,36 +137,40 @@ export default function DetailCaisse() {
       data.comptesCaisse,
       data.mouvementsCompteCaisse,
       data.ouverturesCaisse,
-      jourATraiter,
+      data.employes,
+      jourCibleCloture,
     ],
   )
 
-  const enRetard = (situationJour?.journeesEnRetard.length ?? 0) > 0
-  const joursEnAttenteCloture = employe
-    ? journeesOuvertesEnAttenteCloture(
-        employe.id,
-        data.ouverturesCaisse ?? [],
-        data.arretsCaisse,
-        aujourdHuiIso(),
-      )
-    : []
-  const doitCloturerAvantOuverture = joursEnAttenteCloture.length > 0
   const peutOuvrir =
-    peutGerer &&
-    !!caisseATraiter &&
-    !caisseATraiter.ouverte &&
-    !caisseATraiter.cloturee &&
-    !doitCloturerAvantOuverture
-  const peutCloturer =
-    peutGerer && !!caisseATraiter && caisseATraiter.ouverte && !caisseATraiter.cloturee
+    peutGerer && !!situationJour && !situationJour.ouverte && !situationJour.cloturee
+  const peutCloturerAujourdhui =
+    peutGerer && !!situationJour && situationJour.ouverte && !situationJour.cloturee
+  const ouvrirModaleCloture = (jour: string) => {
+    if (!employe) return
+    const sit = situationCaisse(
+      employe.id,
+      data.transactions,
+      data.arretsCaisse,
+      jour,
+      data.comptesCaisse,
+      data.mouvementsCompteCaisse,
+      data.ouverturesCaisse ?? [],
+      data.employes,
+    )
+    setJourCibleCloture(jour)
+    setMontantFermeture(String(sit.soldeFermetureTheorique))
+    setNoteArret('')
+    setModaleArret(true)
+  }
   const ecartPrevu =
-    montantFermeture === '' || !caisseATraiter
+    montantFermeture === '' || !caisseACloturer
       ? null
-      : Number(montantFermeture) - caisseATraiter.soldeFermetureTheorique
+      : Number(montantFermeture) - caisseACloturer.soldeFermetureTheorique
 
   const arretsHistorique = useMemo(() => {
     if (!employe) return []
-    return data.arretsCaisse.filter((a) => a.employeId === employe.id)
+    return data.arretsCaisse.filter((a) => a.agenceId === employe.agenceId)
   }, [employe, data.arretsCaisse])
 
   const validerOuverture = async (e: React.FormEvent) => {
@@ -166,7 +181,7 @@ export default function DetailCaisse() {
       employe.id,
       montant,
       noteOuverture.trim() || undefined,
-      jourATraiter,
+      jourOuverture,
     )
     if (err) {
       await alerter('Ouverture impossible', err)
@@ -177,7 +192,7 @@ export default function DetailCaisse() {
     setNoteOuverture('')
     await alerter(
       'Journée ouverte',
-      `Ouverture enregistrée pour ${employe.nomComplet} — ${formatDate(jourATraiter + 'T12:00:00')} — ${formatMontant(montant)}.`,
+      `Ouverture enregistrée pour ${employe.nomComplet} — ${formatDate(jourOuverture + 'T12:00:00')} — ${formatMontant(montant)}.`,
     )
   }
 
@@ -187,7 +202,7 @@ export default function DetailCaisse() {
     const err = await arreterCaisse(
       Number(montantFermeture),
       noteArret.trim() || undefined,
-      jourATraiter,
+      jourCibleCloture,
       employe.id,
     )
     if (err) {
@@ -199,7 +214,7 @@ export default function DetailCaisse() {
     setNoteArret('')
     await alerter(
       'Clôture enregistrée',
-      `La caisse de ${employe.nomComplet} pour le ${formatDate(jourATraiter + 'T12:00:00')} a été clôturée.`,
+      `La caisse de ${employe.nomComplet} pour le ${formatDate(jourCibleCloture + 'T12:00:00')} a été clôturée.`,
     )
   }
 
@@ -250,6 +265,10 @@ export default function DetailCaisse() {
     return <Navigate to="/caisse" replace />
   }
 
+  if (employe?.role === 'chef_agence' && titulaireCaisse && titulaireCaisse.id !== employe.id) {
+    return <Navigate to={`/caisse/${titulaireCaisse.id}`} replace />
+  }
+
   if (!employe || !accesOk) {
     return (
       <div>
@@ -262,7 +281,7 @@ export default function DetailCaisse() {
     )
   }
 
-  if (!situationJour || !caisseATraiter) return null
+  if (!situationJour || !caisseACloturer) return null
 
   const [prenom, ...reste] = employe.nomComplet.split(' ')
   const nom = reste.join(' ') || prenom
@@ -279,7 +298,7 @@ export default function DetailCaisse() {
 
       <EnTetePage
         titre={`Caisse — ${employe.nomComplet}`}
-        sousTitre={`${LIBELLES_ROLE[employe.role]}${agence ? ` · ${agence.nom}` : ''}`}
+        sousTitre={`Caisse unique de l’agence${agence ? ` · ${agence.nom}` : ''} — caissier : ${employe.nomComplet}`}
         action={
           peutGerer ? (
             <div className="flex flex-wrap gap-2">
@@ -301,32 +320,24 @@ export default function DetailCaisse() {
                   className="btn-primary"
                   onClick={() => {
                     setMontantOuverture(
-                      String(compteCaisseDe(data.comptesCaisse, employe.id)?.solde ?? 0),
+                      String(compteCaisse?.solde ?? 0),
                     )
                     setNoteOuverture('')
                     setModaleOuverture(true)
                   }}
                 >
                   <DoorOpen className="h-4 w-4" />
-                  {enRetard
-                    ? `Ouvrir le ${formatDate(jourATraiter + 'T12:00:00')}`
-                    : 'Ouvrir la journée'}
+                  Ouvrir la journée
                 </button>
               )}
-              {peutCloturer && (
+              {peutCloturerAujourdhui && (
                 <button
                   type="button"
                   className="btn-primary"
-                  onClick={() => {
-                    setMontantFermeture(String(caisseATraiter.soldeFermetureTheorique))
-                    setNoteArret('')
-                    setModaleArret(true)
-                  }}
+                  onClick={() => ouvrirModaleCloture(jourOuverture)}
                 >
                   <Scale className="h-4 w-4" />
-                  {enRetard
-                    ? `Clôturer le ${formatDate(jourATraiter + 'T12:00:00')}`
-                    : 'Clôturer la journée'}
+                  Clôturer la journée
                 </button>
               )}
             </div>
@@ -381,26 +392,45 @@ export default function DetailCaisse() {
         )}
       </div>
 
-      {doitCloturerAvantOuverture && (
+      {joursRattrapage.length > 0 && (
         <div className="mb-6 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
-          Impossible d’ouvrir une nouvelle journée tant que le{' '}
-          {formatDate(joursEnAttenteCloture[0] + 'T12:00:00')} n’est pas clôturé.
+          <p className="font-semibold">Journée(s) précédente(s) non clôturée(s)</p>
+          <p className="mt-1">
+            {joursRattrapage.map((j) => formatDate(j + 'T12:00:00')).join(', ')}. Vous pouvez
+            quand même ouvrir et travailler sur la journée en cours.
+          </p>
+          {peutGerer && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {joursRattrapage.map((j) => (
+                <button
+                  key={j}
+                  type="button"
+                  className="btn-secondary !py-1.5 text-xs"
+                  onClick={() => ouvrirModaleCloture(j)}
+                >
+                  Clôturer le {formatDate(j + 'T12:00:00')}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div className="card mb-6 flex flex-wrap items-center gap-4">
         <Avatar nom={nom} prenom={prenom} taille="lg" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-semibold text-slate-900">{employe.nomComplet}</h2>
+            <h2 className="text-lg font-semibold text-slate-900">
+              Caisse {agence?.nom ?? employe.nomComplet}
+            </h2>
             <BadgeStatutCaisse situation={situationJour} />
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            Identifiant {employe.identifiant}
+            Caissier {employe.nomComplet}
             {employe.telephone ? ` · ${employe.telephone}` : ''}
           </p>
           {situationJour.journeesEnRetard.length > 0 && (
-            <p className="mt-2 text-sm text-rose-700">
-              Jours en retard :{' '}
+            <p className="mt-2 text-sm text-amber-800">
+              Non clôturé :{' '}
               {situationJour.journeesEnRetard.map((j) => formatDate(j + 'T12:00:00')).join(', ')}
             </p>
           )}
@@ -476,7 +506,7 @@ export default function DetailCaisse() {
 
       {peutGerer && (
         <Modale
-          titre={`Ouverture — ${employe.nomComplet} — ${formatDate(jourATraiter + 'T12:00:00')}`}
+          titre={`Ouverture — ${employe.nomComplet} — ${formatDate(jourOuverture + 'T12:00:00')}`}
           ouverte={modaleOuverture}
           onFermer={() => setModaleOuverture(false)}
         >
@@ -531,7 +561,7 @@ export default function DetailCaisse() {
 
       {peutGerer && (
         <Modale
-          titre={`Clôture — ${employe.nomComplet} — ${formatDate(jourATraiter + 'T12:00:00')}`}
+          titre={`Clôture — ${employe.nomComplet} — ${formatDate(jourCibleCloture + 'T12:00:00')}`}
           ouverte={modaleArret}
           onFermer={() => setModaleArret(false)}
         >
@@ -542,28 +572,28 @@ export default function DetailCaisse() {
             <div className="rounded-xl bg-slate-50 p-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-500">Solde à l’ouverture</span>
-                <span className="font-semibold">{formatMontant(caisseATraiter.soldeOuverture)}</span>
+                <span className="font-semibold">{formatMontant(caisseACloturer.soldeOuverture)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Opérations</span>
-                <span className="font-semibold">{caisseATraiter.nombreOperations}</span>
+                <span className="font-semibold">{caisseACloturer.nombreOperations}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Entrées</span>
                 <span className="font-semibold text-emerald-600">
-                  {formatMontant(caisseATraiter.totalEntrees)}
+                  {formatMontant(caisseACloturer.totalEntrees)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Sorties</span>
                 <span className="font-semibold text-rose-600">
-                  {formatMontant(caisseATraiter.totalSorties)}
+                  {formatMontant(caisseACloturer.totalSorties)}
                 </span>
               </div>
               <div className="mt-1 flex justify-between border-t border-slate-200 pt-1">
                 <span className="font-semibold text-slate-700">Fermeture théorique</span>
                 <span className="font-bold text-brand-700">
-                  {formatMontant(caisseATraiter.soldeFermetureTheorique)}
+                  {formatMontant(caisseACloturer.soldeFermetureTheorique)}
                 </span>
               </div>
             </div>

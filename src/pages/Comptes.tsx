@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { useStore } from '../store'
 import { type Compte, type TypeCompte } from '../types'
-import { formatDate, formatDateHeure, formatMontant } from '../utils'
+import { formatDate, formatDateHeure, formatMontant, afficherNumeroClient } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
 import {
   FicheOperationCompteDouble,
@@ -96,7 +96,10 @@ export default function Comptes() {
         return (
           !q ||
           c.numero.toLowerCase().includes(q) ||
-          (client && `${client.prenom} ${client.nom} ${client.codeClient}`.toLowerCase().includes(q))
+          (client &&
+            `${client.prenom} ${client.nom} ${client.codeClient} ${afficherNumeroClient(client.codeClient)}`
+              .toLowerCase()
+              .includes(q))
         )
       })
       .sort((a, b) => b.solde - a.solde)
@@ -107,7 +110,7 @@ export default function Comptes() {
   const caissiersDisponibles = useMemo(() => {
     const client = data.clients.find((c) => c.id === clientPourCompte)
     return data.employes
-      .filter((e) => e.actif && (e.role === 'caissier' || e.role === 'chef_agence'))
+      .filter((e) => e.actif && e.role === 'caissier')
       .filter((e) => !client?.agenceId || e.agenceId === client.agenceId)
       .sort((a, b) => a.nomComplet.localeCompare(b.nomComplet))
   }, [data.employes, data.clients, clientPourCompte])
@@ -160,7 +163,7 @@ export default function Comptes() {
       soldeAvant,
       soldeApres,
       clientNom: client ? `${client.prenom} ${client.nom}` : '—',
-      clientCode: client?.codeClient ?? '—',
+      clientCode: client ? afficherNumeroClient(client.codeClient) : '—',
       clientTelephone: client?.telephone,
       caissierNom: employeConnecte?.nomComplet ?? '—',
       agenceNom: agence ? `${agence.code} — ${agence.nom}` : undefined,
@@ -544,7 +547,7 @@ export default function Comptes() {
                 <option value="">— Choisir un client —</option>
                 {clientsActifs().map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.codeClient} — {c.prenom} {c.nom}
+                    {afficherNumeroClient(c.codeClient)} — {c.prenom} {c.nom}
                   </option>
                 ))}
               </select>

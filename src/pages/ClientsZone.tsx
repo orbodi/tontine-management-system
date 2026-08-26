@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, Plus, Search } from 'lucide-react'
 import { useStore } from '../store'
 import type { Client } from '../types'
-import { formatDate } from '../utils'
+import { formatDate, afficherNumeroClient } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
 import { ModaleClient, formulaireClientVide, type FormulaireClient } from '../components/ModaleClient'
 import { useConfirmation } from '../components/Confirmation'
@@ -12,7 +12,7 @@ export default function ClientsZone() {
   const { zoneId } = useParams<{ zoneId: string }>()
   const navigate = useNavigate()
   const { data, estCaissier, estAdmin, aDroit, ajouterClient, modifierClient } = useStore()
-  const { alerter } = useConfirmation()
+  const { alerter, confirmer } = useConfirmation()
   const peutGererClients = estAdmin || aDroit('gerer_clients')
 
   const zone = data.zones.find((z) => z.id === zoneId)
@@ -34,10 +34,11 @@ export default function ClientsZone() {
           !q ||
           `${c.prenom} ${c.nom}`.toLowerCase().includes(q) ||
           c.codeClient.toLowerCase().includes(q) ||
+          afficherNumeroClient(c.codeClient).includes(q) ||
           c.telephone.replace(/\s/g, '').includes(q.replace(/\s/g, '')) ||
           (c.profession ?? '').toLowerCase().includes(q),
       )
-      .sort((a, b) => a.ordreZone - b.ordreZone)
+      .sort((a, b) => a.codeClient.localeCompare(b.codeClient))
   }, [data.clients, zoneId, recherche])
 
   if (!zone) {
@@ -96,22 +97,34 @@ export default function ClientsZone() {
         setErreur('La zone doit appartenir à l’agence sélectionnée.')
         return
       }
-      const err = await modifierClient(clientEnEdition.id, {
+      const zoneChangee = form.zoneId !== clientEnEdition.zoneId
+      if (zoneChangee) {
+        const ok = await confirmer({
+          titre: 'Changer de zone',
+          message:
+            `Transférer ${patch.prenom} ${patch.nom} vers la zone ${zoneCible.code} ?\n\n` +
+            `Un nouveau n° client (prochain rang de la zone ${zoneCible.code}) sera attribué. ` +
+            `Tous les carnets tontine prendront ce numéro.`,
+          labelValider: 'Transférer',
+        })
+        if (!ok) return
+      }
+      const res = await modifierClient(clientEnEdition.id, {
         ...patch,
         zoneId: form.zoneId,
       })
-      if (err) {
-        setErreur(err)
+      if (res.erreur) {
+        setErreur(res.erreur)
         return
       }
       setModaleOuverte(false)
       setErreur('')
-      const zoneChangee = form.zoneId !== clientEnEdition.zoneId
+      const numeroAffiche = afficherNumeroClient(res.codeClient ?? clientEnEdition.codeClient)
       await alerter(
         'Client modifié',
         zoneChangee
-          ? `Les informations de ${patch.prenom} ${patch.nom} (${clientEnEdition.codeClient}) ont été mises à jour.\nLes numéros de carnet tontine ont été recalculés pour la zone ${zoneCible.code}.`
-          : `Les informations de ${patch.prenom} ${patch.nom} (${clientEnEdition.codeClient}) ont été mises à jour.`,
+          ? `${patch.prenom} ${patch.nom} a été transféré vers la zone ${zoneCible.code} (n° ${numeroAffiche}, carnet ${res.codeClient ?? '—'}).\nTous les carnets tontine ont été réalignés sur ce numéro.`
+          : `Les informations de ${patch.prenom} ${patch.nom} (n° ${numeroAffiche}) ont été mises à jour.`,
       )
       if (zoneChangee && form.zoneId !== zoneId) {
         navigate(`/clients/zone/${form.zoneId}`)
@@ -181,8 +194,8 @@ export default function ClientsZone() {
           <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-5 py-3.5">N°</th>
-                <th className="px-5 py-3.5">ID</th>
+                <th className="px-5 py-3.5">N° Client</th>
+                <th className="px-5 py-3.5">Zone</th>
                 <th className="px-5 py-3.5">Client</th>
                 <th className="px-5 py-3.5">Téléphone</th>
                 <th className="px-5 py-3.5">Profession</th>
@@ -192,11 +205,17 @@ export default function ClientsZone() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {clientsFiltres.map((c) => (
+              {clientsFiltres.map((c) => {
+                const zoneClient = data.zones.find((z) => z.id === c.zoneId) ?? zone
+                return (
                 <tr key={c.id} className="transition hover:bg-slate-50">
-                  <td className="px-5 py-3 font-mono text-xs text-slate-500">{c.ordreZone}</td>
                   <td className="px-5 py-3 font-mono text-xs font-semibold tabular-nums tracking-wide text-brand-700">
-                    {c.codeClient}
+                    <div>{afficherNumeroClient(c.codeClient)}</div>
+                    <div className="font-normal text-slate-400">{c.codeClient}</div>
+                  </td>
+                  <td className="px-5 py-3 font-mono text-xs font-semibold tabular-nums text-slate-700">
+                    {zoneClient.code}
+                    {zoneClient.nom ? <span className="ml-1 font-sans font-normal text-slate-500">— {zoneClient.nom}</span> : null}
                   </td>
                   <td className="px-5 py-3">
                     <Link to={`/clients/${c.id}`} className="flex items-center gap-3">
@@ -236,14 +255,19 @@ export default function ClientsZone() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
       )}
 
       <Modale
-        titre={clientEnEdition ? `Modifier ${clientEnEdition.codeClient}` : `Nouveau client — zone ${zone.code}`}
+        titre={
+          clientEnEdition
+            ? `Modifier ${afficherNumeroClient(clientEnEdition.codeClient)}`
+            : `Nouveau client — zone ${zone.code}`
+        }
         ouverte={modaleOuverte}
         onFermer={() => setModaleOuverte(false)}
       >

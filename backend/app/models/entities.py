@@ -1,7 +1,7 @@
 """Modèles SQLAlchemy — miroir de src/types.ts AppData."""
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Float, Integer, String, Text
+from sqlalchemy import Boolean, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db import Base
@@ -107,9 +107,10 @@ class Client(Base):
 
 class Carnet(Base):
     __tablename__ = "carnets"
+    __table_args__ = (UniqueConstraint("numero", "type_carnet", name="uq_carnet_numero_type"),)
     id: Mapped[str] = mapped_column(String, primary_key=True)
     client_id: Mapped[str] = mapped_column(String, index=True)
-    numero: Mapped[str] = mapped_column(String, unique=True)
+    numero: Mapped[str] = mapped_column(String, index=True)
     zone_id: Mapped[str] = mapped_column(String)
     agence_id: Mapped[str] = mapped_column(String)
     type_carnet: Mapped[str] = mapped_column(String)
@@ -390,3 +391,10 @@ class MappingEcriture(Base):
     compte_credit: Mapped[str] = mapped_column(String)
     libelle_modele: Mapped[str] = mapped_column(String)
     actif: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class SchemaMigration(Base):
+    """Journal des migrations déjà appliquées. Hors AppData : ne pas vider via replace_state."""
+    __tablename__ = "schema_migrations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    applied_at: Mapped[str] = mapped_column(String)

@@ -24,11 +24,12 @@ import {
 } from '../metier'
 import {
   PRIX_CARNET,
+  TYPES_CARNET,
   type FrequenceMise,
   type TypeCarnet,
   type TypeCompte,
 } from '../types'
-import { formatDate, formatDateHeure, formatMontant, numeroCarnet } from '../utils'
+import { formatDate, formatDateHeure, formatMontant, afficherNumeroClient } from '../utils'
 import { Avatar, BadgeStatutCredit, BoutonsMessage, EnTetePage, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
 
@@ -117,7 +118,8 @@ export default function DetailClient() {
     )
   }
 
-  const peutOuvrirCarnet = peutOperer && client.actif
+  const typesCarnetDejaOuverts = new Set(activite.carnets.map((c) => c.typeCarnet))
+  const peutOuvrirCarnet = peutOperer && client.actif && typesCarnetDejaOuverts.size < 4
   const peutOuvrirCompte = peutOperer && !estCaissier && client.actif
 
   const creditEnRetard = MODULE_CREDITS_ACTIF
@@ -189,7 +191,7 @@ export default function DetailClient() {
   }
 
   const caissiersDisponibles = data.employes
-    .filter((e) => e.actif && (e.role === 'caissier' || e.role === 'chef_agence'))
+    .filter((e) => e.actif && e.role === 'caissier')
     .filter((e) => !client.agenceId || e.agenceId === client.agenceId)
     .sort((a, b) => a.nomComplet.localeCompare(b.nomComplet))
 
@@ -202,7 +204,7 @@ export default function DetailClient() {
 
       <EnTetePage
         titre={`${client.prenom} ${client.nom}`}
-        sousTitre={`${client.codeClient} — ${client.profession ?? 'Profession non renseignée'}`}
+        sousTitre={`${afficherNumeroClient(client.codeClient)} — ${client.profession ?? 'Profession non renseignée'}`}
         action={
           <div className="flex flex-wrap gap-2">
             {peutOuvrirCarnet && (
@@ -211,7 +213,8 @@ export default function DetailClient() {
                 onClick={() => {
                   setErreur('')
                   setMise('')
-                  setTypeCarnet('tontine')
+                  const dispo = TYPES_CARNET.find((t) => !typesCarnetDejaOuverts.has(t))
+                  setTypeCarnet(dispo ?? 'tontine')
                   setModaleCarnet(true)
                 }}
               >
@@ -253,7 +256,7 @@ export default function DetailClient() {
                 onClick={async () => {
                   const ok = await confirmer({
                     titre: 'Supprimer le client',
-                    message: `Supprimer définitivement ${client.prenom} ${client.nom} (${client.codeClient}) ? Impossible s’il a déjà des carnets, comptes ou crédits.`,
+                    message: `Supprimer définitivement ${client.prenom} ${client.nom} (n° ${afficherNumeroClient(client.codeClient)}) ? Impossible s’il a déjà des carnets, comptes ou crédits.`,
                     labelValider: 'Supprimer',
                     danger: true,
                   })
@@ -406,6 +409,8 @@ export default function DetailClient() {
                   onClick={() => {
                     setErreur('')
                     setMise('')
+                    const dispo = TYPES_CARNET.find((t) => !typesCarnetDejaOuverts.has(t))
+                    setTypeCarnet(dispo ?? 'tontine')
                     setModaleCarnet(true)
                   }}
                 >
@@ -573,20 +578,24 @@ export default function DetailClient() {
           </div>
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
             N° carnet prévu :{' '}
-            <span className="font-mono font-bold text-brand-700">
-              {(() => {
-                const z = data.zones.find((x) => x.id === client.zoneId)
-                return z ? numeroCarnet(z.code, client.ordreZone) : '—'
-              })()}
-            </span>
+            <span className="font-mono font-bold text-brand-700">{client.codeClient}</span>
+            <span className="ml-1 text-slate-500">(identique au N° Client stocké)</span>
           </p>
           <div>
             <label className="label">Type *</label>
             <select className="input" value={typeCarnet} onChange={(e) => setTypeCarnet(e.target.value as TypeCarnet)}>
-              <option value="tontine">Tontine</option>
-              <option value="carte_tous">Carte pour tous</option>
-              <option value="carte_enfants">Carte pour enfants</option>
-              <option value="carte_bloquee">Carte bloquée</option>
+              <option value="tontine" disabled={typesCarnetDejaOuverts.has('tontine')}>
+                Tontine{typesCarnetDejaOuverts.has('tontine') ? ' (déjà ouvert)' : ''}
+              </option>
+              <option value="carte_tous" disabled={typesCarnetDejaOuverts.has('carte_tous')}>
+                Carte pour tous{typesCarnetDejaOuverts.has('carte_tous') ? ' (déjà ouvert)' : ''}
+              </option>
+              <option value="carte_enfants" disabled={typesCarnetDejaOuverts.has('carte_enfants')}>
+                Carte pour enfants{typesCarnetDejaOuverts.has('carte_enfants') ? ' (déjà ouvert)' : ''}
+              </option>
+              <option value="carte_bloquee" disabled={typesCarnetDejaOuverts.has('carte_bloquee')}>
+                Carte bloquée{typesCarnetDejaOuverts.has('carte_bloquee') ? ' (déjà ouvert)' : ''}
+              </option>
             </select>
             {CARNETS_RETRAIT_6_MOIS.includes(typeCarnet) && (
               <p className="mt-1 text-xs text-amber-700">

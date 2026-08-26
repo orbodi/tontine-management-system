@@ -4,7 +4,7 @@ import { Check, HandCoins, Plus, X } from 'lucide-react'
 import { useStore } from '../store'
 import type { Credit, StatutCredit } from '../types'
 import { situationCredit } from '../metier'
-import { formatDate, formatMontant } from '../utils'
+import { formatDate, formatMontant, afficherNumeroClient } from '../utils'
 import { Avatar, BadgeStatutCredit, EnTetePage, EtatVide, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
 
@@ -245,7 +245,7 @@ export default function Credits() {
                 .filter((c) => c.actif)
                 .map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.codeClient} — {c.prenom} {c.nom}
+                    {afficherNumeroClient(c.codeClient)} — {c.prenom} {c.nom}
                   </option>
                 ))}
             </select>

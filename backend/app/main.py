@@ -7,8 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .db import Base, SessionLocal, engine, migrate_schema
+from .db import Base, SessionLocal, engine
 from . import models  # noqa: F401
+from .migrations import applied_migration_ids, run_data_migrations, run_schema_migrations
 from .routers import auth_router, data_router, comptabilite_router
 
 
@@ -27,8 +28,9 @@ def _ensure_startup_data() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    migrate_schema()
+    run_schema_migrations()
     _ensure_startup_data()
+    run_data_migrations()
     yield
 
 
@@ -53,6 +55,7 @@ def create_app() -> FastAPI:
             "service": settings.app_name,
             "seed_demo_on_startup": settings.seed_demo_on_startup,
             "create_default_accounts": settings.create_default_accounts,
+            "migrations": applied_migration_ids(),
         }
 
     return application

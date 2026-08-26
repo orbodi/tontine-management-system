@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowDownRight, ArrowUpRight, ChevronRight } from 'lucide-react'
-import { LIBELLES_ROLE, useStore } from '../store'
+import { useStore } from '../store'
 import {
   LIBELLES_TYPE,
   TYPES_SORTIE,
   aujourdHuiIso,
-  compteCaisseDe,
+  compteCaisseAgence,
+  compteCaissePourEmploye,
   situationCaisse,
   type SituationCaisse,
 } from '../metier'
@@ -27,9 +28,6 @@ function BadgeEcart({ ecart }: { ecart: number }) {
 }
 
 function BadgeStatutCaisse({ situation }: { situation: SituationCaisse }) {
-  if (situation.journeesEnRetard.length > 0) {
-    return <span className="badge bg-rose-100 text-rose-700">Retard</span>
-  }
   if (situation.cloturee) {
     return <span className="badge bg-emerald-100 text-emerald-700">Clôturée</span>
   }
@@ -112,22 +110,31 @@ function VueGlobaleCaisses() {
   )
 
   const caisses = useMemo(() => {
-    return data.employes
-      .filter((u) => u.actif && (u.role === 'caissier' || u.role === 'chef_agence'))
-      .filter((u) => !agenceFiltreOperations || u.agenceId === agenceFiltreOperations)
-      .map((employe) => ({
-        employe,
-        situation: situationCaisse(
-          employe.id,
-          data.transactions,
-          data.arretsCaisse,
-          dateJournal,
-          data.comptesCaisse,
-          data.mouvementsCompteCaisse,
-          data.ouverturesCaisse ?? [],
-        ),
-        agence: data.agences.find((a) => a.id === employe.agenceId),
-      }))
+    return data.agences
+      .filter((a) => a.actif)
+      .filter((a) => !agenceFiltreOperations || a.id === agenceFiltreOperations)
+      .map((agence) => {
+        const compte = compteCaisseAgence(data.comptesCaisse, agence.id)
+        const titulaire =
+          data.employes.find((e) => e.id === compte?.employeId && e.actif) ??
+          data.employes.find((e) => e.actif && e.role === 'caissier' && e.agenceId === agence.id)
+        if (!titulaire) return null
+        return {
+          agence,
+          employe: titulaire,
+          situation: situationCaisse(
+            titulaire.id,
+            data.transactions,
+            data.arretsCaisse,
+            dateJournal,
+            data.comptesCaisse,
+            data.mouvementsCompteCaisse,
+            data.ouverturesCaisse ?? [],
+            data.employes,
+          ),
+        }
+      })
+      .filter((row): row is NonNullable<typeof row> => row != null)
       .sort((a, b) => {
         const prio = (s: SituationCaisse) =>
           s.journeesEnRetard.length > 0
@@ -143,7 +150,7 @@ function VueGlobaleCaisses() {
                     : 5
         const d = prio(a.situation) - prio(b.situation)
         if (d !== 0) return d
-        return a.employe.nomComplet.localeCompare(b.employe.nomComplet)
+        return a.agence.nom.localeCompare(b.agence.nom)
       })
   }, [data, agenceFiltreOperations, dateJournal])
 
@@ -188,8 +195,8 @@ function VueGlobaleCaisses() {
         titre="Suivi des caisses"
         sousTitre={
           estAdmin
-            ? 'Vue globale — l’arrêt de caisse est validé par l’admin ou le chef d’agence'
-            : 'Caisses de votre agence — vous validez les arrêts de caisse'
+            ? 'Vue globale — une caisse par agence, arrêt validé par l’admin ou le chef d’agence'
+            : 'Caisse de votre agence — vous validez les arrêts'
         }
       />
 
@@ -311,8 +318,8 @@ function VueGlobaleCaisses() {
           <div className="text-xs text-slate-500">Soldes comptes</div>
           <div className="mt-1 text-lg font-bold text-brand-700">
             {formatMontant(
-              caisses.reduce((s, { employe }) => {
-                const c = compteCaisseDe(data.comptesCaisse, employe.id)
+              caisses.reduce((s, { agence }) => {
+                const c = compteCaisseAgence(data.comptesCaisse, agence.id)
                 return s + (c?.solde ?? 0)
               }, 0),
             )}
@@ -341,7 +348,7 @@ function VueGlobaleCaisses() {
       </div>
 
       {caissesFiltrees.length === 0 ? (
-        <EtatVide titre="Aucune caisse" description="Aucun caissier ne correspond au filtre." />
+        <EtatVide titre="Aucune caisse" description="Aucune agence avec caissier ne correspond au filtre." />
       ) : (
         <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {caissesFiltrees.map(({ employe, situation, agence }) => {
@@ -356,19 +363,18 @@ function VueGlobaleCaisses() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-slate-900 group-hover:text-brand-700">
-                      {employe.nomComplet}
+                      {agence?.nom ?? 'Agence'}
                     </span>
                     <BadgeStatutCaisse situation={situation} />
                   </div>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    {LIBELLES_ROLE[employe.role]}
-                    {agence ? ` · ${agence.nom}` : ''}
+                    Caissier : {employe.nomComplet}
                   </p>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
                     <div>
                       <div className="text-slate-500">Compte caisse</div>
                       <div className="font-bold text-brand-700">
-                        {formatMontant(compteCaisseDe(data.comptesCaisse, employe.id)?.solde ?? 0)}
+                        {formatMontant(compteCaisseAgence(data.comptesCaisse, agence?.id ?? '')?.solde ?? 0)}
                       </div>
                     </div>
                     {situation.ouverte || situation.cloturee ? (
@@ -471,6 +477,7 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
         data.comptesCaisse,
         data.mouvementsCompteCaisse,
         data.ouverturesCaisse ?? [],
+        data.employes,
       ),
     [
       employe.id,
@@ -479,17 +486,18 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
       data.comptesCaisse,
       data.mouvementsCompteCaisse,
       data.ouverturesCaisse,
+      data.employes,
     ],
   )
 
   const monCompte = useMemo(
-    () => compteCaisseDe(data.comptesCaisse, employe.id),
-    [data.comptesCaisse, employe.id],
+    () => compteCaissePourEmploye(data.comptesCaisse, employe.id, data.employes),
+    [data.comptesCaisse, data.employes, employe.id],
   )
 
   const arretsPerso = useMemo(
-    () => data.arretsCaisse.filter((a) => a.employeId === employe.id),
-    [data.arretsCaisse, employe.id],
+    () => data.arretsCaisse.filter((a) => a.agenceId === employe.agenceId),
+    [data.arretsCaisse, employe.agenceId],
   )
 
   const demandesAValider = useMemo(
@@ -500,13 +508,11 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
     [data.demandesOuvertureCompte, employe.id],
   )
 
-  const enRetard = maCaisse.journeesEnRetard.length > 0
-
   return (
     <div>
       <EnTetePage
-        titre="Ma caisse"
-        sousTitre={`Consultation — opérations de votre caisse uniquement — ${employe.nomComplet}`}
+        titre={`Caisse de l’agence`}
+        sousTitre={`Consultation — ${data.agences.find((a) => a.id === employe.agenceId)?.nom ?? 'agence'} — opérations de la caisse unique`}
       />
 
       {demandesAValider.length > 0 && (
@@ -606,26 +612,25 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
           </p>
         )}
       </div>
-      {enRetard && (
-        <div className="mb-6 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-800 ring-1 ring-rose-200">
-          <p className="font-semibold">Arrêt de caisse en retard</p>
+      {maCaisse.journeesEnRetard.length > 0 && (
+        <div className="mb-6 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
+          <p className="font-semibold">Journée(s) précédente(s) non clôturée(s)</p>
           <p className="mt-1">
-            Journée(s) non clôturée(s) :{' '}
-            {maCaisse.journeesEnRetard.map((j) => formatDate(j + 'T12:00:00')).join(', ')}.
-            Contactez l’admin ou le chef d’agence pour l’arrêt. Les nouvelles opérations sont
-            bloquées jusqu’à clôture.
+            {maCaisse.journeesEnRetard.map((j) => formatDate(j + 'T12:00:00')).join(', ')}. La
+            journée en cours peut être ouverte et utilisée ; demandez la clôture des jours
+            précédents à l’admin ou au chef d’agence.
           </p>
         </div>
       )}
 
-      {!enRetard && !maCaisse.ouverte && (
+      {!maCaisse.ouverte && (
         <div className="mb-6 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 ring-1 ring-slate-200">
           Journée non ouverte — l’admin ou le chef d’agence doit saisir le montant d’ouverture avant
           vos opérations.
         </div>
       )}
 
-      {!enRetard && maCaisse.ouverte && !maCaisse.cloturee && (
+      {maCaisse.ouverte && !maCaisse.cloturee && (
         <div className="mb-6 rounded-xl bg-sky-50 px-4 py-3 text-sm text-sky-800 ring-1 ring-sky-200">
           Journée ouverte — solde d’ouverture {formatMontant(maCaisse.soldeOuverture)}
           {maCaisse.ouvertureDuJour?.ouvertParNom && (
@@ -634,7 +639,7 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
         </div>
       )}
 
-      {!enRetard && maCaisse.cloturee && maCaisse.arretDuJour && (
+      {maCaisse.cloturee && maCaisse.arretDuJour && (
         <div className="mb-6 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200">
           Caisse du jour arrêtée — écart <BadgeEcart ecart={maCaisse.arretDuJour.ecart} />
           {maCaisse.arretDuJour.valideParNom && (

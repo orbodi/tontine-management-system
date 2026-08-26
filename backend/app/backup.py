@@ -254,4 +254,7 @@ def import_zip_bytes(db: Session, raw: bytes) -> dict[str, Any]:
         raise ValueError("Sauvegarde incomplete : aucun employe.")
 
     replace_state(db, data, hash_plain_passwords=True)
+    from .migrations import repair_data_after_replace
+
+    repair_data_after_replace(db)
     return load_state(db, include_password_hashes=False)

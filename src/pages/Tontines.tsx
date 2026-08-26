@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight, Lock, Plus, Search } from 'lucide-react'
 import { useStore } from '../store'
 import {
   CYCLES_PAR_CARNET,
   PRIX_CARNET,
+  TYPES_CARNET,
   type FrequenceMise,
   type TypeCarnet,
   type TypeTransaction,
@@ -18,7 +19,7 @@ import {
   moisDuCycle,
   situationsCycles,
 } from '../metier'
-import { formatDateHeure, formatMontant, numeroCarnet } from '../utils'
+import { formatDateHeure, formatMontant, afficherNumeroClient } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
 
@@ -86,7 +87,9 @@ export default function Tontines() {
         if (!c.actif) return false
         if (c.agenceId !== agenceChoisie || c.zoneId !== zoneChoisie) return false
         if (!q) return true
-        const texte = normaliser(`${c.codeClient} ${c.prenom} ${c.nom} ${c.telephone}`)
+        const texte = normaliser(
+          `${c.codeClient} ${afficherNumeroClient(c.codeClient)} ${c.prenom} ${c.nom} ${c.telephone}`,
+        )
         return texte.includes(q)
       })
       .sort((a, b) => a.codeClient.localeCompare(b.codeClient))
@@ -94,14 +97,22 @@ export default function Tontines() {
   }, [data.clients, agenceChoisie, zoneChoisie, rechercheClient])
 
   const clientSelectionne = data.clients.find((c) => c.id === clientChoisi)
-  const zoneSelectionnee = data.zones.find((z) => z.id === (zoneChoisie || clientSelectionne?.zoneId))
-  const apercuNumero =
-    clientSelectionne && zoneSelectionnee
-      ? numeroCarnet(zoneSelectionnee.code, clientSelectionne.ordreZone)
-      : null
+  const typesCarnetClient = new Set(
+    data.carnets.filter((c) => c.clientId === clientChoisi).map((c) => c.typeCarnet),
+  )
+  const apercuNumero = clientSelectionne?.codeClient ?? null
+  const tousTypesOuverts = Boolean(clientChoisi) && typesCarnetClient.size >= TYPES_CARNET.length
+
+  useEffect(() => {
+    if (!clientChoisi) return
+    const ouverts = new Set(data.carnets.filter((c) => c.clientId === clientChoisi).map((c) => c.typeCarnet))
+    setTypeNouveauCarnet((prev) =>
+      ouverts.has(prev) ? (TYPES_CARNET.find((t) => !ouverts.has(t)) ?? prev) : prev,
+    )
+  }, [clientChoisi, data.carnets])
 
   const libelleClient = (c: { codeClient: string; prenom: string; nom: string }) =>
-    `${c.codeClient} — ${c.prenom} ${c.nom}`
+    `${afficherNumeroClient(c.codeClient)} — ${c.prenom} ${c.nom}`
 
   const choisirClient = (id: string) => {
     const c = data.clients.find((x) => x.id === id)
@@ -138,7 +149,10 @@ export default function Tontines() {
           c.numero.toLowerCase().includes(q) ||
           (zone && zone.code.includes(q)) ||
           (agence && agence.nom.toLowerCase().includes(q)) ||
-          (client && `${client.prenom} ${client.nom} ${client.codeClient}`.toLowerCase().includes(q))
+          (client &&
+            `${client.prenom} ${client.nom} ${client.codeClient} ${afficherNumeroClient(client.codeClient)}`
+              .toLowerCase()
+              .includes(q))
         )
       })
       .sort((a, b) => a.numero.localeCompare(b.numero))
@@ -197,6 +211,10 @@ export default function Tontines() {
       setErreur('Le client doit appartenir à l’agence et à la zone sélectionnées.')
       return
     }
+    if (typesCarnetClient.has(typeNouveauCarnet)) {
+      setErreur('Ce client a déjà un carnet de ce type.')
+      return
+    }
     const resultat = await ouvrirCarnet(clientChoisi, typeNouveauCarnet, Number(mise), frequence)
     if ('erreur' in resultat) {
       setErreur(resultat.erreur)
@@ -248,9 +266,9 @@ export default function Tontines() {
         <div className="mb-6 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950 ring-1 ring-amber-200">
           <p className="font-semibold">Avant les dépôts tontine</p>
           <p className="mt-1">
-            Saisissez d’abord le <strong>montant réel collecté</strong> sur le compte zone du jour
-            (menu <strong>Collecte tontine</strong> / Zones), puis enregistrez les dépôts sur les
-            carnets.
+            Saisissez d’abord le <strong>montant réel collecté</strong> sur le compte zone
+            (journée du jour ou journée antérieure encore ouverte), puis enregistrez les dépôts
+            en indiquant la collecte concernée.
           </p>
           <Link
             to="/zones"
@@ -520,7 +538,7 @@ export default function Tontines() {
                         <Avatar nom={c.nom} prenom={c.prenom} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-medium text-slate-900">
-                            <span className="font-mono text-xs font-semibold text-brand-700">{c.codeClient}</span>
+                            <span className="font-mono text-xs font-semibold text-brand-700">{afficherNumeroClient(c.codeClient)}</span>
                             {' — '}
                             {c.prenom} {c.nom}
                           </span>
@@ -551,20 +569,33 @@ export default function Tontines() {
           {apercuNumero && (
             <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
               N° carnet prévu : <span className="font-mono font-bold text-brand-700">{apercuNumero}</span>{' '}
-              (zone {zoneSelectionnee?.code} + ordre client)
+              (identique au N° Client stocké)
             </p>
           )}
           <div>
             <label className="label">Type *</label>
             <select className="input" value={typeNouveauCarnet} onChange={(e) => setTypeNouveauCarnet(e.target.value as TypeCarnet)}>
-              <option value="tontine">Tontine</option>
-              <option value="carte_tous">Carte pour tous</option>
-              <option value="carte_enfants">Carte pour enfants</option>
-              <option value="carte_bloquee">Carte bloquée</option>
+              <option value="tontine" disabled={typesCarnetClient.has('tontine')}>
+                Tontine{typesCarnetClient.has('tontine') ? ' (déjà ouvert)' : ''}
+              </option>
+              <option value="carte_tous" disabled={typesCarnetClient.has('carte_tous')}>
+                Carte pour tous{typesCarnetClient.has('carte_tous') ? ' (déjà ouvert)' : ''}
+              </option>
+              <option value="carte_enfants" disabled={typesCarnetClient.has('carte_enfants')}>
+                Carte pour enfants{typesCarnetClient.has('carte_enfants') ? ' (déjà ouvert)' : ''}
+              </option>
+              <option value="carte_bloquee" disabled={typesCarnetClient.has('carte_bloquee')}>
+                Carte bloquée{typesCarnetClient.has('carte_bloquee') ? ' (déjà ouvert)' : ''}
+              </option>
             </select>
             {CARNETS_RETRAIT_6_MOIS.includes(typeNouveauCarnet) && (
               <p className="mt-1 text-xs text-amber-700">
                 Retraits grisés jusqu’à activation par l’administrateur.
+              </p>
+            )}
+            {tousTypesOuverts && (
+              <p className="mt-1 text-xs font-medium text-amber-700">
+                Ce client a déjà un carnet de chaque type.
               </p>
             )}
           </div>
@@ -589,7 +620,7 @@ export default function Tontines() {
             <button type="button" className="btn-secondary" onClick={() => setModaleOuverture(false)}>
               Annuler
             </button>
-            <button type="submit" className="btn-primary">
+            <button type="submit" className="btn-primary" disabled={tousTypesOuverts}>
               Ouvrir
             </button>
           </div>

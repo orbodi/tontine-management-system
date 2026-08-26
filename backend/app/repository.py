@@ -503,7 +503,7 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "dateInscription": c.date_inscription,
                 "actif": c.actif,
             }
-            for c in db.query(m.Client).all()
+            for c in db.query(m.Client).order_by(m.Client.zone_id, m.Client.ordre_zone, m.Client.code_client).all()
         ],
         "carnets": [
             {

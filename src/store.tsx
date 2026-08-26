@@ -100,7 +100,10 @@ interface StoreApi {
   ajouterClient: (
     c: Omit<Client, 'id' | 'codeClient' | 'ordreZone' | 'agenceId' | 'dateInscription' | 'actif'>,
   ) => Promise<boolean>
-  modifierClient: (id: string, patch: Partial<Client>) => Promise<string | null>
+  modifierClient: (
+    id: string,
+    patch: Partial<Client>,
+  ) => Promise<{ erreur: string | null; codeClient?: string }>
   basculerActifClient: (id: string) => Promise<void>
   supprimerClient: (id: string) => Promise<string | null>
   ouvrirCarnet: (
@@ -109,10 +112,15 @@ interface StoreApi {
     mise: number,
     frequence: 'journaliere' | 'hebdomadaire',
   ) => Promise<{ id: string; numero: string } | { erreur: string }>
-  encaisserCotisation: (carnetId: string, montant: number) => Promise<string | null>
+  encaisserCotisation: (
+    carnetId: string,
+    montant: number,
+    dateCollecte?: string,
+  ) => Promise<string | null>
   changerMiseCarnet: (
     carnetId: string,
     nouvelleMise: number,
+    dateCollecte?: string,
   ) => Promise<string | null>
   retraitCycle: (carnetId: string, cycle: number, nombreCarreaux: number) => Promise<string | null>
   basculerVerrouCarnet: (id: string) => Promise<void>
@@ -233,6 +241,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         data?: AppData
         id?: string
         numero?: string
+        codeClient?: string
       }>(`/api/mutations/${action}`, { method: 'POST', json: { payload } })
       if (res.data) appliquerData(res.data)
       return res
@@ -333,7 +342,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       async modifierClient(id, patch) {
         const res = await muter('modifierClient', { id, patch })
-        return res.erreur ?? null
+        return {
+          erreur: res.erreur ?? null,
+          codeClient: typeof res.codeClient === 'string' ? res.codeClient : undefined,
+        }
       },
       async basculerActifClient(id) {
         await muter('basculerActifClient', { id })
@@ -348,12 +360,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (res.id && res.numero) return { id: res.id, numero: res.numero }
         return { erreur: 'Ouverture impossible.' }
       },
-      async encaisserCotisation(carnetId, montant) {
-        const res = await muter('encaisserCotisation', { carnetId, montant })
+      async encaisserCotisation(carnetId, montant, dateCollecte) {
+        const res = await muter('encaisserCotisation', {
+          carnetId,
+          montant,
+          ...(dateCollecte ? { dateCollecte } : {}),
+        })
         return res.erreur ?? null
       },
-      async changerMiseCarnet(carnetId, nouvelleMise) {
-        const res = await muter('changerMiseCarnet', { carnetId, nouvelleMise })
+      async changerMiseCarnet(carnetId, nouvelleMise, dateCollecte) {
+        const res = await muter('changerMiseCarnet', {
+          carnetId,
+          nouvelleMise,
+          ...(dateCollecte ? { dateCollecte } : {}),
+        })
         return res.erreur ?? null
       },
       async retraitCycle(carnetId, cycle, nombreCarreaux) {

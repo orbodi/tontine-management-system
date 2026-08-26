@@ -4,7 +4,7 @@ import { ArrowLeft, MapPinned, Plus, Scale, Users } from 'lucide-react'
 import { useStore } from '../store'
 import { compteZoneDe } from '../metier'
 import { EnTetePage, EtatVide, Modale, Avatar } from '../components/ui'
-import { formatMontant, numeroCarnet, pad2 } from '../utils'
+import { formatMontant, afficherNumeroClient, pad2 } from '../utils'
 import type { Zone } from '../types'
 
 export default function Zones() {
@@ -107,7 +107,10 @@ export default function Zones() {
     if (!zoneClients) return []
     return data.clients
       .filter((c) => c.zoneId === zoneClients.id)
-      .sort((a, b) => a.ordreZone - b.ordreZone)
+      .sort(
+        (a, b) =>
+          (a.ordreZone ?? 0) - (b.ordreZone ?? 0) || a.codeClient.localeCompare(b.codeClient),
+      )
   }, [data.clients, zoneClients])
 
   return (
@@ -137,7 +140,7 @@ export default function Zones() {
               : `${data.zones.length} zone${data.zones.length > 1 ? 's' : ''} — le n° de carnet hérite du n° de zone (ex. 010001)`
             : agenceFiltre
               ? `Zones de votre agence (${agenceFiltre.nom}) — saisissez le montant réel collecté avant les dépôts.`
-              : 'Avant les dépôts clients : saisissez le montant réel collecté sur le compte zone du jour.'
+              : 'Avant les dépôts clients : saisissez le montant réel collecté sur le compte zone (journée du jour ou journée encore ouverte).'
         }
         action={
           peutGererZones ? (
@@ -154,7 +157,7 @@ export default function Zones() {
           <p className="font-semibold">Ordre de saisie tontine</p>
           <ol className="mt-1 list-decimal space-y-0.5 pl-5">
             <li>Ouvrir le <strong>compte zone</strong> et saisir le <strong>montant réel collecté</strong></li>
-            <li>Enregistrer les <strong>dépôts</strong> sur les carnets (Tontine &amp; cartes)</li>
+            <li>Enregistrer les <strong>dépôts</strong> sur les carnets (jour de collecte encore ouvert)</li>
             <li>Revenir ici pour <strong>clôturer</strong> la journée zone</li>
           </ol>
         </div>
@@ -267,7 +270,8 @@ export default function Zones() {
                     {c.prenom} {c.nom}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {c.codeClient} · carnet {numeroCarnet(zoneClients!.code, c.ordreZone)}
+                    {afficherNumeroClient(c.codeClient)}
+                    {c.codeClient ? ` · carnet ${c.codeClient}` : ''}
                     {!c.actif ? ' · inactif' : ''}
                   </p>
                 </div>

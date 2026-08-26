@@ -10,7 +10,7 @@ import {
   situationCredit,
 } from '../metier'
 import type { TypeCompte } from '../types'
-import { exporterCsv, formatDate, formatDateHeure, formatMontant } from '../utils'
+import { exporterCsv, formatDate, formatDateHeure, formatMontant, afficherNumeroClient } from '../utils'
 import { EnTetePage } from '../components/ui'
 
 const LIBELLES_COMPTE: Record<TypeCompte, string> = {
@@ -270,6 +270,7 @@ export default function Rapports() {
         return (
           c.numero.toLowerCase().includes(q) ||
           client.codeClient.toLowerCase().includes(q) ||
+          afficherNumeroClient(client.codeClient).includes(q) ||
           `${client.prenom} ${client.nom}`.toLowerCase().includes(q)
         )
       })
@@ -340,6 +341,7 @@ export default function Rapports() {
         if (!q) return true
         return (
           c.codeClient.toLowerCase().includes(q) ||
+          afficherNumeroClient(c.codeClient).includes(q) ||
           c.nom.toLowerCase().includes(q) ||
           c.prenom.toLowerCase().includes(q) ||
           c.telephone.toLowerCase().includes(q)
@@ -389,10 +391,12 @@ export default function Rapports() {
         "Pièce d'identité",
         'Inscrit le',
         'Agence',
+        'Zone',
         'Statut',
       ],
       ...clientsRapport.map((c) => {
         const agence = data.agences.find((a) => a.id === c.agenceId)
+        const zoneClient = data.zones.find((z) => z.id === c.zoneId)
         return [
           c.codeClient,
           c.nom,
@@ -405,6 +409,7 @@ export default function Rapports() {
           c.pieceIdentite ?? '',
           formatDate(c.dateInscription),
           agence?.nom ?? '',
+          zoneClient ? `${zoneClient.code}${zoneClient.nom ? ` — ${zoneClient.nom}` : ''}` : '',
           c.actif ? 'Actif' : 'Inactif',
         ]
       }),
@@ -986,7 +991,7 @@ export default function Rapports() {
                     : '—'}
                 </div>
                 <div className="text-xs text-slate-500">
-                  {rapportCompte.client?.codeClient}
+                  {afficherNumeroClient(rapportCompte.client.codeClient)}
                   {rapportCompte.agence ? ` · ${rapportCompte.agence.nom}` : ''}
                 </div>
               </div>
@@ -1138,10 +1143,11 @@ export default function Rapports() {
               <table className="w-full min-w-[720px] text-sm print:min-w-0">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="py-2.5 pr-4">Code</th>
+                    <th className="py-2.5 pr-4">N° Client</th>
                     <th className="py-2.5 pr-4">Nom</th>
                     <th className="py-2.5 pr-4">Téléphone</th>
                     <th className="py-2.5 pr-4">Agence</th>
+                    <th className="py-2.5 pr-4">Zone</th>
                     <th className="py-2.5 pr-4">Inscrit le</th>
                     <th className="py-2.5">Statut</th>
                   </tr>
@@ -1149,16 +1155,22 @@ export default function Rapports() {
                 <tbody className="divide-y divide-slate-100">
                   {clientsRapport.map((c) => {
                     const agence = data.agences.find((a) => a.id === c.agenceId)
+                    const zoneClient = data.zones.find((z) => z.id === c.zoneId)
                     return (
                       <tr key={c.id}>
                         <td className="py-2.5 pr-4 font-mono text-xs font-semibold text-brand-700">
-                          {c.codeClient}
+                          {afficherNumeroClient(c.codeClient)}
                         </td>
                         <td className="py-2.5 pr-4 text-slate-800">
                           {c.prenom} {c.nom}
                         </td>
                         <td className="py-2.5 pr-4 text-slate-600">{c.telephone}</td>
                         <td className="py-2.5 pr-4 text-slate-600">{agence?.nom ?? '—'}</td>
+                        <td className="py-2.5 pr-4 font-mono text-xs font-semibold text-slate-700">
+                          {zoneClient
+                            ? `${zoneClient.code}${zoneClient.nom ? ` — ${zoneClient.nom}` : ''}`
+                            : '—'}
+                        </td>
                         <td className="py-2.5 pr-4 text-slate-600">
                           {formatDate(c.dateInscription)}
                         </td>

@@ -164,8 +164,8 @@ export default function CompteZoneTontinePage() {
           Saisissez d’abord le <strong>montant réel collecté</strong>, puis les dépôts sur{' '}
           <Link to="/tontines" className="font-semibold underline">
             Tontine &amp; cartes
-          </Link>
-          , puis clôturez ici.
+          </Link>{' '}
+          en rattachant chaque dépôt au jour de collecte encore ouvert, puis clôturez ici.
         </p>
       </div>
       <div className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-2">

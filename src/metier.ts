@@ -6,6 +6,7 @@ import {
   type CompteCaisse,
   type CompteZoneTontine,
   type Credit,
+  type Employe,
   type JourneeCompteZone,
   type MiseTontine,
   type MouvementCompteCaisse,
@@ -59,6 +60,35 @@ export function compteCaisseDe(
   employeId: string,
 ): CompteCaisse | undefined {
   return comptes.find((c) => c.employeId === employeId && c.actif)
+}
+
+export function compteCaisseAgence(
+  comptes: CompteCaisse[],
+  agenceId: string,
+): CompteCaisse | undefined {
+  return comptes.find((c) => c.agenceId === agenceId && c.actif)
+}
+
+export function compteCaissePourEmploye(
+  comptes: CompteCaisse[],
+  employeId: string,
+  employes: { id: string; agenceId: string }[] = [],
+): CompteCaisse | undefined {
+  const direct = compteCaisseDe(comptes, employeId)
+  if (direct) return direct
+  const agenceId = employes.find((e) => e.id === employeId)?.agenceId
+  return agenceId ? compteCaisseAgence(comptes, agenceId) : undefined
+}
+
+function operateursCaisseAgence(
+  employes: { id: string; agenceId: string; role: string }[],
+  agenceId: string,
+): Set<string> {
+  return new Set(
+    employes
+      .filter((e) => e.agenceId === agenceId && (e.role === 'caissier' || e.role === 'chef_agence'))
+      .map((e) => e.id),
+  )
 }
 
 /** Variation de solde pour une opération caisse (+ entrée, − sortie). */
@@ -336,6 +366,20 @@ export function ouvertureCaisseDuJour(
   return ouverturesCaisse.find((o) => o.employeId === employeId && o.journee === journee)
 }
 
+export function ouvertureCaisseAgence(
+  ouverturesCaisse: OuvertureCaisse[],
+  agenceId: string,
+  journee: string,
+  titulaireId?: string,
+): OuvertureCaisse | undefined {
+  const cands = ouverturesCaisse.filter((o) => o.agenceId === agenceId && o.journee === journee)
+  if (titulaireId) {
+    const hit = cands.find((o) => o.employeId === titulaireId)
+    if (hit) return hit
+  }
+  return cands[0]
+}
+
 export function arretCaisseDuJour(
   arretsCaisse: ArretCaisse[],
   employeId: string,
@@ -344,6 +388,22 @@ export function arretCaisseDuJour(
   return arretsCaisse.find(
     (a) => a.employeId === employeId && (a.journee ?? jourIsoDepuisDate(dateClotureArret(a))) === journee,
   )
+}
+
+export function arretCaisseAgence(
+  arretsCaisse: ArretCaisse[],
+  agenceId: string,
+  journee: string,
+  titulaireId?: string,
+): ArretCaisse | undefined {
+  const cands = arretsCaisse.filter(
+    (a) => a.agenceId === agenceId && (a.journee ?? jourIsoDepuisDate(dateClotureArret(a))) === journee,
+  )
+  if (titulaireId) {
+    const hit = cands.find((a) => a.employeId === titulaireId)
+    if (hit) return hit
+  }
+  return cands[0]
 }
 
 /** Horodatage de clôture d'un arrêt (compat anciennes données). */
@@ -385,12 +445,15 @@ export function journeesCaisseEnRetard(
   arretsCaisse: ArretCaisse[],
   ouverturesCaisse: OuvertureCaisse[] = [],
   avantJour: string = aujourdHuiIso(),
+  employes: Employe[] = [],
 ): string[] {
+  const agenceId = employes.find((e) => e.id === employeId)?.agenceId
+  const opIds = agenceId ? operateursCaisseAgence(employes, agenceId) : new Set([employeId])
   const joursAvecOps = new Set(
     transactions
       .filter(
         (t) =>
-          t.operateurId === employeId &&
+          opIds.has(t.operateurId) &&
           estOperationCaisse(t.type) &&
           jourIsoDepuisDate(t.date) < avantJour,
       )
@@ -398,36 +461,42 @@ export function journeesCaisseEnRetard(
   )
   const joursOuverts = new Set(
     ouverturesCaisse
-      .filter((o) => o.employeId === employeId && o.journee < avantJour)
+      .filter((o) => (agenceId ? o.agenceId === agenceId : o.employeId === employeId) && o.journee < avantJour)
       .map((o) => o.journee),
   )
   const jours = new Set([...joursAvecOps, ...joursOuverts])
   const joursArretes = new Set(
     arretsCaisse
-      .filter((a) => a.employeId === employeId)
+      .filter((a) => (agenceId ? a.agenceId === agenceId : a.employeId === employeId))
       .map((a) => a.journee ?? jourIsoDepuisDate(dateClotureArret(a))),
   )
   return [...jours].filter((j) => !joursArretes.has(j)).sort()
 }
 
 /**
- * Bloque les nouvelles opérations si une journée passée n'a pas été arrêtée,
- * ou si la journée en cours n'est pas ouverte.
+ * Bloque les nouvelles opérations si la journée en cours n'est pas ouverte (ou déjà clôturée).
+ * Une journée passée non clôturée n'empêche plus d'ouvrir ni de travailler sur aujourd'hui.
  */
 export function messageBlocageCaisseJournaliere(
   employeId: string,
   transactions: Transaction[],
   arretsCaisse: ArretCaisse[],
   ouverturesCaisse: OuvertureCaisse[] = [],
+  employes: Employe[] = [],
 ): string | null {
-  const retard = journeesCaisseEnRetard(employeId, transactions, arretsCaisse, ouverturesCaisse)
-  if (retard.length > 0) {
-    const premier = retard[0]
-    return `Arrêt de caisse obligatoire : demandez à l’admin ou au chef d’agence de clôturer la journée du ${premier} avant de continuer.`
-  }
   const aujourdhui = aujourdHuiIso()
-  if (!ouvertureCaisseDuJour(ouverturesCaisse, employeId, aujourdhui)) {
+  const agenceId = employes.find((e) => e.id === employeId)?.agenceId
+  const ouverte = agenceId
+    ? !!ouvertureCaisseAgence(ouverturesCaisse, agenceId, aujourdhui)
+    : !!ouvertureCaisseDuJour(ouverturesCaisse, employeId, aujourdhui)
+  const cloturee = agenceId
+    ? !!arretCaisseAgence(arretsCaisse, agenceId, aujourdhui)
+    : !!arretCaisseDuJour(arretsCaisse, employeId, aujourdhui)
+  if (!ouverte) {
     return `Ouverture de caisse obligatoire : l’admin ou le chef d’agence doit ouvrir la journée (${aujourdhui}) dans Suivi des caisses avant toute opération.`
+  }
+  if (cloturee) {
+    return 'La caisse du jour est déjà clôturée.'
   }
   return null
 }
@@ -441,19 +510,31 @@ export function situationCaisse(
   comptesCaisse: CompteCaisse[] = [],
   mouvementsCompteCaisse: MouvementCompteCaisse[] = [],
   ouverturesCaisse: OuvertureCaisse[] = [],
+  employes: Employe[] = [],
 ): SituationCaisse {
+  const agenceId = employes.find((e) => e.id === employeId)?.agenceId
+  const compte = agenceId
+    ? (compteCaisseAgence(comptesCaisse, agenceId) ?? compteCaisseDe(comptesCaisse, employeId))
+    : compteCaisseDe(comptesCaisse, employeId)
+  const titulaireId = compte?.employeId
+  const opIds = agenceId ? operateursCaisseAgence(employes, agenceId) : new Set([employeId])
+
   const dernierArret =
     arretsCaisse
-      .filter((a) => a.employeId === employeId)
+      .filter((a) => (agenceId ? a.agenceId === agenceId : a.employeId === employeId))
       .sort((a, b) => dateClotureArret(b).localeCompare(dateClotureArret(a)))[0] ?? null
 
-  const arretDuJour = arretCaisseDuJour(arretsCaisse, employeId, journee) ?? null
-  const ouvertureDuJour = ouvertureCaisseDuJour(ouverturesCaisse, employeId, journee) ?? null
+  const arretDuJour = agenceId
+    ? (arretCaisseAgence(arretsCaisse, agenceId, journee, titulaireId) ?? null)
+    : (arretCaisseDuJour(arretsCaisse, employeId, journee) ?? null)
+  const ouvertureDuJour = agenceId
+    ? (ouvertureCaisseAgence(ouverturesCaisse, agenceId, journee, titulaireId) ?? null)
+    : (ouvertureCaisseDuJour(ouverturesCaisse, employeId, journee) ?? null)
 
   const periode = transactions
     .filter(
       (t) =>
-        t.operateurId === employeId &&
+        opIds.has(t.operateurId) &&
         estOperationCaisse(t.type) &&
         jourIsoDepuisDate(t.date) === journee,
     )
@@ -466,7 +547,6 @@ export function situationCaisse(
     else totalEntrees += t.montant
   })
 
-  const compte = compteCaisseDe(comptesCaisse, employeId)
   let soldeOuverture: number
   let soldeFermetureTheorique: number
   if (arretDuJour && typeof arretDuJour.soldeOuverture === 'number') {
@@ -499,6 +579,8 @@ export function situationCaisse(
       transactions,
       arretsCaisse,
       ouverturesCaisse,
+      aujourdHuiIso(),
+      employes,
     ),
     ouverte: !!ouvertureDuJour,
     cloturee: !!arretDuJour,
@@ -543,6 +625,13 @@ export function etatJournalierCaisse(
 
 // ---------- Compte zone tontine ----------
 
+/** Types d'opérations qui alimentent le théorique d'une journée zone tontine. */
+export const TYPES_DEPOT_TONTINE_ZONE: TypeTransaction[] = [
+  'mise_tontine',
+  'commission_tontine',
+  'complement_mise',
+]
+
 /** Dépôts tontine (mises + P.C) d'une zone pour un jour YYYY-MM-DD. */
 export function depotsTontineZoneJour(
   zoneId: string,
@@ -554,7 +643,7 @@ export function depotsTontineZoneJour(
   return transactions
     .filter(
       (t) =>
-        (t.type === 'mise_tontine' || t.type === 'commission_tontine' || t.type === 'complement_mise') &&
+        TYPES_DEPOT_TONTINE_ZONE.includes(t.type) &&
         clientIds.has(t.clientId) &&
         t.date.slice(0, 10) === dateIso,
     )
@@ -573,6 +662,29 @@ export function journeeZoneDuJour(
   dateIso: string,
 ): JourneeCompteZone | undefined {
   return journees.find((j) => j.zoneId === zoneId && j.date === dateIso)
+}
+
+/** Journées de zone encore ouvertes, jusqu'à aujourd'hui (pas de date future). */
+export function joursCollecteSaisissables(
+  journees: JourneeCompteZone[],
+  zoneId: string,
+  avantJour: string = aujourdHuiIso(),
+): string[] {
+  return [
+    ...new Set(
+      journees
+        .filter((j) => j.zoneId === zoneId && !j.cloturee && j.date <= avantJour)
+        .map((j) => j.date),
+    ),
+  ].sort((a, b) => b.localeCompare(a))
+}
+
+export function dateCollecteParDefaut(
+  jours: string[],
+  aujourdhui: string = aujourdHuiIso(),
+): string {
+  if (jours.includes(aujourdhui)) return aujourdhui
+  return jours[0] ?? aujourdhui
 }
 
 export function compteZoneDe(

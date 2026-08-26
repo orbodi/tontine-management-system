@@ -8,6 +8,7 @@ backend/.venv
 backend/backend
 backend/data/app.db
 backend/data/*.db-journal
+backend/data/backups/
 __pycache__
 *.pyc
 .pytest_cache

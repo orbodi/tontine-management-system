@@ -42,6 +42,95 @@ def numero_carnet(code_zone: str, ordre: int) -> str:
     return f"{pad2(code_zone)}{pad4(ordre)}"
 
 
+def est_numero_zzxxxx(code: str | None, code_zone: str) -> bool:
+    """True si le n° stocké est déjà {zone 2 chiffres}{rang 4 chiffres}."""
+    digits = re.sub(r"\D", "", code or "")
+    return len(digits) == 6 and digits[:2] == pad2(code_zone)
+
+
+def numeros_clients_carnets_obsoletes(d: dict) -> bool:
+    """True s'il reste des n° clients/carnets au format d'avant ZZxxxx."""
+    zones = {z["id"]: z for z in d.get("zones") or []}
+    par_client = {c["id"]: c for c in d.get("clients") or []}
+    for c in d.get("clients") or []:
+        zone = zones.get(c.get("zoneId") or "")
+        if not zone:
+            continue
+        if not est_numero_zzxxxx(c.get("codeClient"), zone["code"]):
+            return True
+        attendu = numero_carnet(zone["code"], int(c.get("ordreZone") or 0))
+        if c.get("codeClient") != attendu:
+            return True
+    vus: set[tuple[str, str]] = set()
+    for ca in d.get("carnets") or []:
+        client = par_client.get(ca.get("clientId") or "")
+        if not client:
+            continue
+        zone = zones.get(client.get("zoneId") or "")
+        if not zone:
+            continue
+        cle = (ca.get("clientId") or "", ca.get("typeCarnet") or "")
+        if cle in vus:
+            continue
+        vus.add(cle)
+        if ca.get("numero") != client.get("codeClient"):
+            return True
+        if ca.get("zoneId") != zone["id"] or ca.get("agenceId") != zone["agenceId"]:
+            return True
+    return False
+
+
+def suffixe_ordre_numero(code: str | None) -> int:
+    """Partie locale d'un numéro ZZxxxx (les 4 derniers chiffres)."""
+    digits = re.sub(r"\D", "", code or "")
+    if len(digits) >= 4:
+        return int(digits[-4:])
+    if digits:
+        return int(digits)
+    return 0
+
+
+def _max_ordre_zone(d: dict, zone_id: str, *, exclude_id: str | None = None) -> int:
+    """Plus grand ordre local actuellement occupé dans la zone (clients + carnets)."""
+    existants: list[int] = []
+    for c in d.get("clients") or []:
+        if c.get("zoneId") != zone_id or c.get("id") == exclude_id:
+            continue
+        existants.append(int(c.get("ordreZone") or 0))
+        existants.append(suffixe_ordre_numero(c.get("codeClient")))
+    for ca in d.get("carnets") or []:
+        if ca.get("zoneId") != zone_id or ca.get("clientId") == exclude_id:
+            continue
+        existants.append(suffixe_ordre_numero(ca.get("numero")))
+    return max(existants, default=0)
+
+
+def _prochain_ordre_zone(
+    d: dict,
+    zone_id: str,
+    *,
+    exclude_id: str | None = None,
+    code_zone: str | None = None,
+) -> int:
+    """Prochain rang libre : max des occupants + 1, en évitant un n° déjà attribué."""
+    n = _max_ordre_zone(d, zone_id, exclude_id=exclude_id) + 1
+    if not code_zone:
+        return n
+    occupes = {
+        c.get("codeClient")
+        for c in d.get("clients") or []
+        if c.get("id") != exclude_id and c.get("codeClient")
+    }
+    occupes.update(
+        ca.get("numero")
+        for ca in d.get("carnets") or []
+        if ca.get("clientId") != exclude_id and ca.get("numero")
+    )
+    while numero_carnet(code_zone, n) in occupes:
+        n += 1
+    return n
+
+
 def numero_client(ordre: int) -> str:
     return pad4(ordre)
 
@@ -71,6 +160,222 @@ def _persist(db: Session, d: dict) -> dict:
     return _public(load_state(db))
 
 
+def _realigner_numeros_clients_carnets(d: dict) -> bool:
+    """Aligne codeClient = {zone}{ordre} et tous les carnets du client sur ce numéro.
+
+    Ancien format (ex. ``0001``) : on renumérote 1..n dans chaque zone, puis on préfixe.
+    Format ZZxxxx déjà en place : on conserve les rangs (y compris les trous).
+    """
+    zones = {z["id"]: z for z in d.get("zones") or []}
+    clients = list(d.get("clients") or [])
+    par_zone: dict[str, list[int]] = {}
+    for i, c in enumerate(clients):
+        par_zone.setdefault(c.get("zoneId") or "", []).append(i)
+
+    changed = False
+    for zone_id, indices in par_zone.items():
+        zone = zones.get(zone_id)
+        if not zone:
+            continue
+        ordres = [int(clients[i].get("ordreZone") or 0) for i in indices]
+        ancien_format = any(
+            not est_numero_zzxxxx(clients[i].get("codeClient"), zone["code"]) for i in indices
+        )
+        if ancien_format or len(ordres) != len(set(ordres)) or any(o <= 0 for o in ordres):
+            indices_tries = sorted(
+                indices,
+                key=lambda i: (
+                    suffixe_ordre_numero(clients[i].get("codeClient")),
+                    int(clients[i].get("ordreZone") or 0),
+                    clients[i].get("dateInscription") or "",
+                    clients[i].get("id") or "",
+                ),
+            )
+            for n, i in enumerate(indices_tries, 1):
+                if int(clients[i].get("ordreZone") or 0) != n:
+                    changed = True
+                clients[i] = {**clients[i], "ordreZone": n}
+        for i in indices:
+            c = clients[i]
+            attendu = numero_carnet(zone["code"], int(c.get("ordreZone") or 0))
+            if c.get("codeClient") != attendu:
+                changed = True
+                clients[i] = {**c, "codeClient": attendu}
+
+    carnets, carnets_changed = _aligner_carnets_sur_clients(d.get("carnets") or [], clients, zones)
+    changed = changed or carnets_changed
+
+    if not changed:
+        return False
+    d["clients"] = clients
+    d["carnets"] = carnets
+    compteurs = dict(d.get("compteursOrdreZone") or {})
+    for zone_id in par_zone:
+        if zone_id:
+            compteurs[zone_id] = _max_ordre_zone(d, zone_id)
+    d["compteursOrdreZone"] = compteurs
+    return True
+
+
+def _aligner_carnets_sur_clients(
+    carnets_src: list[dict],
+    clients: list[dict],
+    zones: dict[str, dict],
+) -> tuple[list[dict], bool]:
+    """Un numéro partagé par type ( = codeClient ) ; les doublons de type gardent un numéro libre."""
+    par_client = {c["id"]: c for c in clients}
+    primaires: list[dict] = []
+    extras: list[dict] = []
+    vus: set[tuple[str, str]] = set()
+    for ca in sorted(
+        carnets_src,
+        key=lambda x: (
+            0 if (par_client.get(x.get("clientId") or "") or {}).get("codeClient") == x.get("numero") else 1,
+            x.get("dateOuverture") or "",
+            x.get("id") or "",
+        ),
+    ):
+        cle = (ca.get("clientId") or "", ca.get("typeCarnet") or "")
+        if cle in vus:
+            extras.append(ca)
+        else:
+            vus.add(cle)
+            primaires.append(ca)
+
+    occupes: set[tuple[str, str]] = set()
+    par_id: dict[str, dict] = {}
+    changed = False
+
+    def _appliquer(ca: dict, numero: str, zone: dict | None) -> None:
+        nonlocal changed
+        patch: dict[str, Any] = {}
+        if ca.get("numero") != numero:
+            patch["numero"] = numero
+        if zone and (ca.get("zoneId") != zone["id"] or ca.get("agenceId") != zone["agenceId"]):
+            patch["zoneId"] = zone["id"]
+            patch["agenceId"] = zone["agenceId"]
+        occupes.add((numero, ca.get("typeCarnet") or ""))
+        if patch:
+            changed = True
+            par_id[ca["id"]] = {**ca, **patch}
+        else:
+            par_id[ca["id"]] = ca
+
+    for ca in primaires:
+        client = par_client.get(ca.get("clientId") or "")
+        if not client:
+            occupes.add((ca.get("numero") or "", ca.get("typeCarnet") or ""))
+            par_id[ca["id"]] = ca
+            continue
+        zone = zones.get(client.get("zoneId") or "")
+        _appliquer(ca, client["codeClient"], zone)
+
+    for ca in extras:
+        client = par_client.get(ca.get("clientId") or "")
+        zone = zones.get((client or {}).get("zoneId") or "") if client else None
+        typ = ca.get("typeCarnet") or ""
+        actuel = ca.get("numero") or ""
+        prefixe = pad2((zone or {}).get("code") or "00")
+        codes_zone = {
+            c.get("codeClient") or ""
+            for c in clients
+            if zone and c.get("zoneId") == zone["id"] and c.get("codeClient")
+        }
+        # Doublon : garder le numéro seulement s'il est déjà préfixé de la zone
+        # et n'est le n° client de personne (sinon collision à l'ouverture d'un carnet).
+        if (
+            actuel.startswith(prefixe)
+            and actuel
+            and (actuel, typ) not in occupes
+            and actuel not in codes_zone
+        ):
+            _appliquer(ca, actuel, zone)
+            continue
+        n = 1
+        code_zone = (zone or {}).get("code") or "00"
+        while True:
+            cand = numero_carnet(code_zone, n)
+            if (cand, typ) not in occupes and cand not in codes_zone:
+                break
+            n += 1
+        _appliquer(ca, cand, zone)
+
+    return [par_id.get(ca["id"], ca) for ca in carnets_src], changed
+
+
+def realigner_numeros_persist(db: Session) -> None:
+    d = load_state(db, include_password_hashes=True)
+    if not d.get("clients") and not d.get("carnets"):
+        return
+    if _realigner_numeros_clients_carnets(d):
+        _persist(db, d)
+
+
+def consolider_caisses_par_agence(d: dict) -> bool:
+    """Une caisse active par agence ; le chef d'agence n'en a pas.
+
+    Fusionne les comptes surnuméraires (mouvements, cumuls) dans le compte du caissier.
+    Retourne True si l'état a changé.
+    """
+    changed = False
+    par_agence: dict[str, list[dict]] = {}
+    for c in d.get("comptesCaisse") or []:
+        if not c.get("actif"):
+            continue
+        par_agence.setdefault(c.get("agenceId") or "", []).append(c)
+
+    for agence_id, comptes in par_agence.items():
+        if not agence_id:
+            continue
+        caissier = _premier_caissier_agence(d, agence_id)
+
+        def _score(c: dict) -> tuple:
+            emp = next((e for e in d["employes"] if e["id"] == c.get("employeId")), None)
+            return (1 if emp and emp.get("role") == "caissier" else 0, abs(float(c.get("solde") or 0)))
+
+        comptes.sort(key=_score, reverse=True)
+        keeper = comptes[0]
+        agence_changed = False
+        emp_k = next((e for e in d["employes"] if e["id"] == keeper.get("employeId")), None)
+        if emp_k and emp_k.get("role") == "chef_agence" and caissier:
+            keeper["employeId"] = caissier["id"]
+            agence_changed = True
+        elif caissier and keeper.get("employeId") != caissier["id"] and len(comptes) == 1:
+            keeper["employeId"] = caissier["id"]
+            agence_changed = True
+
+        for extra in comptes[1:]:
+            agence_changed = True
+            extra_id = extra["id"]
+            keeper["cumulManquant"] = float(keeper.get("cumulManquant") or 0) + float(
+                extra.get("cumulManquant") or 0
+            )
+            keeper["cumulSurplus"] = float(keeper.get("cumulSurplus") or 0) + float(
+                extra.get("cumulSurplus") or 0
+            )
+            d["mouvementsCompteCaisse"] = [
+                {**m, "compteCaisseId": keeper["id"]} if m.get("compteCaisseId") == extra_id else m
+                for m in (d.get("mouvementsCompteCaisse") or [])
+            ]
+            d["ajustementsCompteCaisse"] = [
+                {**a, "compteCaisseId": keeper["id"]} if a.get("compteCaisseId") == extra_id else a
+                for a in (d.get("ajustementsCompteCaisse") or [])
+            ]
+            extra["actif"] = False
+
+        if agence_changed:
+            changed = True
+            _recalculer_solde_compte_caisse(d, keeper["employeId"])
+
+    return changed
+
+
+def consolider_caisses_agence_persist(db: Session) -> None:
+    d = load_state(db, include_password_hashes=True)
+    if consolider_caisses_par_agence(d):
+        _persist(db, d)
+
+
 def _user(d: dict, user_id: str) -> dict | None:
     return next((e for e in d["employes"] if e["id"] == user_id and e.get("actif")), None)
 
@@ -94,14 +399,27 @@ def _a_droit(u: dict, droit: str) -> bool:
 
 
 def _employe_a_compte_caisse(role: str) -> bool:
-    return role in ("caissier", "chef_agence")
+    return role == "caissier"
+
+
+def _premier_caissier_agence(d: dict, agence_id: str) -> dict | None:
+    return next(
+        (
+            e
+            for e in d["employes"]
+            if e.get("agenceId") == agence_id and e.get("role") == "caissier" and e.get("actif")
+        ),
+        None,
+    )
 
 
 def _ouvrir_compte_caisse_si_besoin(d: dict, employe_id: str) -> dict:
-    if M.compte_caisse_de(d["comptesCaisse"], employe_id):
-        return d
     emp = next((e for e in d["employes"] if e["id"] == employe_id), None)
     if not emp or not _employe_a_compte_caisse(emp["role"]):
+        return d
+    if M.compte_caisse_agence(d["comptesCaisse"], emp["agenceId"]):
+        return d
+    if M.compte_caisse_de(d["comptesCaisse"], employe_id):
         return d
     ordre = int(d.get("compteurs", {}).get("compteCaisse", 0)) + 1
     compte = {
@@ -121,11 +439,29 @@ def _ouvrir_compte_caisse_si_besoin(d: dict, employe_id: str) -> dict:
     return d
 
 
+def _compte_caisse_operateur(d: dict, operateur_id: str, agence_id: str | None = None) -> tuple[dict, dict | None]:
+    """Caisse unique de l'agence de l'opérateur (le chef n'a pas de caisse personnelle)."""
+    op = next((e for e in d["employes"] if e["id"] == operateur_id), None)
+    aid = agence_id or (op.get("agenceId") if op else None)
+    if not aid:
+        return d, None
+    compte = M.compte_caisse_agence(d["comptesCaisse"], aid)
+    if compte:
+        return d, compte
+    caissier = _premier_caissier_agence(d, aid)
+    if caissier:
+        d = _ouvrir_compte_caisse_si_besoin(d, caissier["id"])
+        return d, M.compte_caisse_agence(d["comptesCaisse"], aid)
+    if op and _employe_a_compte_caisse(op["role"]):
+        d = _ouvrir_compte_caisse_si_besoin(d, op["id"])
+        return d, M.compte_caisse_agence(d["comptesCaisse"], aid)
+    return d, None
+
+
 def _appliquer_tx_caisse(d: dict, tx: dict) -> dict:
     if not M.est_operation_caisse(tx["type"]) or not tx.get("operateurId"):
         return d
-    next_d = _ouvrir_compte_caisse_si_besoin(d, tx["operateurId"])
-    compte = M.compte_caisse_de(next_d["comptesCaisse"], tx["operateurId"])
+    next_d, compte = _compte_caisse_operateur(d, tx["operateurId"], tx.get("agenceId"))
     if not compte:
         return next_d
     delta = M.delta_solde_operation_caisse(tx["type"], tx["montant"])
@@ -181,17 +517,44 @@ def _nom_client(d: dict, client_id: str) -> str:
 def _verif_caisse(d: dict, u: dict) -> str | None:
     if _est_admin(u):
         return None
-    if not _employe_a_compte_caisse(u["role"]):
+    if not (_est_caissier(u) or _est_chef(u)):
         return None
     return M.message_blocage_caisse_journaliere(
-        u["id"], d["transactions"], d["arretsCaisse"], d.get("ouverturesCaisse") or []
+        u["id"],
+        d["transactions"],
+        d["arretsCaisse"],
+        d.get("ouverturesCaisse") or [],
+        d.get("employes") or [],
     )
+
+
+def _jour_collecte_payload(p: dict) -> str:
+    brut = p.get("dateCollecte") or p.get("dateIso") or M.aujourd_hui_iso()
+    return str(brut).strip()[:10]
+
+
+def _erreur_date_collecte(d: dict, zone_id: str, jour: str) -> str | None:
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", jour or ""):
+        return "Date de collecte invalide."
+    if jour > M.aujourd_hui_iso():
+        return "Impossible de saisir une collecte future."
+    zone = next((z for z in d["zones"] if z["id"] == zone_id), None)
+    code = zone["code"] if zone else "—"
+    jz = M.journee_zone_du_jour(d["journeesCompteZone"], zone_id, jour)
+    if not jz:
+        return (
+            f"Saisissez d'abord le montant reel collecté pour la zone {code} "
+            f"(collecte du {jour})."
+        )
+    if jz.get("cloturee"):
+        return f"La collecte tontine de la zone {code} est deja cloturee pour le {jour}."
+    return None
 
 
 def _verif_solde_sortie(d: dict, u: dict, montant: float) -> str | None:
     if _est_admin(u):
         return None
-    compte = M.compte_caisse_de(d["comptesCaisse"], u["id"])
+    _, compte = _compte_caisse_operateur(d, u["id"], u.get("agenceId"))
     solde = compte["solde"] if compte else 0
     if solde < montant:
         return "Solde de caisse insuffisant."
@@ -202,6 +565,9 @@ def run_mutation(db: Session, current_user_id: str, action: str, payload: dict) 
     payload = payload or {}
     if action == "reinitialiserDemo":
         seed_database(db)
+        from .migrations import repair_data_after_replace
+
+        repair_data_after_replace(db)
         return {"ok": True, "data": _public(load_state(db))}
 
     d = load_state(db, include_password_hashes=True)
@@ -323,7 +689,7 @@ def ajouter_zone(d, u, p):
     d["comptesZoneTontine"].append(
         {"id": uid(), "zoneId": zid, "cumulManquant": 0, "cumulSurplus": 0, "actif": True}
     )
-    d["compteursOrdreZone"][zid] = 0
+    d["compteursOrdreZone"] = {**d.get("compteursOrdreZone", {}), zid: 0}
     return (None, d, {})
 
 
@@ -349,7 +715,25 @@ def modifier_zone(d, u, p):
             n["nom"] = (patch["nom"] or "").strip() or None
         return n
     d["zones"] = [upd(z) for z in d["zones"]]
+    if zone["code"] != code:
+        d = _reprefixer_numeros_zone(d, zone_id=id_, nouveau_code=code)
     return (None, d, {})
+
+
+def _reprefixer_numeros_zone(d: dict, *, zone_id: str, nouveau_code: str) -> dict:
+    """Recalcule codeClient et numéros de carnets après changement du code zone."""
+    clients_zone = [c for c in d["clients"] if c.get("zoneId") == zone_id]
+    par_id = {}
+    for c in clients_zone:
+        nouveau = numero_carnet(nouveau_code, int(c.get("ordreZone") or suffixe_ordre_numero(c.get("codeClient"))))
+        par_id[c["id"]] = nouveau
+    d["clients"] = [
+        {**c, "codeClient": par_id[c["id"]]} if c["id"] in par_id else c for c in d["clients"]
+    ]
+    zones = {z["id"]: z for z in d.get("zones") or []}
+    carnets, _ = _aligner_carnets_sur_clients(d.get("carnets") or [], d["clients"], zones)
+    d["carnets"] = carnets
+    return d
 
 
 def basculer_actif_zone(d, u, p):
@@ -520,13 +904,12 @@ def ajouter_client(d, u, p):
     if not zone:
         return {"erreur": "Zone introuvable."}
     d = copy.deepcopy(d)
-    ordre_zone = int(d.get("compteursOrdreZone", {}).get(zone_id, 0)) + 1
-    ordre_client = int(d["compteurs"].get("client", 0)) + 1
+    ordre_zone = _prochain_ordre_zone(d, zone_id, code_zone=zone["code"])
     cid = uid()
     d["clients"].append(
         {
             "id": cid,
-            "codeClient": numero_client(ordre_client),
+            "codeClient": numero_carnet(zone["code"], ordre_zone),
             "agenceId": zone["agenceId"],
             "zoneId": zone_id,
             "ordreZone": ordre_zone,
@@ -542,7 +925,6 @@ def ajouter_client(d, u, p):
             "actif": True,
         }
     )
-    d["compteurs"] = {**d["compteurs"], "client": ordre_client}
     d["compteursOrdreZone"] = {**d.get("compteursOrdreZone", {}), zone_id: ordre_zone}
     return (None, d, {"id": cid})
 
@@ -558,6 +940,8 @@ def modifier_client(d, u, p):
     client = next((c for c in d["clients"] if c["id"] == id_), None)
     if not client:
         return {"erreur": "Client introuvable."}
+    if not _est_admin(u) and client.get("agenceId") != u.get("agenceId"):
+        return {"erreur": "Ce client n'appartient pas a votre agence."}
 
     champs_simples = {
         "nom",
@@ -572,53 +956,35 @@ def modifier_client(d, u, p):
     simple = {k: v for k, v in patch.items() if k in champs_simples}
 
     new_zone_id = patch.get("zoneId")
+    extra: dict[str, Any] = {}
     if new_zone_id is not None and new_zone_id != client["zoneId"]:
         zone = next((z for z in d["zones"] if z["id"] == new_zone_id), None)
         if not zone:
             return {"erreur": "Zone introuvable."}
         if not zone.get("actif"):
             return {"erreur": "La zone de destination est inactive."}
-        err = _appliquer_changement_zone_client(d, client_id=id_, zone=zone)
+        if not _est_admin(u) and zone["agenceId"] != u.get("agenceId"):
+            return {"erreur": "Vous ne pouvez transferer un client que vers une zone de votre agence."}
+        err, info = _appliquer_changement_zone_client(d, client_id=id_, zone=zone)
         if err:
             return {"erreur": err}
+        extra = info
 
     if simple:
         d["clients"] = [{**c, **simple} if c["id"] == id_ else c for c in d["clients"]]
-    return (None, d, {})
+    return (None, d, extra)
 
 
-def _appliquer_changement_zone_client(d: dict, *, client_id: str, zone: dict) -> str | None:
-    """Change la zone/agence d'un client et recalcule ordreZone + numéros de carnets."""
+def _appliquer_changement_zone_client(d: dict, *, client_id: str, zone: dict) -> tuple[str | None, dict]:
+    """Change la zone/agence d'un client et recalcule N° client + numéros de carnets."""
     client = next((c for c in d["clients"] if c["id"] == client_id), None)
     if not client:
-        return "Client introuvable."
+        return "Client introuvable.", {}
 
     zone_id = zone["id"]
     compteurs = dict(d.get("compteursOrdreZone") or {})
-    ordres_existants = [
-        int(c["ordreZone"])
-        for c in d["clients"]
-        if c.get("zoneId") == zone_id and c["id"] != client_id
-    ]
-    base = max([int(compteurs.get(zone_id, 0)), *ordres_existants], default=0)
-    new_ordre = base + 1
-
-    numeros_pris = {c["numero"] for c in d["carnets"]}
-    for carnet in d["carnets"]:
-        if carnet.get("clientId") == client_id:
-            numeros_pris.discard(carnet["numero"])
-
-    carnets_client = [c for c in d["carnets"] if c.get("clientId") == client_id]
-    ordre_carnet = new_ordre
-    numeros_carnets: list[str] = []
-    for _ in carnets_client:
-        num = numero_carnet(zone["code"], ordre_carnet)
-        while num in numeros_pris:
-            ordre_carnet += 1
-            num = numero_carnet(zone["code"], ordre_carnet)
-        numeros_pris.add(num)
-        numeros_carnets.append(num)
-        ordre_carnet += 1
+    new_ordre = _prochain_ordre_zone(d, zone_id, exclude_id=client_id, code_zone=zone["code"])
+    nouveau_numero = numero_carnet(zone["code"], new_ordre)
 
     d["clients"] = [
         {
@@ -626,34 +992,26 @@ def _appliquer_changement_zone_client(d: dict, *, client_id: str, zone: dict) ->
             "zoneId": zone_id,
             "agenceId": zone["agenceId"],
             "ordreZone": new_ordre,
+            "codeClient": nouveau_numero,
         }
         if c["id"] == client_id
         else c
         for c in d["clients"]
     ]
-    max_ordre_utilise = (ordre_carnet - 1) if carnets_client else new_ordre
     d["compteursOrdreZone"] = {
         **compteurs,
-        zone_id: max(int(compteurs.get(zone_id, 0)), max_ordre_utilise),
+        zone_id: max(int(compteurs.get(zone_id, 0) or 0), new_ordre),
     }
-
-    idx = 0
-    nouveaux_carnets = []
-    for carnet in d["carnets"]:
-        if carnet.get("clientId") != client_id:
-            nouveaux_carnets.append(carnet)
-            continue
-        nouveaux_carnets.append(
-            {
-                **carnet,
-                "numero": numeros_carnets[idx],
-                "zoneId": zone_id,
-                "agenceId": zone["agenceId"],
-            }
-        )
-        idx += 1
-    d["carnets"] = nouveaux_carnets
-    return None
+    zones = {z["id"]: z for z in d.get("zones") or []}
+    carnets, _ = _aligner_carnets_sur_clients(d.get("carnets") or [], d["clients"], zones)
+    d["carnets"] = carnets
+    d["compteursOrdreZone"][zone_id] = _max_ordre_zone(d, zone_id)
+    return None, {
+        "codeClient": nouveau_numero,
+        "ordreZone": new_ordre,
+        "zoneId": zone_id,
+        "agenceId": zone["agenceId"],
+    }
 
 
 def basculer_actif_client(d, u, p):
@@ -705,13 +1063,15 @@ def ouvrir_carnet(d, u, p):
     zone = next((z for z in d["zones"] if z["id"] == client["zoneId"]), None)
     if not zone:
         return {"erreur": "Zone introuvable."}
+    if any(
+        c.get("clientId") == client_id and c.get("typeCarnet") == type_carnet
+        for c in d.get("carnets") or []
+    ):
+        return {"erreur": "Ce client a déjà un carnet de ce type."}
     d = copy.deepcopy(d)
-    numeros = {c["numero"] for c in d["carnets"]}
-    ordre = client["ordreZone"]
-    numero = numero_carnet(zone["code"], ordre)
-    while numero in numeros:
-        ordre += 1
-        numero = numero_carnet(zone["code"], ordre)
+    numero = client.get("codeClient") or numero_carnet(zone["code"], int(client.get("ordreZone") or 1))
+    if suffixe_ordre_numero(numero) <= 0 or len(re.sub(r"\D", "", numero)) < 6:
+        numero = numero_carnet(zone["code"], int(client.get("ordreZone") or 1))
     cid = uid()
     date = M.maintenant()
     tx = _mk_tx(
@@ -764,16 +1124,10 @@ def encaisser_cotisation(d, u, p):
         carnet = {**carnet, "cycleActuel": carnet["cycleActuel"] + 1}
         d["carnets"] = [carnet if c["id"] == carnet_id else c for c in d["carnets"]]
 
-    jour = M.aujourd_hui_iso()
-    jz = M.journee_zone_du_jour(d["journeesCompteZone"], carnet["zoneId"], jour)
-    if not jz or jz.get("cloturee"):
-        zone = next((z for z in d["zones"] if z["id"] == carnet["zoneId"]), None)
-        code = zone["code"] if zone else "—"
-        if jz and jz.get("cloturee"):
-            return {"erreur": f"La collecte tontine de la zone {code} est deja cloturee pour aujourd'hui."}
-        return {
-            "erreur": f"Saisissez d'abord le montant reel collecté pour la zone {code} avant les depots."
-        }
+    jour = _jour_collecte_payload(p)
+    err_jour = _erreur_date_collecte(d, carnet["zoneId"], jour)
+    if err_jour:
+        return {"erreur": err_jour}
 
     calc = M.calculer_mises_depuis_montant(montant, carnet["mise"])
     if not calc.get("ok"):
@@ -786,7 +1140,8 @@ def encaisser_cotisation(d, u, p):
     if nombre != calc["nombreMises"]:
         return {"erreur": f"Seulement {restants} carreau(x) restant(s) sur ce cycle."}
 
-    date = M.maintenant()
+    date = M.horodater_sur_jour(jour)
+    note_collecte = f" (collecte du {jour})" if jour != M.aujourd_hui_iso() else ""
     cycle_depot = carnet["cycleActuel"]
     mise_entree = {
         "id": uid(),
@@ -806,7 +1161,7 @@ def encaisser_cotisation(d, u, p):
                     "clientId": carnet["clientId"],
                     "montant": carnet["mise"],
                     "date": date,
-                    "description": f"Premiere cotisation (P.C) — {_nom_client(d, carnet['clientId'])} (cycle {cycle_depot})",
+                    "description": f"Premiere cotisation (P.C) — {_nom_client(d, carnet['clientId'])} (cycle {cycle_depot}){note_collecte}",
                 },
             )
         )
@@ -819,7 +1174,7 @@ def encaisser_cotisation(d, u, p):
                         "clientId": carnet["clientId"],
                         "montant": carnet["mise"] * (nombre - 1),
                         "date": date,
-                        "description": f"Depot x{nombre - 1} — {_nom_client(d, carnet['clientId'])} (cycle {cycle_depot})",
+                        "description": f"Depot x{nombre - 1} — {_nom_client(d, carnet['clientId'])} (cycle {cycle_depot}){note_collecte}",
                     },
                 )
             )
@@ -832,7 +1187,7 @@ def encaisser_cotisation(d, u, p):
                     "clientId": carnet["clientId"],
                     "montant": mise_entree["montant"],
                     "date": date,
-                    "description": f"Depot x{nombre} — {_nom_client(d, carnet['clientId'])} (cycle {cycle_depot})",
+                    "description": f"Depot x{nombre} — {_nom_client(d, carnet['clientId'])} (cycle {cycle_depot}){note_collecte}",
                 },
             )
         )
@@ -873,18 +1228,13 @@ def changer_mise_carnet(d, u, p):
         err = _verif_caisse(d, u)
         if err:
             return {"erreur": err}
-        jour = M.aujourd_hui_iso()
-        jz = M.journee_zone_du_jour(d["journeesCompteZone"], carnet["zoneId"], jour)
-        if not jz or jz.get("cloturee"):
-            zone = next((z for z in d["zones"] if z["id"] == carnet["zoneId"]), None)
-            code = zone["code"] if zone else "—"
-            if jz and jz.get("cloturee"):
-                return {"erreur": f"La collecte tontine de la zone {code} est deja cloturee pour aujourd'hui."}
-            return {
-                "erreur": f"Saisissez d'abord le montant reel collecté pour la zone {code} avant le complement."
-            }
-
-    date = M.maintenant()
+        jour = _jour_collecte_payload(p)
+        err_jour = _erreur_date_collecte(d, carnet["zoneId"], jour)
+        if err_jour:
+            return {"erreur": err_jour}
+        date = M.horodater_sur_jour(jour)
+    else:
+        date = M.maintenant()
     d["carnets"] = [{**c, "mise": nouvelle} if c["id"] == carnet_id else c for c in d["carnets"]]
 
     if complement > 0:
@@ -912,6 +1262,7 @@ def changer_mise_carnet(d, u, p):
                         "description": (
                             f"Complement mise {int(ancienne)}→{int(nouvelle)} ×{deposes} carreaux "
                             f"— {_nom_client(d, carnet['clientId'])} (cycle {cycle})"
+                            + (f" (collecte du {jour})" if jour != M.aujourd_hui_iso() else "")
                         ),
                     },
                 )
@@ -1030,8 +1381,8 @@ def ouvrir_compte(d, u, p):
     if not client:
         return {"erreur": "Client introuvable."}
     caissier = next((e for e in d["employes"] if e["id"] == caissier_id and e.get("actif")), None)
-    if not caissier or not _employe_a_compte_caisse(caissier["role"]):
-        return {"erreur": "Caissier / titulaire de caisse introuvable."}
+    if not caissier or caissier.get("role") != "caissier":
+        return {"erreur": "Indiquez un caissier de l'agence (le chef d'agence n'a pas de caisse)."}
     if _est_chef(u) and caissier["agenceId"] != u["agenceId"]:
         return {"erreur": "Le caissier doit appartenir à votre agence."}
     if _est_chef(u) and client["agenceId"] != u["agenceId"]:
@@ -1158,7 +1509,11 @@ def valider_ouverture_compte(d, u, p):
     if not caissier:
         return {"erreur": "Caissier assigné introuvable."}
     err = M.message_blocage_caisse_journaliere(
-        caissier["id"], d["transactions"], d["arretsCaisse"], d.get("ouverturesCaisse") or []
+        caissier["id"],
+        d["transactions"],
+        d["arretsCaisse"],
+        d.get("ouverturesCaisse") or [],
+        d.get("employes") or [],
     )
     if err:
         return {"erreur": f"Caisse du caissier : {err}"}
@@ -1480,12 +1835,13 @@ def alimenter_compte_caisse(d, u, p):
     cible = next((e for e in d["employes"] if e["id"] == employe_id and e.get("actif")), None)
     if not cible:
         return {"erreur": "Employe introuvable."}
+    if cible.get("role") == "chef_agence":
+        return {"erreur": "Le chef d'agence n'a pas de caisse."}
     if not _employe_a_compte_caisse(cible["role"]):
         return {"erreur": "Cet employe n'a pas de compte caisse."}
     if _est_chef(u) and cible["agenceId"] != u["agenceId"]:
         return {"erreur": "Vous ne pouvez alimenter que les caisses de votre agence."}
-    d = _ouvrir_compte_caisse_si_besoin(copy.deepcopy(d), cible["id"])
-    compte = M.compte_caisse_de(d["comptesCaisse"], cible["id"])
+    d, compte = _compte_caisse_operateur(copy.deepcopy(d), cible["id"], cible["agenceId"])
     if not compte:
         return {"erreur": "Compte caisse introuvable."}
     date = M.maintenant()
@@ -1522,27 +1878,31 @@ def ouvrir_journee_caisse(d, u, p):
     cible = next((e for e in d["employes"] if e["id"] == employe_id and e.get("actif")), None)
     if not cible:
         return {"erreur": "Employe introuvable."}
+    if cible.get("role") == "chef_agence":
+        return {"erreur": "Le chef d'agence n'a pas de caisse. Ouvrez la caisse unique de l'agence (caissier)."}
     if not _employe_a_compte_caisse(cible["role"]):
         return {"erreur": "Cet employe n'a pas de compte caisse."}
     if _est_chef(u) and cible["agenceId"] != u["agenceId"]:
         return {"erreur": "Vous ne pouvez ouvrir que les caisses de votre agence."}
     d = copy.deepcopy(d)
-    if M.ouverture_caisse_du_jour(d.get("ouverturesCaisse") or [], cible["id"], jour):
+    if M.ouverture_caisse_agence(d.get("ouverturesCaisse") or [], cible["agenceId"], jour):
         return {"erreur": f"La journee du {jour} est deja ouverte."}
-    if M.arret_caisse_du_jour(d["arretsCaisse"], cible["id"], jour):
+    if M.arret_caisse_agence(d["arretsCaisse"], cible["agenceId"], jour):
         return {"erreur": f"La journee du {jour} est deja cloturee."}
-    en_attente = M.journees_ouvertes_en_attente_cloture(
-        cible["id"], d.get("ouverturesCaisse") or [], d["arretsCaisse"], jour
-    )
-    if en_attente:
-        return {"erreur": f"Impossible d'ouvrir le {jour} : la journee du {en_attente[0]} est en attente de cloture."}
-    retards = M.journees_caisse_en_retard(
-        cible["id"], d["transactions"], d["arretsCaisse"], d.get("ouverturesCaisse") or [], jour
-    )
-    if retards and jour != retards[0]:
-        return {"erreur": f"Cloturez d'abord la journee du {retards[0]} avant d'ouvrir le {jour}."}
-    if not retards and jour != M.aujourd_hui_iso():
-        return {"erreur": "Seule la journee en cours (ou une journee en retard) peut etre ouverte."}
+    auj = M.aujourd_hui_iso()
+    if jour > auj:
+        return {"erreur": "Impossible d'ouvrir une journee future."}
+    if jour < auj:
+        retards = M.journees_caisse_en_retard(
+            cible["id"],
+            d["transactions"],
+            d["arretsCaisse"],
+            d.get("ouverturesCaisse") or [],
+            auj,
+            d.get("employes") or [],
+        )
+        if jour not in retards:
+            return {"erreur": "Seule la journee en cours (ou une journee passee jamais ouverte) peut etre ouverte."}
     date = M.maintenant()
     ouverture = {
         "id": uid(),
@@ -1557,8 +1917,7 @@ def ouvrir_journee_caisse(d, u, p):
         "note": (note or "").strip() or None,
     }
     d["ouverturesCaisse"] = [ouverture, *(d.get("ouverturesCaisse") or [])]
-    d = _ouvrir_compte_caisse_si_besoin(d, cible["id"])
-    compte = M.compte_caisse_de(d["comptesCaisse"], cible["id"])
+    d, compte = _compte_caisse_operateur(d, cible["id"], cible["agenceId"])
     if compte and compte["solde"] != solde_ouverture:
         delta = solde_ouverture - compte["solde"]
         mouvement = {
@@ -1595,21 +1954,19 @@ def arreter_caisse(d, u, p):
     cible = next((e for e in d["employes"] if e["id"] == cible_id and e.get("actif")), None)
     if not cible:
         return {"erreur": "Employe introuvable."}
+    if cible.get("role") == "chef_agence":
+        return {"erreur": "Le chef d'agence n'a pas de caisse."}
     if _est_chef(u) and cible["agenceId"] != u["agenceId"]:
         return {"erreur": "Vous ne pouvez arreter que les caisses de votre agence."}
     d = copy.deepcopy(d)
-    if M.arret_caisse_du_jour(d["arretsCaisse"], cible["id"], jour):
+    if M.arret_caisse_agence(d["arretsCaisse"], cible["agenceId"], jour):
         return {"erreur": f"La caisse du {jour} est deja arretee."}
-    ouverture = M.ouverture_caisse_du_jour(d.get("ouverturesCaisse") or [], cible["id"], jour)
+    ouverture = M.ouverture_caisse_agence(d.get("ouverturesCaisse") or [], cible["agenceId"], jour)
     if not ouverture:
         return {"erreur": f"Ouvrez d'abord la journee du {jour}."}
-    retards = M.journees_caisse_en_retard(
-        cible["id"], d["transactions"], d["arretsCaisse"], d.get("ouverturesCaisse") or []
-    )
-    if retards and jour != retards[0]:
-        return {"erreur": f"Cloturez d'abord la journee du {retards[0]}."}
-    if not retards and jour != M.aujourd_hui_iso():
-        return {"erreur": "Seule la journee en cours (ou une journee en retard) peut etre arretee."}
+    auj = M.aujourd_hui_iso()
+    if jour > auj:
+        return {"erreur": "Impossible de cloturer une journee future."}
     sit = M.situation_caisse(
         cible["id"],
         d["transactions"],
@@ -1618,6 +1975,7 @@ def arreter_caisse(d, u, p):
         d["comptesCaisse"],
         d["mouvementsCompteCaisse"],
         d.get("ouverturesCaisse") or [],
+        d.get("employes") or [],
     )
     dates = sorted(t["date"] for t in sit["transactions"])
     now = M.maintenant()
@@ -1644,8 +2002,7 @@ def arreter_caisse(d, u, p):
         "valideParNom": u["nomComplet"],
     }
     d["arretsCaisse"] = [arret, *d["arretsCaisse"]]
-    d = _ouvrir_compte_caisse_si_besoin(d, cible["id"])
-    compte = M.compte_caisse_de(d["comptesCaisse"], cible["id"])
+    d, compte = _compte_caisse_operateur(d, cible["id"], cible["agenceId"])
     if compte:
         cm = compte.get("cumulManquant", 0)
         cs = compte.get("cumulSurplus", 0)
@@ -1697,7 +2054,7 @@ def regulariser_cumul_compte_caisse(d, u, p):
     if not motif:
         return {"erreur": "Motif obligatoire."}
     d = copy.deepcopy(d)
-    compte = M.compte_caisse_de(d["comptesCaisse"], employe_id)
+    compte = M.compte_caisse_pour_employe(d["comptesCaisse"], employe_id, d.get("employes") or [])
     if not compte:
         return {"erreur": "Compte caisse introuvable."}
     avant = compte["cumulManquant"] if type_ == "manquant" else compte["cumulSurplus"]
@@ -1772,11 +2129,11 @@ def _recalculer_solde_compte_client(d: dict, compte_id: str) -> dict:
 
 def _recalculer_solde_compte_caisse(d: dict, employe_id: str, solde_initial: float | None = None) -> dict:
     """Recalcule solde + soldeApres de la caisse à partir de la chaîne des mouvements."""
-    compte = M.compte_caisse_de(d.get("comptesCaisse") or [], employe_id)
+    compte = M.compte_caisse_pour_employe(d.get("comptesCaisse") or [], employe_id, d.get("employes") or [])
     if not compte:
         return d
     mvts = sorted(
-        [m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("employeId") == employe_id],
+        [m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("compteCaisseId") == compte["id"]],
         key=lambda x: (x.get("date") or "", x.get("id") or ""),
     )
     if not mvts:
@@ -1815,11 +2172,11 @@ def _recalculer_solde_compte_caisse(d: dict, employe_id: str, solde_initial: flo
 
 
 def _solde_caisse_avant_premier_mouvement(d: dict, employe_id: str) -> float | None:
-    compte = M.compte_caisse_de(d.get("comptesCaisse") or [], employe_id)
+    compte = M.compte_caisse_pour_employe(d.get("comptesCaisse") or [], employe_id, d.get("employes") or [])
     if not compte:
         return None
     mvts = sorted(
-        [m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("employeId") == employe_id],
+        [m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("compteCaisseId") == compte["id"]],
         key=lambda x: (x.get("date") or "", x.get("id") or ""),
     )
     if not mvts:
@@ -2195,8 +2552,9 @@ def corriger_montant_transaction(d, u, p):
 
     # ---- Caisse de l'opérateur : maj mouvement + recalcul complet ----
     if M.est_operation_caisse(typ) and tx.get("operateurId"):
-        d = _ouvrir_compte_caisse_si_besoin(d, tx["operateurId"])
-        solde_initial = _solde_caisse_avant_premier_mouvement(d, tx["operateurId"])
+        d, compte_caisse = _compte_caisse_operateur(d, tx["operateurId"], tx.get("agenceId"))
+        titulaire = (compte_caisse or {}).get("employeId") or tx["operateurId"]
+        solde_initial = _solde_caisse_avant_premier_mouvement(d, titulaire)
         delta_nouveau = M.delta_solde_operation_caisse(typ, nouveau)
         mvt_caisse = next(
             (m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("transactionId") == tx_id),
@@ -2217,28 +2575,28 @@ def corriger_montant_transaction(d, u, p):
             ]
         else:
             delta_caisse = delta_nouveau - M.delta_solde_operation_caisse(typ, ancien)
-            if abs(delta_caisse) > 0.005:
-                compte_caisse = M.compte_caisse_de(d["comptesCaisse"], tx["operateurId"])
-                if compte_caisse:
-                    d["mouvementsCompteCaisse"] = [
-                        {
-                            "id": uid(),
-                            "compteCaisseId": compte_caisse["id"],
-                            "employeId": tx["operateurId"],
-                            "type": "entree_operation" if delta_caisse > 0 else "sortie_operation",
-                            "montant": abs(delta_caisse),
-                            "sens": "credit" if delta_caisse > 0 else "debit",
-                            "soldeApres": float(compte_caisse["solde"]) + delta_caisse,
-                            "date": date_tx or M.maintenant(),
-                            "description": f"Correction transaction {note_corr}",
-                            "transactionId": tx_id,
-                            "operateurId": u["id"],
-                            "operateurNom": u["nomComplet"],
-                        },
-                        *d["mouvementsCompteCaisse"],
-                    ]
-        d = _recalculer_solde_compte_caisse(d, tx["operateurId"], solde_initial)
-        compte_caisse = M.compte_caisse_de(d["comptesCaisse"], tx["operateurId"])
+            if abs(delta_caisse) > 0.005 and compte_caisse:
+                d["mouvementsCompteCaisse"] = [
+                    {
+                        "id": uid(),
+                        "compteCaisseId": compte_caisse["id"],
+                        "employeId": tx["operateurId"],
+                        "type": "entree_operation" if delta_caisse > 0 else "sortie_operation",
+                        "montant": abs(delta_caisse),
+                        "sens": "credit" if delta_caisse > 0 else "debit",
+                        "soldeApres": float(compte_caisse["solde"]) + delta_caisse,
+                        "date": date_tx or M.maintenant(),
+                        "description": f"Correction transaction {note_corr}",
+                        "transactionId": tx_id,
+                        "operateurId": u["id"],
+                        "operateurNom": u["nomComplet"],
+                    },
+                    *d["mouvementsCompteCaisse"],
+                ]
+        d = _recalculer_solde_compte_caisse(d, titulaire, solde_initial)
+        compte_caisse = M.compte_caisse_pour_employe(
+            d["comptesCaisse"], tx["operateurId"], d.get("employes") or []
+        )
         if compte_caisse and float(compte_caisse["solde"]) < -0.005 and not _est_admin(u):
             return {"erreur": "Correction impossible : solde de caisse insuffisant."}
 

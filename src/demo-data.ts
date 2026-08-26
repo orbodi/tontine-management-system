@@ -23,7 +23,7 @@ import {
   type TypeTransaction,
   type Zone,
 } from './types'
-import { numeroCarnet, numeroClient, numeroCompteCaisse, numeroCompteSolde, pad4, uid } from './utils'
+import { numeroCarnet, numeroCompteCaisse, numeroCompteSolde, pad4, uid } from './utils'
 
 function ilYa(jours: number, heure = 10): string {
   const d = new Date()
@@ -198,7 +198,7 @@ export function genererDonneesDemo(): AppData {
     const zone = zoneParId(zoneId)
     return {
       id: uid(),
-      codeClient: numeroClient(i + 1),
+      codeClient: numeroCarnet(zone.code, ordre),
       agenceId: zone.agenceId,
       zoneId,
       ordreZone: ordre,
@@ -652,7 +652,7 @@ export function genererDonneesDemo(): AppData {
     return compte
   }
 
-  for (const employe of [affoue, brice, chef]) {
+  for (const employe of [affoue, brice]) {
     const compte = ouvrirCompteCaisseDemo(employe)
     compte.solde = floatInitial
     const mvt: MouvementCompteCaisse = {
@@ -674,10 +674,11 @@ export function genererDonneesDemo(): AppData {
   const chronos = [...data.transactions].sort((a, b) => a.date.localeCompare(b.date))
   for (const t of chronos) {
     if (!estOperationCaisse(t.type) || !t.operateurId) continue
-    let compte = data.comptesCaisse.find((c) => c.employeId === t.operateurId && c.actif)
+    const emp = data.employes.find((e) => e.id === t.operateurId)
+    if (!emp) continue
+    let compte = data.comptesCaisse.find((c) => c.agenceId === emp.agenceId && c.actif)
     if (!compte) {
-      const emp = data.employes.find((e) => e.id === t.operateurId)
-      if (!emp) continue
+      if (emp.role !== 'caissier') continue
       compte = ouvrirCompteCaisseDemo(emp)
     }
     const delta = deltaSoldeOperationCaisse(t.type, t.montant)

@@ -1,6 +1,6 @@
 import type { Client, Sexe } from '../types'
 import { useStore } from '../store'
-import { numeroCarnet } from '../utils'
+import { afficherNumeroClient } from '../utils'
 
 export interface FormulaireClient {
   agenceId: string
@@ -67,9 +67,11 @@ export function ModaleClient({
   })
 
   const zone = data.zones.find((z) => z.id === form.zoneId)
+  const zoneOrigine = clientEnEdition
+    ? data.zones.find((z) => z.id === clientEnEdition.zoneId)
+    : undefined
   const zoneChangee =
     !!clientEnEdition && !!form.zoneId && form.zoneId !== clientEnEdition.zoneId
-  const nouvelOrdreEstime = zoneChangee && zone ? ' (nouveau n° carnet calculé à l’enregistrement)' : ''
 
   const afficherSelecteurs = !zoneVerrouillee || !!clientEnEdition
 
@@ -133,18 +135,17 @@ export function ModaleClient({
       {clientEnEdition && zone && (
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 space-y-1">
           <p>
-            Carnet actuel :{' '}
+            N° Client :{' '}
             <span className="font-mono font-semibold text-brand-700">
-              {numeroCarnet(
-                data.zones.find((z) => z.id === clientEnEdition.zoneId)?.code ?? zone.code,
-                clientEnEdition.ordreZone,
-              )}
+              {afficherNumeroClient(clientEnEdition.codeClient)}
             </span>
+            <span className="text-slate-500"> (carnet {clientEnEdition.codeClient})</span>
           </p>
           {zoneChangee && (
             <p className="text-amber-800">
-              Changement de zone : les numéros de carnet tontine seront recalculés
-              {nouvelOrdreEstime}.
+              Transfert {zoneOrigine?.code ?? '—'} → {zone.code} : un nouveau n° client (prochain rang
+              de la zone {zone.code}) sera attribué à l’enregistrement. Tous les carnets tontine
+              prendront ce numéro.
             </p>
           )}
         </div>

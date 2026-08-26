@@ -10,23 +10,68 @@ import {
 } from 'lucide-react'
 import { NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
-import { CYCLES_PAR_CARNET } from '../types'
+import { CYCLES_PAR_CARNET, type JourneeCompteZone } from '../types'
 import {
   aujourdHuiIso,
   CARNETS_RETRAIT_6_MOIS,
+  dateCollecteParDefaut,
   LIBELLES_CARNET,
   calculerMisesDepuisMontant,
   carreauxNets,
   eligibiliteRetraitCarnet,
   journeeZoneDuJour,
+  joursCollecteSaisissables,
   moisDuCycle,
   montantComplementMise,
   situationsCycles,
   type EtatCycle,
 } from '../metier'
-import { formatDate, formatMontant } from '../utils'
+import { formatDate, formatMontant, afficherNumeroClient } from '../utils'
 import { Avatar, EnTetePage, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
+
+function libelleJourCollecte(jour: string, aujourdhui: string): string {
+  const date = formatDate(`${jour}T12:00:00`)
+  if (jour === aujourdhui) return `${date} (aujourd’hui)`
+  return `${date} (rattrapage)`
+}
+
+function SelectJourCollecte({
+  jours,
+  value,
+  onChange,
+  journees,
+  zoneId,
+}: {
+  jours: string[]
+  value: string
+  onChange: (v: string) => void
+  journees: JourneeCompteZone[]
+  zoneId: string
+}) {
+  const auj = aujourdHuiIso()
+  if (jours.length === 0) return null
+  return (
+    <div>
+      <label className="label">Collecte du *</label>
+      <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+        {jours.map((j) => {
+          const jz = journeeZoneDuJour(journees, zoneId, j)
+          return (
+            <option key={j} value={j}>
+              {libelleJourCollecte(j, auj)}
+              {jz ? ` — réel ${formatMontant(jz.montantReel)}` : ''}
+            </option>
+          )
+        })}
+      </select>
+      <p className="mt-1 text-xs text-slate-400">
+        Le dépôt alimente le théorique de cette journée zone. La saisie se fait depuis la caisse
+        d’aujourd’hui.
+      </p>
+    </div>
+  )
+}
 
 export default function DetailTontine() {
   const { id } = useParams()
@@ -50,6 +95,7 @@ export default function DetailTontine() {
   const [retraitSur, setRetraitSur] = useState<EtatCycle | null>(null)
   const [nbCarreaux, setNbCarreaux] = useState('1')
   const [erreur, setErreur] = useState('')
+  const [dateCollecte, setDateCollecte] = useState(() => aujourdHuiIso())
 
   const carnet = data.carnets.find((c) => c.id === id)
   const client = carnet ? data.clients.find((c) => c.id === carnet.clientId) : undefined
@@ -57,11 +103,15 @@ export default function DetailTontine() {
   const peutOperer = aDroit('operer_comptes')
   const peutVerrouiller = aDroit('verrouiller_comptes')
 
-  const journeeCollecte = carnet
-    ? journeeZoneDuJour(data.journeesCompteZone, carnet.zoneId, aujourdHuiIso())
+  const aujourdhui = aujourdHuiIso()
+  const joursSaisissables = carnet
+    ? joursCollecteSaisissables(data.journeesCompteZone, carnet.zoneId, aujourdhui)
+    : []
+  const collecteOuverte = joursSaisissables.length > 0
+  const journeeAujourdhui = carnet
+    ? journeeZoneDuJour(data.journeesCompteZone, carnet.zoneId, aujourdhui)
     : undefined
-  const collecteOuverte = !!journeeCollecte && !journeeCollecte.cloturee
-  const collecteCloturee = !!journeeCollecte?.cloturee
+  const collecteAujourdhuiCloturee = !!journeeAujourdhui?.cloturee
 
   const cycles = useMemo(
     () => (carnet ? situationsCycles(carnet, data.mises) : []),
@@ -94,11 +144,11 @@ export default function DetailTontine() {
 
   const ouvrirRecapDepot = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!collecteOuverte) {
+    if (!collecteOuverte || !joursSaisissables.includes(dateCollecte)) {
       setErreur(
-        collecteCloturee
-          ? 'La collecte de cette zone est déjà clôturée pour aujourd’hui.'
-          : 'Saisissez d’abord le montant réel collecté sur le compte zone.',
+        !collecteOuverte && collecteAujourdhuiCloturee
+          ? 'Aucune collecte ouverte : la journée d’aujourd’hui est déjà clôturée.'
+          : 'Saisissez d’abord le montant réel collecté sur le compte zone, puis choisissez le jour de collecte.',
       )
       return
     }
@@ -118,7 +168,7 @@ export default function DetailTontine() {
   const validerDepot = async () => {
     const montant = Number(montantDepot)
     const avant = carnet.cycleActuel
-    const resultat = await encaisserCotisation(carnet.id, montant)
+    const resultat = await encaisserCotisation(carnet.id, montant, dateCollecte)
     setRecapDepot(false)
     setModaleDepot(false)
     setMontantDepot('')
@@ -131,7 +181,7 @@ export default function DetailTontine() {
     // Note: data may not have updated yet in closure — message generic with auto-pass hint
     await alerter(
       'Dépôt effectué',
-      `Le dépôt de ${formatMontant(montant)} a été enregistré pour ${client.prenom} ${client.nom} (carnet ${carnet.numero}).` +
+      `Le dépôt de ${formatMontant(montant)} a été enregistré pour ${client.prenom} ${client.nom} (carnet ${carnet.numero}), collecte du ${libelleJourCollecte(dateCollecte, aujourdhui)}.` +
         (payeesActuel + (calcDepot?.ok ? calcDepot.nombreMises : 0) >= carnet.misesParCycle
           ? `\n\n${moisDuCycle(carnet, avant).label} complet : passage automatique au mois suivant.`
           : ''),
@@ -174,7 +224,7 @@ export default function DetailTontine() {
 
       <EnTetePage
         titre={`Carnet ${carnet.numero}`}
-        sousTitre={`${LIBELLES_CARNET[carnet.typeCarnet]} — ${client.prenom} ${client.nom} (${client.codeClient}) — ${data.agences.find((a) => a.id === carnet.agenceId)?.nom ?? 'Agence'} · Zone ${data.zones.find((z) => z.id === carnet.zoneId)?.code ?? '—'}`}
+        sousTitre={`${LIBELLES_CARNET[carnet.typeCarnet]} — ${client.prenom} ${client.nom} (n° ${afficherNumeroClient(client.codeClient)}) — ${data.agences.find((a) => a.id === carnet.agenceId)?.nom ?? 'Agence'} · Zone ${data.zones.find((z) => z.id === carnet.zoneId)?.code ?? '—'}`}
         action={
           <div className="flex flex-wrap gap-2">
             {peutOperer && (
@@ -185,7 +235,7 @@ export default function DetailTontine() {
                   carnet.verrouille
                     ? 'Carnet verrouillé'
                     : !collecteOuverte
-                      ? 'Saisissez d’abord le montant réel collecté sur le compte zone'
+                      ? 'Saisissez d’abord le montant réel collecté (journée du jour ou journée antérieure encore ouverte)'
                       : payeesActuel >= carnet.misesParCycle
                         ? 'Mois complet : le prochain dépôt passera au mois suivant'
                         : undefined
@@ -193,6 +243,7 @@ export default function DetailTontine() {
                 onClick={() => {
                   setMontantDepot('')
                   setErreur('')
+                  setDateCollecte(dateCollecteParDefaut(joursSaisissables, aujourdhui))
                   setModaleDepot(true)
                 }}
               >
@@ -208,6 +259,7 @@ export default function DetailTontine() {
                 onClick={() => {
                   setNouvelleMise(String(carnet.mise))
                   setErreur('')
+                  setDateCollecte(dateCollecteParDefaut(joursSaisissables, aujourdhui))
                   setModaleMise(true)
                 }}
               >
@@ -268,15 +320,16 @@ export default function DetailTontine() {
       {peutOperer && !collecteOuverte && (
         <div
           className={`mb-6 rounded-xl px-4 py-3 text-sm ring-1 ${
-            collecteCloturee
+            collecteAujourdhuiCloturee
               ? 'bg-slate-50 text-slate-700 ring-slate-200'
               : 'bg-amber-50 text-amber-950 ring-amber-200'
           }`}
         >
-          {collecteCloturee ? (
+          {collecteAujourdhuiCloturee ? (
             <p>
               La collecte tontine de la zone {zone?.code ?? '—'} est <strong>clôturée</strong> pour
-              aujourd’hui — plus de dépôt possible.
+              aujourd’hui, et aucune journée antérieure n’est encore ouverte — plus de dépôt
+              possible.
             </p>
           ) : (
             <>
@@ -284,7 +337,7 @@ export default function DetailTontine() {
               <p className="mt-1">
                 Avant tout dépôt sur ce carnet, saisissez le montant réellement collecté pour la zone{' '}
                 <strong>{zone?.code ?? '—'}</strong>
-                {zone?.nom ? ` (${zone.nom})` : ''}.
+                {zone?.nom ? ` (${zone.nom})` : ''} (journée du jour ou journée encore ouverte).
               </p>
               <Link
                 to={`/zones/${carnet.zoneId}/compte`}
@@ -299,11 +352,42 @@ export default function DetailTontine() {
 
       {peutOperer && collecteOuverte && (
         <div className="mb-6 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900 ring-1 ring-emerald-200">
-          Collecte zone {zone?.code ?? '—'} ouverte — réel saisi :{' '}
-          <strong>{formatMontant(journeeCollecte!.montantReel)}</strong>
+          <p>
+            Collecte zone {zone?.code ?? '—'} ouverte
+            {joursSaisissables.length > 1
+              ? ` — ${joursSaisissables.length} journées encore saisissables (aujourd’hui et/ou rattrapage).`
+              : joursSaisissables[0] === aujourdhui
+                ? ' — réel saisi pour aujourd’hui : '
+                : ` — ${libelleJourCollecte(joursSaisissables[0], aujourdhui)} : `}
+            {joursSaisissables.length === 1 && (
+              <strong>
+                {formatMontant(
+                  journeeZoneDuJour(data.journeesCompteZone, carnet.zoneId, joursSaisissables[0])
+                    ?.montantReel ?? 0,
+                )}
+              </strong>
+            )}
+          </p>
+          {joursSaisissables.length > 1 && (
+            <ul className="mt-2 list-disc space-y-0.5 pl-5">
+              {joursSaisissables.map((j) => {
+                const jz = journeeZoneDuJour(data.journeesCompteZone, carnet.zoneId, j)
+                return (
+                  <li key={j}>
+                    {libelleJourCollecte(j, aujourdhui)} — réel{' '}
+                    <strong>{formatMontant(jz?.montantReel ?? 0)}</strong>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          <p className="mt-2 text-xs text-emerald-800">
+            Au dépôt, choisissez la collecte concernée (tournée du jour ou fin de saisie de la
+            veille).
+          </p>
           <Link
             to={`/zones/${carnet.zoneId}/compte`}
-            className="ml-2 font-semibold text-brand-700 hover:text-brand-800"
+            className="mt-2 inline-flex font-semibold text-brand-700 hover:text-brand-800"
           >
             Voir le compte zone
           </Link>
@@ -558,6 +642,13 @@ export default function DetailTontine() {
             />
             <p className="mt-1 text-xs text-slate-400">Multiple de la mise.</p>
           </div>
+          <SelectJourCollecte
+            jours={joursSaisissables}
+            value={dateCollecte}
+            onChange={setDateCollecte}
+            journees={data.journeesCompteZone}
+            zoneId={carnet.zoneId}
+          />
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-secondary" onClick={() => setModaleDepot(false)}>
@@ -588,11 +679,11 @@ export default function DetailTontine() {
               return
             }
             const apercu = montantComplementMise(carnet, data.mises, nm)
-            if (apercu.complement > 0 && !collecteOuverte) {
+            if (apercu.complement > 0 && (!collecteOuverte || !joursSaisissables.includes(dateCollecte))) {
               setErreur(
-                collecteCloturee
-                  ? 'La collecte de cette zone est déjà clôturée pour aujourd’hui.'
-                  : 'Saisissez d’abord le montant réel collecté sur le compte zone.',
+                !collecteOuverte && collecteAujourdhuiCloturee
+                  ? 'Aucune collecte ouverte : la journée d’aujourd’hui est déjà clôturée.'
+                  : 'Saisissez d’abord le montant réel collecté sur le compte zone, puis choisissez le jour de collecte.',
               )
               return
             }
@@ -602,12 +693,17 @@ export default function DetailTontine() {
                 apercu.complement > 0
                   ? `Mise ${formatMontant(carnet.mise)} → ${formatMontant(nm)}.\n` +
                     `${apercu.carreaux} carreau(x) déjà cotisé(s) : complément à encaisser ${formatMontant(apercu.complement)}.\n` +
+                    `Collecte du ${libelleJourCollecte(dateCollecte, aujourdhui)}.\n` +
                     `Les dépôts suivants se feront à ${formatMontant(nm)}.`
                   : `Mise ${formatMontant(carnet.mise)} → ${formatMontant(nm)}.\nAucun carreau encore cotisé sur ce cycle : pas de complément.`,
               labelValider: apercu.complement > 0 ? 'Encaisser et changer' : 'Changer la mise',
             })
             if (!ok) return
-            const err = await changerMiseCarnet(carnet.id, nm)
+            const err = await changerMiseCarnet(
+              carnet.id,
+              nm,
+              apercu.complement > 0 ? dateCollecte : undefined,
+            )
             if (err) {
               setErreur(err)
               await alerter('Changement impossible', err)
@@ -647,6 +743,15 @@ export default function DetailTontine() {
               onChange={(e) => setNouvelleMise(e.target.value)}
             />
           </div>
+          {Number(nouvelleMise) > carnet.mise && apercuComplement && apercuComplement.complement > 0 && (
+            <SelectJourCollecte
+              jours={joursSaisissables}
+              value={dateCollecte}
+              onChange={setDateCollecte}
+              journees={data.journeesCompteZone}
+              zoneId={carnet.zoneId}
+            />
+          )}
           {Number(nouvelleMise) > carnet.mise && apercuComplement && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
               {apercuComplement.carreaux > 0 ? (
@@ -691,6 +796,10 @@ export default function DetailTontine() {
               <div className="mt-2 flex justify-between border-t border-brand-200 pt-2">
                 <span>Carreaux</span>
                 <span className="text-lg font-bold">{calcDepot.nombreMises}</span>
+              </div>
+              <div className="mt-2 flex justify-between border-t border-brand-200 pt-2">
+                <span>Collecte du</span>
+                <span className="font-bold">{libelleJourCollecte(dateCollecte, aujourdhui)}</span>
               </div>
               {payeesActuel === 0 && (
                 <p className="mt-2 text-xs text-amber-800">

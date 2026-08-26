@@ -24,7 +24,7 @@ import {
 } from 'recharts'
 import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
-import { TYPES_SORTIE, LIBELLES_CARNET, compteCaisseDe, situationCredit, situationsCycles } from '../metier'
+import { TYPES_SORTIE, LIBELLES_CARNET, compteCaissePourEmploye, situationCredit, situationsCycles } from '../metier'
 import type { TypeCarnet } from '../types'
 import { formatDate, formatMontant } from '../utils'
 import { EnTetePage } from '../components/ui'
@@ -38,22 +38,23 @@ export default function TableauDeBord() {
   const comptesCaisseVisibles = useMemo(() => {
     let comptes = data.comptesCaisse.filter((c) => c.actif)
     if (estCaissier && employeConnecte) {
-      comptes = comptes.filter((c) => c.employeId === employeConnecte.id)
+      const c = compteCaissePourEmploye(data.comptesCaisse, employeConnecte.id, data.employes)
+      comptes = c ? [c] : []
     } else if (agenceFiltreOperations) {
       comptes = comptes.filter((c) => c.agenceId === agenceFiltreOperations)
     }
     return comptes
-  }, [data.comptesCaisse, estCaissier, employeConnecte, agenceFiltreOperations])
+  }, [data.comptesCaisse, data.employes, estCaissier, employeConnecte, agenceFiltreOperations])
 
   const soldeCompteCaissePerso = useMemo(() => {
     if (!employeConnecte) return null
-    return compteCaisseDe(data.comptesCaisse, employeConnecte.id)?.solde ?? null
-  }, [data.comptesCaisse, employeConnecte])
+    return compteCaissePourEmploye(data.comptesCaisse, employeConnecte.id, data.employes)?.solde ?? null
+  }, [data.comptesCaisse, data.employes, employeConnecte])
 
   const compteCaissePerso = useMemo(() => {
     if (!employeConnecte) return null
-    return compteCaisseDe(data.comptesCaisse, employeConnecte.id) ?? null
-  }, [data.comptesCaisse, employeConnecte])
+    return compteCaissePourEmploye(data.comptesCaisse, employeConnecte.id, data.employes) ?? null
+  }, [data.comptesCaisse, data.employes, employeConnecte])
 
   const totalSoldesCaisses = useMemo(
     () => comptesCaisseVisibles.reduce((s, c) => s + c.solde, 0),

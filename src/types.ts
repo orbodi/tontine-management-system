@@ -118,10 +118,10 @@ export interface Employe {
 
 export interface Client {
   id: string
-  codeClient: string // ex. 0001
+  codeClient: string // stocké 010001 (zone + ordre) ; affiché 0001
   agenceId: string // dérivé de la zone
   zoneId: string
-  /** Ordre du client dans sa zone (pour n° carnet xxxx). */
+  /** Ordre local dans la zone : suffixe du N° Client / n° carnet (xxxx). */
   ordreZone: number
   nom: string
   prenom: string
@@ -139,6 +139,8 @@ export interface Client {
 
 export type TypeCarnet = 'tontine' | 'carte_tous' | 'carte_enfants' | 'carte_bloquee'
 
+export const TYPES_CARNET: TypeCarnet[] = ['tontine', 'carte_tous', 'carte_enfants', 'carte_bloquee']
+
 export type FrequenceMise = 'journaliere' | 'hebdomadaire'
 
 export const PRIX_CARNET = 300
@@ -149,7 +151,7 @@ export const CARREAUX_PAR_CYCLE = 31
 export interface CarnetTontine {
   id: string
   clientId: string
-  /** Format 010001 : n° zone + ordre client dans la zone. */
+  /** Format 010001 : n° zone + ordre client. Identique au N° Client stocké ; plusieurs types partagent ce numéro. */
   numero: string
   /** Zone du carnet (préfixe du numéro). */
   zoneId: string
@@ -257,7 +259,7 @@ export interface Remboursement {
 
 // ---------- Caisse ----------
 
-/** Compte de caisse physique d'un caissier (ou chef opérant). */
+/** Compte de caisse physique unique de l'agence (titulaire : un caissier). Le chef d'agence n'a pas de caisse. */
 export interface CompteCaisse {
   id: string
   employeId: string

@@ -36,12 +36,19 @@ export function pad4(n: number): string {
   return String(n).padStart(4, '0')
 }
 
-/** Numéro de carnet tontine : n° zone (2) + ordre client dans la zone (4). Ex. 010001 */
+/** Numéro stocké : n° zone (2) + ordre dans la zone (4). Ex. 010001 */
 export function numeroCarnet(codeZone: string, ordreClient: number): string {
   return `${pad2(codeZone)}${pad4(ordreClient)}`
 }
 
-/** Identifiant client : numéro d'ordre global sur 4 chiffres. Ex. 0001 */
+/** Affichage N° Client : masque le préfixe zone. Ex. 010001 → 0001 */
+export function afficherNumeroClient(codeClient: string): string {
+  const digits = (codeClient || '').replace(/\D/g, '')
+  if (digits.length >= 4) return digits.slice(-4).padStart(4, '0')
+  return codeClient || '—'
+}
+
+/** Identifiant client historique (ordre global). Conservé pour compat. */
 export function numeroClient(ordre: number): string {
   return pad4(ordre)
 }

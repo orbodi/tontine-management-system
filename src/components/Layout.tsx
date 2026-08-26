@@ -25,8 +25,8 @@ import { LIBELLES_ROLE, useStore } from '../store'
 import {
   aujourdHuiIso,
   messageBlocageCaisseJournaliere,
-  ouvertureCaisseDuJour,
-  arretCaisseDuJour,
+  ouvertureCaisseAgence,
+  arretCaisseAgence,
 } from '../metier'
 import { useConfirmation } from './Confirmation'
 
@@ -53,16 +53,20 @@ export default function Layout() {
   const aujourdhui = aujourdHuiIso()
 
   const caissesSansOuvertureJour = useMemo(() => {
-    return data.employes
-      .filter((e) => e.actif && (e.role === 'caissier' || e.role === 'chef_agence'))
-      .filter((e) => !agenceFiltreOperations || e.agenceId === agenceFiltreOperations)
-      .filter((e) => {
-        const ouverte = !!ouvertureCaisseDuJour(data.ouverturesCaisse ?? [], e.id, aujourdhui)
-        const cloturee = !!arretCaisseDuJour(data.arretsCaisse, e.id, aujourdhui)
+    return data.agences
+      .filter((a) => a.actif)
+      .filter((a) => !agenceFiltreOperations || a.id === agenceFiltreOperations)
+      .filter((a) => {
+        const hasCaissier = data.employes.some(
+          (e) => e.actif && e.role === 'caissier' && e.agenceId === a.id,
+        )
+        if (!hasCaissier) return false
+        const ouverte = !!ouvertureCaisseAgence(data.ouverturesCaisse ?? [], a.id, aujourdhui)
+        const cloturee = !!arretCaisseAgence(data.arretsCaisse, a.id, aujourdhui)
         return !ouverte && !cloturee
       })
-      .sort((a, b) => a.nomComplet.localeCompare(b.nomComplet))
-  }, [data.employes, data.ouverturesCaisse, data.arretsCaisse, agenceFiltreOperations, aujourdhui])
+      .sort((a, b) => a.nom.localeCompare(b.nom))
+  }, [data.agences, data.employes, data.ouverturesCaisse, data.arretsCaisse, agenceFiltreOperations, aujourdhui])
 
   const monBlocageCaisse =
     employeConnecte && (estCaissier || estChefAgence)
@@ -71,6 +75,7 @@ export default function Layout() {
           data.transactions,
           data.arretsCaisse,
           data.ouverturesCaisse ?? [],
+          data.employes,
         )
       : null
 
@@ -295,8 +300,8 @@ export default function Layout() {
               <p className="font-semibold">Ouverture de journée de caisse requise</p>
               <p className="mt-1">
                 Les dépôts tontine, opérations de compte et autres encaissements ne sont possibles
-                pour un caissier (ou chef d’agence) qu’après ouverture de sa journée de caisse par
-                l’admin ou le chef d’agence.
+                pour un caissier qu’après ouverture de la caisse de l’agence par
+                l’admin ou le chef d’agence. Le chef d’agence n’a pas de caisse personnelle.
               </p>
               {monBlocageCaisse && (
                 <p className="mt-2 font-medium text-rose-800">{monBlocageCaisse}</p>
@@ -305,7 +310,7 @@ export default function Layout() {
                 <p className="mt-2">
                   Caisse(s) non ouverte(s) aujourd’hui ({aujourdhui}) :{' '}
                   <strong>
-                    {caissesSansOuvertureJour.map((e) => e.nomComplet).join(', ')}
+                    {caissesSansOuvertureJour.map((a) => a.nom).join(', ')}
                   </strong>
                 </p>
               )}

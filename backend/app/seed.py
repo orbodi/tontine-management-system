@@ -163,7 +163,7 @@ def bootstrap_default_accounts(db: Session) -> dict:
     data["comptesCaisse"] = [
         {
             "id": _uid("cc"),
-            "employeId": chef_id,
+            "employeId": caisse_id,
             "agenceId": agence_id,
             "numero": "CC-0001",
             "solde": 0,
@@ -172,19 +172,8 @@ def bootstrap_default_accounts(db: Session) -> dict:
             "dateOuverture": now,
             "actif": True,
         },
-        {
-            "id": _uid("cc"),
-            "employeId": caisse_id,
-            "agenceId": agence_id,
-            "numero": "CC-0002",
-            "solde": 0,
-            "cumulManquant": 0,
-            "cumulSurplus": 0,
-            "dateOuverture": now,
-            "actif": True,
-        },
     ]
-    data["compteurs"]["compteCaisse"] = 2
+    data["compteurs"]["compteCaisse"] = 1
 
     replace_state(db, data, hash_plain_passwords=True)
     return {
