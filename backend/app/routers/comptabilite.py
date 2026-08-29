@@ -276,6 +276,18 @@ def creer_ecriture(
     return {"ok": True, "ecriture": C.serialize_ecriture(db, ecr) if ecr else None}
 
 
+@router.delete("/ecritures/{ecriture_id}")
+def supprimer_ecriture(
+    ecriture_id: str,
+    user: Annotated[dict[str, Any], Depends(require_compta_ecriture)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, Any]:
+    err = C.supprimer_ecriture(db, ecriture_id)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    return {"ok": True}
+
+
 @router.get("/grand-livre")
 def grand_livre(
     user: Annotated[dict[str, Any], Depends(require_compta)],

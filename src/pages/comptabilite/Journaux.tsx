@@ -50,7 +50,7 @@ function lignesDefaut(code: string): LigneDraft[] {
 
 export default function JournauxPage() {
   const { estAdmin, aDroit } = useStore()
-  const { alerter } = useConfirmation()
+  const { alerter, confirmer } = useConfirmation()
   const [onglet, setOnglet] = useState('CAISSE')
   const [ecritures, setEcritures] = useState<EcritureComptable[]>([])
   const [journaux, setJournaux] = useState<JournalComptable[]>([])
@@ -181,6 +181,30 @@ export default function JournauxPage() {
       await charger()
     } catch (err) {
       await alerter('Impossible', err instanceof Error ? err.message : 'Erreur')
+    }
+  }
+
+  const peutSupprimerEcriture = (e: EcritureComptable) =>
+    e.source !== 'ouverture' && e.source !== 'anouveaux'
+
+  const supprimerEcriture = async (e: EcritureComptable) => {
+    if (!peutEcrire || !peutSupprimerEcriture(e)) return
+    const ok = await confirmer({
+      titre: 'Supprimer l’écriture',
+      message:
+        `Supprimer la pièce ${e.numeroPiece} — ${e.libelle} ?\n\n` +
+        `Les lignes de cette écriture disparaîtront du journal, du grand livre et de la balance. ` +
+        `Cette action est irréversible.`,
+      labelValider: 'Supprimer',
+      danger: true,
+    })
+    if (!ok) return
+    try {
+      await comptaApi.supprimerEcriture(e.id)
+      if (detail?.id === e.id) setDetail(null)
+      await charger()
+    } catch (err) {
+      await alerter('Suppression impossible', err instanceof Error ? err.message : 'Erreur')
     }
   }
 
@@ -326,6 +350,7 @@ export default function JournauxPage() {
               <th className="px-4 py-3">Libellé</th>
               <th className="px-4 py-3 text-right">Débit</th>
               <th className="px-4 py-3 text-right">Crédit</th>
+              {peutEcrire && <th className="px-4 py-3 w-12" />}
             </tr>
           </thead>
           <tbody>
@@ -346,12 +371,29 @@ export default function JournauxPage() {
                   <td className="px-4 py-2 text-slate-700">{i === 0 ? e.libelle : l.libelle || ''}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{l.debit ? formatMontant(l.debit) : ''}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{l.credit ? formatMontant(l.credit) : ''}</td>
+                  {peutEcrire && (
+                    <td className="px-4 py-2 text-right">
+                      {i === 0 && peutSupprimerEcriture(e) && (
+                        <button
+                          type="button"
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                          title="Supprimer l’écriture"
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            void supprimerEcriture(e)
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))
             })}
             {ecritures.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={peutEcrire ? 7 : 6} className="px-4 py-8 text-center text-slate-500">
                   Aucune écriture dans ce journal.
                 </td>
               </tr>
@@ -365,6 +407,7 @@ export default function JournauxPage() {
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatMontant(totauxListe.debit)}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{formatMontant(totauxListe.credit)}</td>
+                {peutEcrire && <td />}
               </tr>
             </tfoot>
           )}
@@ -410,6 +453,18 @@ export default function JournauxPage() {
                 </tr>
               </tfoot>
             </table>
+            {peutEcrire && peutSupprimerEcriture(detail) && (
+              <div className="flex justify-end border-t border-slate-100 pt-3">
+                <button
+                  type="button"
+                  className="btn-danger"
+                  onClick={() => void supprimerEcriture(detail)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Supprimer l’écriture
+                </button>
+              </div>
+            )}
           </div>
         )}
       </Modale>

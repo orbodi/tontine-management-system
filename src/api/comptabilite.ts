@@ -90,6 +90,8 @@ export const comptaApi = {
       method: 'POST',
       json: body,
     }),
+  supprimerEcriture: (id: string) =>
+    apiFetch<{ ok: boolean }>(`/api/comptabilite/ecritures/${id}`, { method: 'DELETE' }),
   grandLivre: (params?: {
     exercice_id?: string
     compte_numero?: string

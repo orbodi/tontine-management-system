@@ -312,6 +312,24 @@ def creer_ecriture(
     return None, ecriture
 
 
+def supprimer_ecriture(db: Session, ecriture_id: str) -> str | None:
+    """Supprime une écriture et ses lignes. Ouverture / à-nouveaux : protégées."""
+    e = db.query(m.EcritureComptable).filter_by(id=ecriture_id).first()
+    if not e:
+        return "Écriture introuvable."
+    ex = db.query(m.ExerciceComptable).filter_by(id=e.exercice_id).first()
+    if not ex:
+        return "Exercice introuvable."
+    if ex.statut != "ouvert":
+        return "Exercice clôturé : suppression impossible."
+    if e.source in ("ouverture", "anouveaux"):
+        return "Cette écriture (ouverture ou à-nouveaux) ne peut pas être supprimée ici."
+    db.query(m.LigneEcriture).filter_by(ecriture_id=e.id).delete()
+    db.delete(e)
+    db.commit()
+    return None
+
+
 def supprimer_ecritures_auto(db: Session, source_type: str, source_ids: list[str]) -> int:
     """Supprime les écritures automatiques liées à des sources métier (transactions annulées)."""
     if not source_ids:
