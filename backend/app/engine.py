@@ -140,11 +140,59 @@ def numero_client_banque(ordre: int) -> str:
     return pad4(ordre)
 
 
+def _ordres_banque_occupes(d: dict, *, exclude_id: str | None = None) -> set[int]:
+    occupes: set[int] = set()
+    for c in d.get("clients") or []:
+        if c.get("id") == exclude_id:
+            continue
+        n = int(c.get("ordreBanque") or 0)
+        if n > 0:
+            occupes.add(n)
+        code = re.sub(r"\D", "", c.get("codeClientBanque") or "")
+        if code:
+            occupes.add(int(code))
+    return occupes
+
+
+def _prochain_ordre_banque(d: dict, *, exclude_id: str | None = None) -> int:
+    """Plus petit n° banque libre (réutilise 0001 si plus personne ne l’a)."""
+    occupes = _ordres_banque_occupes(d, exclude_id=exclude_id)
+    n = 1
+    while n in occupes:
+        n += 1
+    return n
+
+
+def _ordres_compte_solde_occupes(d: dict) -> set[int]:
+    occupes: set[int] = set()
+    for c in d.get("comptes") or []:
+        m = re.fullmatch(r"B(\d+)", (c.get("numero") or "").strip(), re.IGNORECASE)
+        if m:
+            occupes.add(int(m.group(1)))
+    return occupes
+
+
+def _prochain_ordre_compte_solde(d: dict) -> int:
+    """Plus petit n° de compte Bxxxx libre (réutilise B0001 si le compte a été supprimé)."""
+    occupes = _ordres_compte_solde_occupes(d)
+    n = 1
+    while n in occupes:
+        n += 1
+    return n
+
+
+def _sync_compteur_client_banque(d: dict) -> None:
+    n = max(_ordres_banque_occupes(d), default=0)
+    d["compteurs"] = {**(d.get("compteurs") or {}), "clientBanque": n}
+
+
 def attribuer_numeros_clients_banque(d: dict) -> bool:
     """Assigne un n° banque aux clients qui ont un compte et pas encore de codeClientBanque."""
     ids_compte = {co.get("clientId") for co in d.get("comptes") or [] if co.get("clientId")}
     if not ids_compte:
-        return False
+        avant = int((d.get("compteurs") or {}).get("clientBanque") or 0)
+        _sync_compteur_client_banque(d)
+        return int((d.get("compteurs") or {}).get("clientBanque") or 0) != avant
     premiere_date: dict[str, str] = {}
     for co in d.get("comptes") or []:
         cid = co.get("clientId")
@@ -153,12 +201,6 @@ def attribuer_numeros_clients_banque(d: dict) -> bool:
         dt = co.get("dateOuverture") or ""
         if cid not in premiere_date or dt < premiere_date[cid]:
             premiere_date[cid] = dt
-    deja = [
-        int(c.get("ordreBanque") or 0)
-        for c in d.get("clients") or []
-        if c.get("ordreBanque")
-    ]
-    n = max(int((d.get("compteurs") or {}).get("clientBanque") or 0), max(deja, default=0))
     par_id = {c["id"]: c for c in d.get("clients") or []}
     a_numeroter = [
         par_id[cid]
@@ -166,20 +208,18 @@ def attribuer_numeros_clients_banque(d: dict) -> bool:
         if cid in par_id and not par_id[cid].get("codeClientBanque")
     ]
     if not a_numeroter:
-        compteurs = dict(d.get("compteurs") or {})
-        if int(compteurs.get("clientBanque") or 0) < n:
-            d["compteurs"] = {**compteurs, "clientBanque": n}
-            return True
-        return False
+        avant = int((d.get("compteurs") or {}).get("clientBanque") or 0)
+        _sync_compteur_client_banque(d)
+        return int((d.get("compteurs") or {}).get("clientBanque") or 0) != avant
     for c in a_numeroter:
-        n += 1
+        n = _prochain_ordre_banque(d)
         par_id[c["id"]] = {
             **c,
             "ordreBanque": n,
             "codeClientBanque": numero_client_banque(n),
         }
-    d["clients"] = [par_id.get(c["id"], c) for c in d["clients"]]
-    d["compteurs"] = {**(d.get("compteurs") or {}), "clientBanque": n}
+        d["clients"] = [par_id.get(x["id"], x) for x in d["clients"]]
+    _sync_compteur_client_banque(d)
     return True
 
 
@@ -190,17 +230,16 @@ def attribuer_numeros_clients_banque_persist(db: Session) -> None:
 
 
 def _assurer_numero_client_banque(d: dict, client_id: str) -> None:
-    """Attribue le prochain n° banque (0001, 0002…) au premier compte du client."""
+    """Attribue le plus petit n° banque libre (0001 si plus aucun client banque)."""
     client = next((c for c in d.get("clients") or [] if c["id"] == client_id), None)
     if not client or client.get("codeClientBanque"):
         return
-    deja = [int(c.get("ordreBanque") or 0) for c in d.get("clients") or [] if c.get("ordreBanque")]
-    n = max(int((d.get("compteurs") or {}).get("clientBanque") or 0), max(deja, default=0)) + 1
+    n = _prochain_ordre_banque(d, exclude_id=client_id)
     d["clients"] = [
         {**c, "ordreBanque": n, "codeClientBanque": numero_client_banque(n)} if c["id"] == client_id else c
         for c in d["clients"]
     ]
-    d["compteurs"] = {**(d.get("compteurs") or {}), "clientBanque": n}
+    _sync_compteur_client_banque(d)
 
 
 def numero_compte_solde(ordre: int) -> str:
@@ -1270,6 +1309,7 @@ def supprimer_client(d, u, p):
     d["demandesOuvertureCompte"] = [
         x for x in (d.get("demandesOuvertureCompte") or []) if x.get("clientId") != id_
     ]
+    _sync_compteur_client_banque(d)
     return (None, d, {})
 
 
@@ -1809,11 +1849,11 @@ def _appliquer_ouverture_compte_validee(d, operateur, demande):
     part_sociale = float(demande.get("partSociale") or 0)
     droit = float(demande.get("droitAdhesion") or 0)
     _assurer_numero_client_banque(d, client_id)
-    ordre = int(d["compteurs"].get("compte", 0)) + 1
+    ordre = _prochain_ordre_compte_solde(d)
     cid = uid()
     numero = numero_compte_solde(ordre)
     date = _horodate_caisse_agence(d, operateur.get("agenceId"))
-    d["compteurs"] = {**d["compteurs"], "compte": ordre}
+    d["compteurs"] = {**d["compteurs"], "compte": max(_ordres_compte_solde_occupes(d) | {ordre})}
     d["comptes"].append(
         {
             "id": cid,
