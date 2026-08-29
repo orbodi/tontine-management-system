@@ -652,7 +652,7 @@ export default function DetailClient() {
             </div>
           </div>
           <div className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">
-            {estAncienClientTontine(client) ? (
+            {estAncienClient(client) ? (
               <>
                 Carnet offert (client ancien) — pas de {formatMontant(PRIX_CARNET)}. Pas de P.C. sur le
                 premier cycle ; 31 carreaux × 12 mois.
