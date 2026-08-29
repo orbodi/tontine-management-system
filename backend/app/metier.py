@@ -283,11 +283,18 @@ def pc_due_sur_cycle(carnet: dict, cycle: int) -> bool:
     return int(cycle) >= 1
 
 
-def carreaux_retirables(carnet: dict, mises: list, cycle: int) -> int:
+def carreaux_retirables(
+    carnet: dict, mises: list, cycle: int, transactions: list | None = None
+) -> int:
+    """Carreaux encore retirables. La P.C. n'est réservée que si elle a été payée."""
     nets = carreaux_nets(carnet, mises, cycle)
     if nets <= 0:
         return 0
-    reserve_pc = 1 if pc_due_sur_cycle(carnet, cycle) else 0
+    reserve_pc = (
+        1
+        if pc_due_sur_cycle(carnet, cycle) and pc_payee_sur_cycle(carnet, transactions, cycle)
+        else 0
+    )
     return max(0, nets - reserve_pc)
 
 

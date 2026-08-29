@@ -1638,7 +1638,7 @@ def retrait_cycle(d, u, p):
     elig = M.eligibilite_retrait_carnet(carnet, d["mises"])
     if not elig.get("autorise"):
         return {"erreur": "Retrait non autorise pour ce type de carnet."}
-    retirables = M.carreaux_retirables(carnet, d["mises"], cycle)
+    retirables = M.carreaux_retirables(carnet, d["mises"], cycle, d.get("transactions") or [])
     if nombre > retirables:
         return {"erreur": "Pas assez de carreaux."}
     montant = carnet["mise"] * nombre

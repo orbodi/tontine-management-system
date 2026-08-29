@@ -190,7 +190,7 @@ export default function Tontines() {
   const encoursTotal = data.carnets
     .filter((c) => c.actif)
     .reduce((s, c) => {
-      const cycles = situationsCycles(c, data.mises)
+      const cycles = situationsCycles(c, data.mises, data.transactions)
       return s + cycles.reduce((x, et) => x + et.nets * c.mise, 0)
     }, 0)
 
@@ -316,7 +316,7 @@ export default function Tontines() {
             const client = data.clients.find((c) => c.id === carnet.clientId)
             if (!client) return null
             const payees = carreauxNets(carnet, data.mises)
-            const cycles = situationsCycles(carnet, data.mises)
+            const cycles = situationsCycles(carnet, data.mises, data.transactions)
             const mois = moisDuCycle(carnet, carnet.cycleActuel)
             const passés = cycles.filter((c) => !c.estActuel)
             const dispo = cycles.reduce((s, c) => s + c.montantRetirable, 0)

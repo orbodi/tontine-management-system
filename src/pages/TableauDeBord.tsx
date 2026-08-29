@@ -109,7 +109,7 @@ export default function TableauDeBord() {
     const encoursTontine = carnets
       .filter((c) => c.actif)
       .reduce((s, carnet) => {
-        const cycles = situationsCycles(carnet, data.mises)
+        const cycles = situationsCycles(carnet, data.mises, data.transactions)
         return s + cycles.reduce((x, et) => x + et.nets * carnet.mise, 0)
       }, 0)
     const creditsActifs = data.credits.filter((c) => c.statut === 'en_cours' || c.statut === 'en_retard')

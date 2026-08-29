@@ -119,7 +119,7 @@ export default function DetailClient() {
     })
 
     const soldeTontine = carnets.reduce((s, carnet) => {
-      const cycles = situationsCycles(carnet, data.mises)
+      const cycles = situationsCycles(carnet, data.mises, data.transactions)
       return s + cycles.reduce((x, et) => x + et.nets * carnet.mise, 0)
     }, 0)
     const soldeEpargne = comptes.reduce((s, c) => s + c.solde, 0)
@@ -589,7 +589,7 @@ export default function DetailClient() {
               </div>
             ))}
             {activite.carnets.map((carnet) => {
-              const cycles = situationsCycles(carnet, data.mises)
+              const cycles = situationsCycles(carnet, data.mises, data.transactions)
               const actuel = cycles.find((c) => c.estActuel)
               const mois = moisDuCycle(carnet, carnet.cycleActuel)
               const mises = actuel?.nets ?? 0

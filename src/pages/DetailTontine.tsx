@@ -134,8 +134,8 @@ export default function DetailTontine() {
   const collecteAujourdhuiCloturee = !!journeeAujourdhui?.cloturee
 
   const cycles = useMemo(
-    () => (carnet ? situationsCycles(carnet, data.mises) : []),
-    [carnet, data.mises],
+    () => (carnet ? situationsCycles(carnet, data.mises, data.transactions) : []),
+    [carnet, data.mises, data.transactions],
   )
 
   const payeesActuel = carnet ? carreauxNets(carnet, data.mises) : 0
@@ -648,8 +648,8 @@ export default function DetailTontine() {
         <div className="border-b border-slate-200 px-5 py-4">
           <h3 className="font-semibold text-slate-900">Mois (cycles) et état</h3>
           <p className="text-xs text-slate-500">
-            Chaque cycle correspond à un mois. Un mois soldé (retrait total hors P.C) apparaît grisé.
-            P.C. = 1 carreau pour {NOM_APPLICATION}, à régler au dépôt (maintenant ou plus tard).
+            Chaque cycle correspond à un mois. Un mois soldé (retrait total) apparaît grisé.
+            La P.C. n’est déduite des mises disponibles que si elle a été cochée au dépôt.
             Retrait partiel possible aussi sur le mois en cours.
           </p>
         </div>
@@ -730,7 +730,7 @@ export default function DetailTontine() {
                               const ok = await confirmer({
                                 titre: `Retrait total — ${et.moisLabel}`,
                                 message:
-                                  `Retirer ${formatMontant(et.montantRetirable)} (${et.retirables} mises hors P.C) pour ${client.prenom} ${client.nom} (${et.moisLabel}) ?\n` +
+                                  `Retirer ${formatMontant(et.montantRetirable)} (${et.retirables} mise${et.retirables > 1 ? 's' : ''}${pcPayeeSurCycle(carnet, data.transactions, et.cycle) ? ' hors P.C' : ''}) pour ${client.prenom} ${client.nom} (${et.moisLabel}) ?\n` +
                                   `Mises déjà retirées : ${et.retires}\n` +
                                   `Mises disponibles : ${et.retirables}\n` +
                                   `Montant disponible : ${formatMontant(et.montantRetirable)}\n\n` +
@@ -787,7 +787,9 @@ export default function DetailTontine() {
                   <div className={`text-lg font-bold tabular-nums ${et.grise ? 'text-slate-500' : 'text-amber-900'}`}>
                     {et.retirables}
                   </div>
-                  <div className="text-[10px] text-slate-500">hors P.C</div>
+                  {pcPayeeSurCycle(carnet, data.transactions, et.cycle) && (
+                    <div className="text-[10px] text-slate-500">hors P.C</div>
+                  )}
                 </div>
                 <div
                   className={`rounded-lg px-3 py-2 ring-1 ${

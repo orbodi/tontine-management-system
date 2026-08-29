@@ -171,10 +171,7 @@ export function carreauxRetires(carnet: CarnetTontine, mises: MiseTontine[], cyc
     .reduce((s, m) => s + Math.abs(m.nombreMises), 0)
 }
 
-/**
- * Carreaux encore retirables (hors P.C = 1re mise, sauf 1er cycle d’un carnet papier).
- * Un cycle complet à 31 laisse au plus 30 carreaux au client (31 si P.C. non due).
- */
+/** P.C. due sur chaque cycle (paiement optionnel au dépôt). */
 export function pcDueSurCycle(_carnet: Pick<CarnetTontine, 'reprisePapier'>, cycle: number): boolean {
   return cycle >= 1
 }
@@ -352,10 +349,17 @@ export function fraisOuvertureComptePour(
   }
 }
 
-export function carreauxRetirables(carnet: CarnetTontine, mises: MiseTontine[], cycle: number): number {
+/** Carreaux encore retirables. La P.C. n’est réservée que si elle a été payée. */
+export function carreauxRetirables(
+  carnet: CarnetTontine,
+  mises: MiseTontine[],
+  cycle: number,
+  transactions: Transaction[] = [],
+): number {
   const nets = carreauxNets(carnet, mises, cycle)
   if (nets <= 0) return 0
-  const reservePc = pcDueSurCycle(carnet, cycle) ? 1 : 0
+  const reservePc =
+    pcDueSurCycle(carnet, cycle) && pcPayeeSurCycle(carnet, transactions, cycle) ? 1 : 0
   return Math.max(0, nets - reservePc)
 }
 
@@ -405,7 +409,11 @@ export function moisDuCycle(
 }
 
 /** Résumé de tous les cycles connus d'un carnet (1 → cycleActuel). */
-export function situationsCycles(carnet: CarnetTontine, mises: MiseTontine[]): EtatCycle[] {
+export function situationsCycles(
+  carnet: CarnetTontine,
+  mises: MiseTontine[],
+  transactions: Transaction[] = [],
+): EtatCycle[] {
   const max = carnet.cycleActuel
   const cycles = new Set<number>()
   for (let i = 1; i <= max; i++) cycles.add(i)
@@ -417,7 +425,7 @@ export function situationsCycles(carnet: CarnetTontine, mises: MiseTontine[]): E
       const deposes = carreauxDeposes(carnet, mises, cycle)
       const retires = carreauxRetires(carnet, mises, cycle)
       const nets = carreauxNets(carnet, mises, cycle)
-      const retirables = carreauxRetirables(carnet, mises, cycle)
+      const retirables = carreauxRetirables(carnet, mises, cycle, transactions)
       const complet = deposes >= carnet.misesParCycle
       const estActuel = cycle === carnet.cycleActuel
       const grise = !estActuel && complet && retirables === 0
