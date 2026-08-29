@@ -127,6 +127,8 @@ interface Props {
   setForm: React.Dispatch<React.SetStateAction<FormulaireClient>>
   erreur: string
   zoneVerrouillee?: boolean
+  /** Client banque : pas de zone, n° 0001 affiché. */
+  modeBanque?: boolean
   onSubmit: (e: React.FormEvent) => void
 }
 
@@ -137,6 +139,7 @@ export function ModaleClient({
   setForm,
   erreur,
   zoneVerrouillee,
+  modeBanque,
   onSubmit,
 }: Props) {
   const { data, estAdmin, employeConnecte } = useStore()
@@ -165,7 +168,8 @@ export function ModaleClient({
   const zoneChangee =
     !!clientEnEdition && !!form.zoneId && form.zoneId !== clientEnEdition.zoneId
 
-  const afficherSelecteurs = !zoneVerrouillee || !!clientEnEdition
+  const afficherSelecteurs = !modeBanque && (!zoneVerrouillee || !!clientEnEdition)
+  const agenceFiche = data.agences.find((a) => a.id === form.agenceId)
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -212,6 +216,24 @@ export function ModaleClient({
           </div>
         </div>
       )}
+      {modeBanque && (
+        <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 space-y-1">
+          <p>
+            Agence :{' '}
+            <span className="font-semibold text-slate-900">
+              {agenceFiche ? `${agenceFiche.code} — ${agenceFiche.nom}` : '—'}
+            </span>
+          </p>
+          {clientEnEdition?.codeClientBanque && (
+            <p>
+              N° client banque :{' '}
+              <span className="font-mono font-semibold text-sky-700">
+                {clientEnEdition.codeClientBanque}
+              </span>
+            </p>
+          )}
+        </div>
+      )}
       {zoneVerrouillee && !clientEnEdition && zone && (
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
           <p>
@@ -224,7 +246,7 @@ export function ModaleClient({
           </p>
         </div>
       )}
-      {clientEnEdition && zone && (
+      {clientEnEdition && zone && !modeBanque && (
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 space-y-1">
           <p>
             N° Client :{' '}

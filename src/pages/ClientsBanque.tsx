@@ -5,7 +5,7 @@ import { useStore } from '../store'
 import type { Client, TypeCompte } from '../types'
 import { afficherNumeroClient, formatDateHeure, formatMontant, texteAlerteCompteOuvert, texteAlerteDemandeOuverture, texteConfirmationOuvertureCompte } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
-import { formulaireClientVide, ChoixOrigineClient, RecapFraisOuvertureCompte, type FormulaireClient } from '../components/ModaleClient'
+import { formulaireClientVide, ChoixOrigineClient, RecapFraisOuvertureCompte, ModaleClient, type FormulaireClient } from '../components/ModaleClient'
 import { useConfirmation } from '../components/Confirmation'
 import { estAncienClient, fraisOuvertureComptePour } from '../metier'
 
@@ -114,6 +114,7 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
     aDroit,
     employeConnecte,
     ajouterClient,
+    modifierClient,
     ouvrirCompte,
     validerOuvertureCompte,
     refuserOuvertureCompte,
@@ -121,6 +122,7 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
   const { alerter, confirmer } = useConfirmation()
   const [recherche, setRecherche] = useState('')
   const [modaleOuverte, setModaleOuverte] = useState(false)
+  const [clientEnEdition, setClientEnEdition] = useState<Client | null>(null)
   const [modeAjout, setModeAjout] = useState<'nouveau' | 'existant'>('nouveau')
   const [form, setForm] = useState<FormulaireClient>(formulaireClientVide)
   const [clientExistantId, setClientExistantId] = useState('')
@@ -204,7 +206,56 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
     return <Navigate to="/clients/banque" replace />
   }
 
+  const ouvrirEdition = (c: Client) => {
+    if (estCaissier) return
+    setClientEnEdition(c)
+    setForm({
+      agenceId: c.agenceId,
+      zoneId: c.zoneId ?? '',
+      nom: c.nom,
+      prenom: c.prenom,
+      telephone: c.telephone,
+      email: c.email ?? '',
+      sexe: c.sexe,
+      profession: c.profession ?? '',
+      adresse: c.adresse ?? '',
+      pieceIdentite: c.pieceIdentite ?? '',
+      origineTontine: c.origineTontine === 'ancien' ? 'ancien' : 'nouveau',
+    })
+    setErreur('')
+  }
+
+  const enregistrerEdition = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!clientEnEdition) return
+    const patch = {
+      nom: form.nom.trim(),
+      prenom: form.prenom.trim(),
+      telephone: form.telephone.trim(),
+      email: form.email.trim() || undefined,
+      sexe: form.sexe,
+      profession: form.profession.trim() || undefined,
+      adresse: form.adresse.trim() || undefined,
+      pieceIdentite: form.pieceIdentite.trim() || undefined,
+      origineTontine: form.origineTontine,
+    }
+    const res = await modifierClient(clientEnEdition.id, patch)
+    if (res.erreur) {
+      setErreur(res.erreur)
+      return
+    }
+    setClientEnEdition(null)
+    setErreur('')
+    await alerter(
+      'Client modifié',
+      `Les informations de ${patch.prenom} ${patch.nom}${
+        clientEnEdition.codeClientBanque ? ` (n° ${clientEnEdition.codeClientBanque})` : ''
+      } ont été mises à jour.`,
+    )
+  }
+
   const ouvrirCreation = () => {
+    setClientEnEdition(null)
     setModeAjout(peutGererClients ? 'nouveau' : 'existant')
     setForm({
       ...formulaireClientVide,
@@ -480,13 +531,24 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">
-                      <Link
-                        to={`/clients/${c.id}?depuis=banque`}
-                        className="text-brand-600 hover:text-brand-700"
-                        title="Voir la fiche"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Link>
+                      <div className="flex items-center justify-end gap-2">
+                        {!estCaissier && peutGererClients && (
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-slate-500 hover:text-brand-600"
+                            onClick={() => ouvrirEdition(c)}
+                          >
+                            Modifier
+                          </button>
+                        )}
+                        <Link
+                          to={`/clients/${c.id}?depuis=banque`}
+                          className="text-brand-600 hover:text-brand-700"
+                          title="Voir la fiche"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -495,6 +557,26 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
           </table>
         </div>
       )}
+
+      <Modale
+        titre={
+          clientEnEdition
+            ? `Modifier ${clientEnEdition.codeClientBanque ?? `${clientEnEdition.prenom} ${clientEnEdition.nom}`}`
+            : 'Nouveau client banque'
+        }
+        ouverte={!!clientEnEdition}
+        onFermer={() => setClientEnEdition(null)}
+      >
+        <ModaleClient
+          onFermer={() => setClientEnEdition(null)}
+          clientEnEdition={clientEnEdition}
+          form={form}
+          setForm={setForm}
+          erreur={erreur}
+          modeBanque
+          onSubmit={enregistrerEdition}
+        />
+      </Modale>
 
       <Modale
         titre="Nouveau client banque"

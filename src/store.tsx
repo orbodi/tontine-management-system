@@ -121,6 +121,7 @@ interface StoreApi {
     montant: number,
     dateCollecte?: string,
   ) => Promise<string | null>
+  renouvelerCarnet: (carnetId: string, dateCollecte?: string) => Promise<string | null>
   changerMiseCarnet: (
     carnetId: string,
     nouvelleMise: number,
@@ -385,6 +386,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const res = await muter('encaisserCotisation', {
           carnetId,
           montant,
+          ...(dateCollecte ? { dateCollecte } : {}),
+        })
+        return res.erreur ?? null
+      },
+      async renouvelerCarnet(carnetId, dateCollecte) {
+        const res = await muter('renouvelerCarnet', {
+          carnetId,
           ...(dateCollecte ? { dateCollecte } : {}),
         })
         return res.erreur ?? null

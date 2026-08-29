@@ -1,8 +1,11 @@
 """Helpers métier (port de src/metier.ts)."""
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from typing import Any
+
+_RE_ANNEE_RENOUVELLEMENT = re.compile(r"carnet\s+(\d+),\s*cycle\s+1/", re.IGNORECASE)
 
 TYPES_SORTIE = ["retrait_tontine", "retrait_compte", "octroi_credit"]
 TYPES_OPERATION_CAISSE = [
@@ -36,8 +39,52 @@ def annee_carnet(cycle: int) -> int:
 
 
 def est_premier_cycle_renouvellement(cycle: int) -> bool:
-    """Premier mois d'un carnet renouvelé (13, 25, …) : vente 300 F due."""
+    """Premier mois d'un carnet renouvelé (13, 25, …)."""
     return int(cycle) > 1 and cycle_dans_annee(cycle) == 1
+
+
+def cycle_courant_effectif(carnet: dict, mises: list) -> int:
+    """Cycle à alimenter (saute les cycles déjà complets)."""
+    par_cycle = int(carnet.get("misesParCycle") or CARREAUX_PAR_CYCLE)
+    cycle = int(carnet.get("cycleActuel") or 1)
+    garde = 0
+    while garde < 200 and carreaux_nets(carnet, mises, cycle) >= par_cycle:
+        cycle += 1
+        garde += 1
+    return cycle
+
+
+def annee_carnet_ouverte(carnet: dict, mises: list, transactions: list | None = None) -> int:
+    """Années de 12 cycles déjà ouvertes (1 à l'ouverture, +1 par renouvellement payé)."""
+    ouverte = 1
+    numero = carnet.get("numero") or ""
+    client_id = carnet.get("clientId")
+    for t in transactions or []:
+        if t.get("type") != "vente_carnet":
+            continue
+        if client_id and t.get("clientId") != client_id:
+            continue
+        desc = t.get("description") or ""
+        if "Renouvellement" not in desc:
+            continue
+        if numero and numero not in desc:
+            continue
+        m = _RE_ANNEE_RENOUVELLEMENT.search(desc)
+        if m:
+            ouverte = max(ouverte, int(m.group(1)))
+    for mi in mises or []:
+        if mi.get("carnetId") != carnet.get("id"):
+            continue
+        if int(mi.get("nombreMises") or 0) <= 0:
+            continue
+        ouverte = max(ouverte, annee_carnet(int(mi.get("cycle") or 1)))
+    return ouverte
+
+
+def besoin_renouvellement_carnet(carnet: dict, mises: list, transactions: list | None = None) -> bool:
+    """True quand l'année de 12 cycles est terminée et le renouvellement (300 F) n'est pas payé."""
+    cycle = cycle_courant_effectif(carnet, mises)
+    return annee_carnet(cycle) > annee_carnet_ouverte(carnet, mises, transactions)
 
 
 def aujourd_hui_iso() -> str:
@@ -154,6 +201,79 @@ def calculer_mises_depuis_montant(montant: float, mise: float) -> dict[str, Any]
             "erreur": f"Le montant doit etre un multiple de la mise ({int(mise)} FCFA).",
         }
     return {"ok": True, "nombreMises": int(round(montant / mise))}
+
+
+MAX_CYCLES_DEPOT = 24
+
+
+def repartir_depot_sur_cycles(
+    carnet: dict,
+    mises: list,
+    nombre_mises: int,
+    transactions: list | None = None,
+) -> dict[str, Any]:
+    """Répartit un dépôt (en carreaux) sur le cycle courant puis les suivants (même année)."""
+    if nombre_mises <= 0:
+        return {"ok": False, "erreur": "Nombre de carreaux invalide.", "tranches": []}
+    par_cycle = int(carnet.get("misesParCycle") or CARREAUX_PAR_CYCLE)
+    annee_ouverte = annee_carnet_ouverte(carnet, mises, transactions)
+    cycle_max = annee_ouverte * CYCLES_PAR_CARNET
+    cycle = cycle_courant_effectif(carnet, mises)
+    if cycle > cycle_max:
+        return {
+            "ok": False,
+            "erreur": "Renouvelez d'abord le carnet (300 F) pour ouvrir 12 nouveaux cycles.",
+            "tranches": [],
+        }
+    reste = int(nombre_mises)
+    tranches: list[dict[str, Any]] = []
+    while reste > 0:
+        if cycle > cycle_max:
+            restants_annee = sum(t["nombre"] for t in tranches)
+            return {
+                "ok": False,
+                "erreur": (
+                    f"Il reste {restants_annee} carreau(x) sur cette annee de carnet. "
+                    "Renouvelez le carnet (300 F) pour deposer davantage."
+                    if restants_annee
+                    else "Renouvelez d'abord le carnet (300 F) pour ouvrir 12 nouveaux cycles."
+                ),
+                "tranches": [],
+            }
+        if len(tranches) >= MAX_CYCLES_DEPOT:
+            return {
+                "ok": False,
+                "erreur": f"Depot trop important : au plus {MAX_CYCLES_DEPOT} cycles d'un coup.",
+                "tranches": [],
+            }
+        payees = carreaux_nets(carnet, mises, cycle)
+        restants = par_cycle - payees
+        if restants <= 0:
+            cycle += 1
+            continue
+        nombre = min(reste, restants)
+        tranches.append(
+            {
+                "cycle": cycle,
+                "nombre": nombre,
+                "payeesAvant": payees,
+                "preleverPc": payees == 0 and pc_due_sur_cycle(carnet, cycle),
+                "renouvellement": False,
+            }
+        )
+        reste -= nombre
+        if payees + nombre >= par_cycle:
+            cycle += 1
+    dernier = tranches[-1]
+    cycle_final = dernier["cycle"]
+    if dernier["payeesAvant"] + dernier["nombre"] >= par_cycle:
+        cycle_final = dernier["cycle"] + 1
+    return {
+        "ok": True,
+        "tranches": tranches,
+        "cycleFinal": cycle_final,
+        "nbCycles": len(tranches),
+    }
 
 
 def journee_zone_du_jour(journees: list, zone_id: str, date_iso: str) -> dict | None:

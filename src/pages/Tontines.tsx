@@ -18,6 +18,7 @@ import {
   estAncienClientTontine,
   libelleCycleCarnet,
   anneeCarnet,
+  besoinRenouvellementCarnet,
   moisDuCycle,
   situationsCycles,
 } from '../metier'
@@ -348,9 +349,11 @@ export default function Tontines() {
                     <span className={`badge ${STYLES_CARNET[carnet.typeCarnet]}`}>
                       {LIBELLES_CARNET[carnet.typeCarnet]}
                     </span>
-                    {anneeCarnet(carnet.cycleActuel) > 1 && (
+                    {besoinRenouvellementCarnet(carnet, data.mises, data.transactions) ? (
+                      <span className="badge bg-amber-100 text-amber-800">À renouveler</span>
+                    ) : anneeCarnet(carnet.cycleActuel) > 1 ? (
                       <span className="badge bg-sky-100 text-sky-800">Renouvelé</span>
-                    )}
+                    ) : null}
                     {carnet.reprisePapier && (
                       <span className="badge bg-amber-100 text-amber-800">Papier</span>
                     )}

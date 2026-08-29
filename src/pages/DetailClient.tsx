@@ -5,6 +5,7 @@ import {
   Banknote,
   BellRing,
   HandCoins,
+  Pencil,
   PiggyBank,
   Plus,
   Trash2,
@@ -18,6 +19,7 @@ import {
   CARNETS_RETRAIT_6_MOIS,
   LIBELLES_CARNET,
   TYPES_SORTIE,
+  besoinRenouvellementCarnet,
   estAncienClient,
   fraisOuvertureComptePour,
   libelleCycleCarnet,
@@ -34,7 +36,12 @@ import {
 } from '../types'
 import { formatDate, formatDateHeure, formatMontant, afficherNumeroClient, texteAlerteDemandeOuverture } from '../utils'
 import { Avatar, BadgeStatutCredit, BoutonsMessage, EnTetePage, Modale } from '../components/ui'
-import { RecapFraisOuvertureCompte } from '../components/ModaleClient'
+import {
+  formulaireClientVide,
+  ModaleClient,
+  RecapFraisOuvertureCompte,
+  type FormulaireClient,
+} from '../components/ModaleClient'
 import { useConfirmation } from '../components/Confirmation'
 
 const LIBELLES_FREQUENCE: Record<FrequenceMise, string> = {
@@ -46,8 +53,19 @@ export default function DetailClient() {
   const { id } = useParams()
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const { data, aDroit, estAdmin, estCaissier, employeConnecte, basculerActifClient, supprimerClient, supprimerCompte, ouvrirCarnet, ouvrirCompte } =
-    useStore()
+  const {
+    data,
+    aDroit,
+    estAdmin,
+    estCaissier,
+    employeConnecte,
+    basculerActifClient,
+    supprimerClient,
+    supprimerCompte,
+    modifierClient,
+    ouvrirCarnet,
+    ouvrirCompte,
+  } = useStore()
   const { alerter, confirmer } = useConfirmation()
   const [modaleMessage, setModaleMessage] = useState(false)
   const [texteMessage, setTexteMessage] = useState('')
@@ -65,6 +83,9 @@ export default function DetailClient() {
     droitAdhesionPromo: 500,
   })
   const [erreur, setErreur] = useState('')
+  const [modaleEdition, setModaleEdition] = useState(false)
+  const [formEdition, setFormEdition] = useState<FormulaireClient>(formulaireClientVide)
+  const [erreurEdition, setErreurEdition] = useState('')
 
   const client = data.clients.find((c) => c.id === id)
   const peutOperer = aDroit('operer_comptes')
@@ -133,10 +154,46 @@ export default function DetailClient() {
   const typesCarnetDejaOuverts = new Set(activite.carnets.map((c) => c.typeCarnet))
   const peutOuvrirCarnet = peutOperer && client.actif && !!client.zoneId && typesCarnetDejaOuverts.size < 4
   const peutOuvrirCompte = peutOperer && !estCaissier && client.actif
+  const peutModifier = !estCaissier && (estAdmin || aDroit('gerer_clients'))
 
   const creditEnRetard = MODULE_CREDITS_ACTIF
     ? activite.credits.find((c) => c.statut === 'en_retard')
     : undefined
+
+  const enregistrerEdition = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const patch = {
+      nom: formEdition.nom.trim(),
+      prenom: formEdition.prenom.trim(),
+      telephone: formEdition.telephone.trim(),
+      email: formEdition.email.trim() || undefined,
+      sexe: formEdition.sexe,
+      profession: formEdition.profession.trim() || undefined,
+      adresse: formEdition.adresse.trim() || undefined,
+      pieceIdentite: formEdition.pieceIdentite.trim() || undefined,
+      origineTontine: formEdition.origineTontine,
+    }
+    const res = await modifierClient(client.id, {
+      ...patch,
+      ...(client.zoneId && formEdition.zoneId ? { zoneId: formEdition.zoneId } : {}),
+    })
+    if (res.erreur) {
+      setErreurEdition(res.erreur)
+      return
+    }
+    setModaleEdition(false)
+    setErreurEdition('')
+    await alerter(
+      'Client modifié',
+      `Les informations de ${patch.prenom} ${patch.nom}${
+        client.codeClientBanque
+          ? ` (n° ${client.codeClientBanque})`
+          : client.codeClient
+            ? ` (n° ${afficherNumeroClient(res.codeClient ?? client.codeClient)})`
+            : ''
+      } ont été mises à jour.`,
+    )
+  }
 
   const ouvrirModaleMessage = () => {
     let texte = `Bonjour ${client.prenom} ${client.nom}, `
@@ -252,6 +309,31 @@ export default function DetailClient() {
               >
                 <Wallet className="h-4 w-4" />
                 Ouvrir un compte
+              </button>
+            )}
+            {peutModifier && (
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setFormEdition({
+                    agenceId: client.agenceId,
+                    zoneId: client.zoneId ?? '',
+                    nom: client.nom,
+                    prenom: client.prenom,
+                    telephone: client.telephone,
+                    email: client.email ?? '',
+                    sexe: client.sexe,
+                    profession: client.profession ?? '',
+                    adresse: client.adresse ?? '',
+                    pieceIdentite: client.pieceIdentite ?? '',
+                    origineTontine: client.origineTontine === 'ancien' ? 'ancien' : 'nouveau',
+                  })
+                  setErreurEdition('')
+                  setModaleEdition(true)
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+                Modifier
               </button>
             )}
             <button className="btn-secondary" onClick={ouvrirModaleMessage}>
@@ -523,6 +605,9 @@ export default function DetailClient() {
                       {LIBELLES_CARNET[carnet.typeCarnet]} — mise {formatMontant(carnet.mise)} — {mois.label} (
                       {libelleCycleCarnet(carnet.cycleActuel)})
                       {carnet.verrouille && <span className="badge ml-2 bg-rose-100 text-rose-700">Verrouillé</span>}
+                      {besoinRenouvellementCarnet(carnet, data.mises, data.transactions) && (
+                        <span className="badge ml-2 bg-amber-100 text-amber-800">À renouveler</span>
+                      )}
                     </span>
                     <span className="font-bold text-slate-900">
                       {mises}/{carnet.misesParCycle}
@@ -736,6 +821,26 @@ export default function DetailClient() {
             </button>
           </div>
         </form>
+      </Modale>
+
+      <Modale
+        titre={
+          depuisBanque
+            ? `Modifier ${client.codeClientBanque ?? `${client.prenom} ${client.nom}`}`
+            : `Modifier ${afficherNumeroClient(client.codeClient)}`
+        }
+        ouverte={modaleEdition}
+        onFermer={() => setModaleEdition(false)}
+      >
+        <ModaleClient
+          onFermer={() => setModaleEdition(false)}
+          clientEnEdition={client}
+          form={formEdition}
+          setForm={setFormEdition}
+          erreur={erreurEdition}
+          modeBanque={depuisBanque}
+          onSubmit={enregistrerEdition}
+        />
       </Modale>
 
       {/* Modale notification */}

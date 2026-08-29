@@ -1390,13 +1390,6 @@ def encaisser_cotisation(d, u, p):
     if carnet.get("verrouille"):
         return {"erreur": "Ce carnet est verrouille."}
 
-    # avance cycles complets (y compris après 12 mois → renouvellement)
-    garde = 0
-    while garde < 200 and M.carreaux_nets(carnet, d["mises"]) >= carnet["misesParCycle"]:
-        carnet = {**carnet, "cycleActuel": carnet["cycleActuel"] + 1}
-        d["carnets"] = [carnet if c["id"] == carnet_id else c for c in d["carnets"]]
-        garde += 1
-
     jour = _jour_collecte_payload(p)
     err_jour = _erreur_date_collecte(d, carnet["zoneId"], jour)
     if err_jour:
@@ -1405,28 +1398,122 @@ def encaisser_cotisation(d, u, p):
     calc = M.calculer_mises_depuis_montant(montant, carnet["mise"])
     if not calc.get("ok"):
         return {"erreur": calc["erreur"]}
-    payees = M.carreaux_nets(carnet, d["mises"])
-    restants = carnet["misesParCycle"] - payees
-    nombre = min(calc["nombreMises"], restants)
-    if nombre <= 0:
-        return {"erreur": "Le cycle actuel est deja complet (31 carreaux)."}
-    if nombre != calc["nombreMises"]:
-        return {"erreur": f"Seulement {restants} carreau(x) restant(s) sur ce cycle."}
+    plan = M.repartir_depot_sur_cycles(
+        carnet, d["mises"], calc["nombreMises"], d.get("transactions") or []
+    )
+    if not plan.get("ok"):
+        return {"erreur": plan.get("erreur") or "Depot impossible."}
 
     date = M.horodater_sur_jour(jour)
     note_collecte = f" (collecte du {jour})" if jour != M.aujourd_hui_iso() else ""
-    cycle_depot = carnet["cycleActuel"]
-    mise_entree = {
-        "id": uid(),
-        "carnetId": carnet_id,
-        "cycle": cycle_depot,
-        "nombreMises": nombre,
-        "montant": carnet["mise"] * nombre,
-        "date": date,
-    }
     nouvelles = []
-    if payees == 0 and M.est_premier_cycle_renouvellement(cycle_depot):
-        nouvelles.append(
+    nouvelles_mises = []
+    for tr in plan["tranches"]:
+        cycle_depot = int(tr["cycle"])
+        nombre = int(tr["nombre"])
+        payees = int(tr["payeesAvant"])
+        nouvelles_mises.append(
+            {
+                "id": uid(),
+                "carnetId": carnet_id,
+                "cycle": cycle_depot,
+                "nombreMises": nombre,
+                "montant": carnet["mise"] * nombre,
+                "date": date,
+            }
+        )
+        if tr.get("preleverPc"):
+            nouvelles.append(
+                _mk_tx(
+                    u,
+                    {
+                        "type": "commission_tontine",
+                        "clientId": carnet["clientId"],
+                        "montant": carnet["mise"],
+                        "date": date,
+                        "description": (
+                            f"Premiere cotisation (P.C) — {_nom_client(d, carnet['clientId'])} "
+                            f"(cycle {cycle_depot}){note_collecte}"
+                        ),
+                    },
+                )
+            )
+            if nombre > 1:
+                nouvelles.append(
+                    _mk_tx(
+                        u,
+                        {
+                            "type": "mise_tontine",
+                            "clientId": carnet["clientId"],
+                            "montant": carnet["mise"] * (nombre - 1),
+                            "date": date,
+                            "description": (
+                                f"Depot x{nombre - 1} — {_nom_client(d, carnet['clientId'])} "
+                                f"(cycle {cycle_depot}){note_collecte}"
+                            ),
+                        },
+                    )
+                )
+        else:
+            note_pc = " (P.C. non prelevee — client ancien)" if payees == 0 else ""
+            nouvelles.append(
+                _mk_tx(
+                    u,
+                    {
+                        "type": "mise_tontine",
+                        "clientId": carnet["clientId"],
+                        "montant": carnet["mise"] * nombre,
+                        "date": date,
+                        "description": (
+                            f"Depot x{nombre} — {_nom_client(d, carnet['clientId'])} "
+                            f"(cycle {cycle_depot}){note_collecte}{note_pc}"
+                        ),
+                    },
+                )
+            )
+
+    d["mises"] = [*d["mises"], *nouvelles_mises]
+    d["carnets"] = [
+        {**c, "cycleActuel": plan["cycleFinal"]} if c["id"] == carnet_id else c for c in d["carnets"]
+    ]
+    d = _enregistrer_tx(d, nouvelles)
+    return (None, d, {})
+
+
+def renouveler_carnet(d, u, p):
+    """Encaissement des 300 F et ouverture de 12 nouveaux cycles, après une année complète."""
+    err = _verif_caisse(d, u)
+    if err:
+        return {"erreur": err}
+    carnet_id = p["carnetId"]
+    d = copy.deepcopy(d)
+    carnet = next((c for c in d["carnets"] if c["id"] == carnet_id), None)
+    if not carnet or not carnet.get("actif"):
+        return {"erreur": "Carnet introuvable."}
+    if carnet.get("verrouille"):
+        return {"erreur": "Ce carnet est verrouille."}
+    if not M.besoin_renouvellement_carnet(carnet, d["mises"], d.get("transactions") or []):
+        return {"erreur": "Ce carnet n'est pas encore a renouveler (12 cycles non termines)."}
+
+    jour = _jour_collecte_payload(p)
+    err_jour = _erreur_date_collecte(d, carnet["zoneId"], jour)
+    if err_jour:
+        return {"erreur": err_jour}
+
+    ouverte = M.annee_carnet_ouverte(carnet, d["mises"], d.get("transactions") or [])
+    annee_nouvelle = ouverte + 1
+    cycle_cible = ouverte * M.CYCLES_PAR_CARNET + 1
+    if int(carnet.get("cycleActuel") or 1) < cycle_cible:
+        d["carnets"] = [
+            {**c, "cycleActuel": cycle_cible} if c["id"] == carnet_id else c for c in d["carnets"]
+        ]
+        carnet = next(c for c in d["carnets"] if c["id"] == carnet_id)
+
+    date = M.horodater_sur_jour(jour)
+    note_collecte = f" (collecte du {jour})" if jour != M.aujourd_hui_iso() else ""
+    d = _enregistrer_tx(
+        d,
+        [
             _mk_tx(
                 u,
                 {
@@ -1436,61 +1523,13 @@ def encaisser_cotisation(d, u, p):
                     "date": date,
                     "description": (
                         f"Renouvellement du carnet {carnet['numero']} — {_nom_client(d, carnet['clientId'])} "
-                        f"(carnet {M.annee_carnet(cycle_depot)}, cycle 1/{M.CYCLES_PAR_CARNET}){note_collecte}"
+                        f"(carnet {annee_nouvelle}, cycle 1/{M.CYCLES_PAR_CARNET}){note_collecte}"
                     ),
                 },
             )
-        )
-    prelever_pc = payees == 0 and M.pc_due_sur_cycle(carnet, cycle_depot)
-    if prelever_pc:
-        nouvelles.append(
-            _mk_tx(
-                u,
-                {
-                    "type": "commission_tontine",
-                    "clientId": carnet["clientId"],
-                    "montant": carnet["mise"],
-                    "date": date,
-                    "description": f"Premiere cotisation (P.C) — {_nom_client(d, carnet['clientId'])} (cycle {cycle_depot}){note_collecte}",
-                },
-            )
-        )
-        if nombre > 1:
-            nouvelles.append(
-                _mk_tx(
-                    u,
-                    {
-                        "type": "mise_tontine",
-                        "clientId": carnet["clientId"],
-                        "montant": carnet["mise"] * (nombre - 1),
-                        "date": date,
-                        "description": f"Depot x{nombre - 1} — {_nom_client(d, carnet['clientId'])} (cycle {cycle_depot}){note_collecte}",
-                    },
-                )
-            )
-    else:
-        note_pc = " (P.C. non prelevee — client ancien)" if payees == 0 else ""
-        nouvelles.append(
-            _mk_tx(
-                u,
-                {
-                    "type": "mise_tontine",
-                    "clientId": carnet["clientId"],
-                    "montant": mise_entree["montant"],
-                    "date": date,
-                    "description": f"Depot x{nombre} — {_nom_client(d, carnet['clientId'])} (cycle {cycle_depot}){note_collecte}{note_pc}",
-                },
-            )
-        )
-
-    d["mises"] = [*d["mises"], mise_entree]
-    nets_apres = payees + nombre
-    if nets_apres >= carnet["misesParCycle"]:
-        d["carnets"] = [
-            {**c, "cycleActuel": c["cycleActuel"] + 1} if c["id"] == carnet_id else c for c in d["carnets"]
-        ]
-    d = _enregistrer_tx(d, nouvelles)
-    return (None, d, {})
+        ],
+    )
+    return (None, d, {"annee": annee_nouvelle, "cycle": cycle_cible})
 
 
 def changer_mise_carnet(d, u, p):
@@ -3403,6 +3442,7 @@ ACTIONS = {
     "supprimerClient": supprimer_client,
     "ouvrirCarnet": ouvrir_carnet,
     "encaisserCotisation": encaisser_cotisation,
+    "renouvelerCarnet": renouveler_carnet,
     "changerMiseCarnet": changer_mise_carnet,
     "retraitCycle": retrait_cycle,
     "basculerVerrouCarnet": basculer_verrou_carnet,

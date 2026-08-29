@@ -188,9 +188,56 @@ export function anneeCarnet(cycle: number): number {
   return Math.floor((cycle - 1) / CYCLES_PAR_CARNET) + 1
 }
 
-/** Premier mois d’un carnet renouvelé (13, 25, …) : vente 300 F due. */
+/** Premier mois d’un carnet renouvelé (13, 25, …). */
 export function estPremierCycleRenouvellement(cycle: number): boolean {
   return cycle > 1 && cycleDansAnnee(cycle) === 1
+}
+
+const RE_ANNEE_RENOUVELLEMENT = /carnet\s+(\d+),\s*cycle\s+1\//i
+
+export function cycleCourantEffectif(
+  carnet: Pick<CarnetTontine, 'id' | 'cycleActuel' | 'misesParCycle'>,
+  mises: MiseTontine[],
+): number {
+  const parCycle = carnet.misesParCycle
+  let cycle = carnet.cycleActuel
+  let garde = 0
+  while (garde < 200 && carreauxNets(carnet as CarnetTontine, mises, cycle) >= parCycle) {
+    cycle += 1
+    garde += 1
+  }
+  return cycle
+}
+
+/** Années de 12 cycles déjà ouvertes (1 à l’ouverture, +1 par renouvellement payé). */
+export function anneeCarnetOuverte(
+  carnet: Pick<CarnetTontine, 'id' | 'clientId' | 'numero' | 'cycleActuel'>,
+  mises: MiseTontine[],
+  transactions: Transaction[] = [],
+): number {
+  let ouverte = 1
+  for (const t of transactions) {
+    if (t.type !== 'vente_carnet') continue
+    if (t.clientId !== carnet.clientId) continue
+    if (!t.description.includes('Renouvellement')) continue
+    if (carnet.numero && !t.description.includes(carnet.numero)) continue
+    const m = t.description.match(RE_ANNEE_RENOUVELLEMENT)
+    if (m) ouverte = Math.max(ouverte, Number(m[1]))
+  }
+  for (const mi of mises) {
+    if (mi.carnetId !== carnet.id || mi.nombreMises <= 0) continue
+    ouverte = Math.max(ouverte, anneeCarnet(mi.cycle))
+  }
+  return ouverte
+}
+
+/** Année de 12 cycles terminée : le renouvellement (300 F) est dû avant tout dépôt. */
+export function besoinRenouvellementCarnet(
+  carnet: Pick<CarnetTontine, 'id' | 'clientId' | 'numero' | 'cycleActuel' | 'misesParCycle'>,
+  mises: MiseTontine[],
+  transactions: Transaction[] = [],
+): boolean {
+  return anneeCarnet(cycleCourantEffectif(carnet, mises)) > anneeCarnetOuverte(carnet, mises, transactions)
 }
 
 export function libelleCycleCarnet(cycle: number): string {
@@ -328,6 +375,75 @@ export function calculerMisesDepuisMontant(
     }
   }
   return { ok: true, nombreMises: montant / mise }
+}
+
+/** Nombre max de cycles qu’un seul dépôt peut alimenter. */
+export const MAX_CYCLES_DEPOT = 24
+
+export type TrancheDepotCycle = {
+  cycle: number
+  nombre: number
+  payeesAvant: number
+  preleverPc: boolean
+  renouvellement: boolean
+}
+
+/**
+ * Répartit un dépôt (en carreaux) sur le cycle courant puis les suivants.
+ * Ex. mise 300, cycle vide : 18 600 F → 31 + 31 carreaux sur 2 cycles.
+ */
+export function repartirDepotSurCycles(
+  carnet: Pick<CarnetTontine, 'id' | 'clientId' | 'numero' | 'cycleActuel' | 'misesParCycle' | 'reprisePapier'>,
+  mises: MiseTontine[],
+  nombreMises: number,
+  transactions: Transaction[] = [],
+):
+  | { ok: true; tranches: TrancheDepotCycle[]; cycleFinal: number }
+  | { ok: false; erreur: string } {
+  if (nombreMises <= 0) return { ok: false, erreur: 'Nombre de carreaux invalide.' }
+  const parCycle = carnet.misesParCycle
+  const anneeOuverte = anneeCarnetOuverte(carnet, mises, transactions)
+  const cycleMax = anneeOuverte * CYCLES_PAR_CARNET
+  let cycle = cycleCourantEffectif(carnet, mises)
+  if (cycle > cycleMax) {
+    return { ok: false, erreur: 'Renouvelez d’abord le carnet (300 F) pour ouvrir 12 nouveaux cycles.' }
+  }
+  let reste = nombreMises
+  const tranches: TrancheDepotCycle[] = []
+  while (reste > 0) {
+    if (cycle > cycleMax) {
+      const restantsAnnee = tranches.reduce((s, t) => s + t.nombre, 0)
+      return {
+        ok: false,
+        erreur: restantsAnnee
+          ? `Il reste ${restantsAnnee} carreau(x) sur cette année de carnet. Renouvelez le carnet (300 F) pour déposer davantage.`
+          : 'Renouvelez d’abord le carnet (300 F) pour ouvrir 12 nouveaux cycles.',
+      }
+    }
+    if (tranches.length >= MAX_CYCLES_DEPOT) {
+      return { ok: false, erreur: `Dépôt trop important : au plus ${MAX_CYCLES_DEPOT} cycles d’un coup.` }
+    }
+    const payeesAvant = carreauxNets(carnet as CarnetTontine, mises, cycle)
+    const restants = parCycle - payeesAvant
+    if (restants <= 0) {
+      cycle += 1
+      continue
+    }
+    const nombre = Math.min(reste, restants)
+    tranches.push({
+      cycle,
+      nombre,
+      payeesAvant,
+      preleverPc: payeesAvant === 0 && pcDueSurCycle(carnet, cycle),
+      renouvellement: false,
+    })
+    reste -= nombre
+    if (payeesAvant + nombre >= parCycle) cycle += 1
+  }
+  const dernier = tranches[tranches.length - 1]
+  const cycleFinal =
+    dernier.payeesAvant + dernier.nombre >= parCycle ? dernier.cycle + 1 : dernier.cycle
+  return { ok: true, tranches, cycleFinal }
 }
 
 // ---------- Caisse ----------
