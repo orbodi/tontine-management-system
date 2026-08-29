@@ -116,6 +116,10 @@ export default function DetailTontine() {
   const [modaleRenouvellement, setModaleRenouvellement] = useState(false)
   const [payerAbonnement, setPayerAbonnement] = useState(false)
   const [payerPc, setPayerPc] = useState(false)
+  const [modaleSuppression, setModaleSuppression] = useState(false)
+  const [confirmationSuppression, setConfirmationSuppression] = useState('')
+  const [erreurSuppression, setErreurSuppression] = useState('')
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false)
 
   const carnet = data.carnets.find((c) => c.id === id)
   const client = carnet ? data.clients.find((c) => c.id === carnet.clientId) : undefined
@@ -211,6 +215,27 @@ export default function DetailTontine() {
     }
     setErreur('')
     setRecapDepot(true)
+  }
+
+  const suppressionConfirmee = confirmationSuppression.trim().toLowerCase() === 'je confirme'
+
+  const validerSuppression = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!suppressionConfirmee || suppressionEnCours) return
+    setErreurSuppression('')
+    setSuppressionEnCours(true)
+    try {
+      const err = await supprimerCarnet(carnet.id)
+      if (err) {
+        setErreurSuppression(err)
+        return
+      }
+      setModaleSuppression(false)
+      setConfirmationSuppression('')
+      navigate(`/clients/${carnet.clientId}`)
+    } finally {
+      setSuppressionEnCours(false)
+    }
   }
 
   const validerDepot = async () => {
@@ -399,24 +424,10 @@ export default function DetailTontine() {
             {estAdmin && (
               <button
                 className="btn-danger"
-                onClick={async () => {
-                  const ok = await confirmer({
-                    titre: 'Supprimer le carnet',
-                    message:
-                      `Supprimer définitivement le carnet ${carnet.numero} (${LIBELLES_CARNET[carnet.typeCarnet]}) ?\n\n` +
-                      `Les mises, la vente de carnet et les opérations de caisse liées seront retirées. ` +
-                      `Vous pourrez ensuite rouvrir un carnet du même type pour ce client.\n\n` +
-                      `Impossible si une journée de caisse ou une collecte zone concernée est déjà clôturée.`,
-                    labelValider: 'Supprimer',
-                    danger: true,
-                  })
-                  if (!ok) return
-                  const err = await supprimerCarnet(carnet.id)
-                  if (err) {
-                    await alerter('Suppression impossible', err)
-                    return
-                  }
-                  navigate(`/clients/${carnet.clientId}`)
+                onClick={() => {
+                  setConfirmationSuppression('')
+                  setErreurSuppression('')
+                  setModaleSuppression(true)
                 }}
               >
                 <Trash2 className="h-4 w-4" />
@@ -1230,6 +1241,53 @@ export default function DetailTontine() {
             </div>
           </form>
         )}
+      </Modale>
+
+      <Modale
+        titre={`Supprimer le carnet — ${carnet.numero}`}
+        ouverte={modaleSuppression}
+        onFermer={() => setModaleSuppression(false)}
+      >
+        <form onSubmit={validerSuppression} className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Supprimer définitivement le carnet {carnet.numero} ({LIBELLES_CARNET[carnet.typeCarnet]})
+            ?
+          </p>
+          <div className="rounded-xl bg-rose-50 p-3 text-sm text-rose-900 ring-1 ring-rose-100">
+            Les mises, la vente de carnet et les opérations de caisse liées seront retirées. Vous
+            pourrez ensuite rouvrir un carnet du même type pour ce client.
+            <p className="mt-2 text-xs text-rose-800">
+              Impossible si une journée de caisse ou une collecte zone concernée est déjà clôturée.
+            </p>
+          </div>
+          <div>
+            <label className="label">
+              Pour confirmer, saisissez <span className="font-semibold">je confirme</span>
+            </label>
+            <input
+              className="input"
+              autoComplete="off"
+              autoFocus
+              value={confirmationSuppression}
+              onChange={(e) => setConfirmationSuppression(e.target.value)}
+              placeholder="je confirme"
+            />
+          </div>
+          {erreurSuppression && <p className="text-sm font-medium text-rose-600">{erreurSuppression}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-secondary" onClick={() => setModaleSuppression(false)}>
+              Annuler
+            </button>
+            <button
+              type="submit"
+              className="btn-danger disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+              disabled={!suppressionConfirmee || suppressionEnCours}
+            >
+              <Trash2 className="h-4 w-4" />
+              {suppressionEnCours ? 'Suppression…' : 'Supprimer'}
+            </button>
+          </div>
+        </form>
       </Modale>
     </div>
   )
