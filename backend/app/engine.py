@@ -908,6 +908,58 @@ def cloturer_journee_zone(d, u, p):
     return (None, d, {})
 
 
+def _rouvrir_journee_zone(d: dict, zone_id: str, jour: str) -> None:
+    """Retire la clôture d'une journée zone (réel conservé, cumuls d'écart reculés)."""
+    journee = M.journee_zone_du_jour(d.get("journeesCompteZone") or [], zone_id, jour)
+    if not journee or not journee.get("cloturee"):
+        return
+    ecart = float(journee.get("ecart") or 0)
+    d["journeesCompteZone"] = [
+        {
+            **j,
+            "cloturee": False,
+            "statut": "en_cours",
+            "dateCloture": None,
+        }
+        if j["id"] == journee["id"]
+        else j
+        for j in d["journeesCompteZone"]
+    ]
+    compte = M.compte_zone_de(d["comptesZoneTontine"], zone_id)
+    if compte and abs(ecart) > 0.005:
+        cm = float(compte.get("cumulManquant") or 0)
+        cs = float(compte.get("cumulSurplus") or 0)
+        if ecart < 0:
+            cm = max(0.0, cm - abs(ecart))
+        else:
+            cs = max(0.0, cs - ecart)
+        d["comptesZoneTontine"] = [
+            {**c, "cumulManquant": cm, "cumulSurplus": cs} if c["id"] == compte["id"] else c
+            for c in d["comptesZoneTontine"]
+        ]
+
+
+def annuler_cloture_journee_zone(d, u, p):
+    """Rouvre une journée zone déjà clôturée (le réel saisi est conservé)."""
+    if not _a_droit(u, "operer_comptes") and not _est_admin(u):
+        return {"erreur": "Droit insuffisant."}
+    zone_id = p["zoneId"]
+    jour = p.get("dateIso") or p.get("journee") or M.aujourd_hui_iso()
+    zone = next((z for z in d["zones"] if z["id"] == zone_id), None)
+    if not zone:
+        return {"erreur": "Zone introuvable."}
+    if not _est_admin(u) and zone["agenceId"] != u["agenceId"]:
+        return {"erreur": "Cette zone n'appartient pas a votre agence."}
+    d = copy.deepcopy(d)
+    journee = M.journee_zone_du_jour(d["journeesCompteZone"], zone_id, jour)
+    if not journee:
+        return {"erreur": "Aucune journée enregistrée pour cette date."}
+    if not journee.get("cloturee"):
+        return {"erreur": "Cette journée n'est pas clôturée."}
+    _rouvrir_journee_zone(d, zone_id, jour)
+    return (None, d, {})
+
+
 def ajuster_cumul_compte_zone(d, u, p):
     if not _est_admin(u):
         return {"erreur": "Reserve a l'administrateur."}
@@ -1482,6 +1534,130 @@ def basculer_retrait_carnet_admin(d, u, p):
         for c in d["carnets"]
     ]
     return (None, d, {})
+
+
+def _txs_lies_au_carnet(d: dict, carnet: dict) -> list[dict]:
+    """Transactions de caisse rattachables à ce carnet (vente, dépôts, P.C., retraits, complément)."""
+    client_id = carnet["clientId"]
+    numero = carnet.get("numero") or ""
+    types = {
+        "vente_carnet",
+        "mise_tontine",
+        "commission_tontine",
+        "complement_mise",
+        "retrait_tontine",
+    }
+    autres = [
+        c for c in d.get("carnets") or [] if c.get("clientId") == client_id and c["id"] != carnet["id"]
+    ]
+    seul = len(autres) == 0
+    out: list[dict] = []
+    vus: set[str] = set()
+    for t in d.get("transactions") or []:
+        if t.get("type") not in types or t.get("clientId") != client_id:
+            continue
+        desc = t.get("description") or ""
+        num_desc = _numero_carnet_depuis_description(desc)
+        lie = False
+        if numero and numero in desc:
+            lie = True
+        elif num_desc and num_desc == numero:
+            lie = True
+        else:
+            trouve = _trouver_mise_tontine(
+                d,
+                client_id=client_id,
+                typ=t["type"],
+                montant=float(t.get("montant") or 0),
+                date_tx=t.get("date") or "",
+                description=desc,
+            )
+            if trouve and trouve[0]["id"] == carnet["id"]:
+                lie = True
+            elif seul:
+                lie = True
+        if lie and t["id"] not in vus:
+            vus.add(t["id"])
+            out.append(t)
+    return out
+
+
+def _retirer_txs_et_mouvements_caisse(d: dict, tx_ids: set[str]) -> dict:
+    if not tx_ids:
+        return d
+    comptes_ids: set[str] = set()
+    for m in d.get("mouvementsCompteCaisse") or []:
+        if m.get("transactionId") in tx_ids:
+            comptes_ids.add(m.get("compteCaisseId") or "")
+    comptes_ids.discard("")
+    initials: dict[str, tuple[str, float | None]] = {}
+    for cid in comptes_ids:
+        compte = next((c for c in d.get("comptesCaisse") or [] if c["id"] == cid), None)
+        if not compte:
+            continue
+        emp_id = compte.get("employeId") or ""
+        initial = _solde_caisse_avant_premier_mouvement(d, emp_id) if emp_id else float(compte.get("solde") or 0)
+        initials[cid] = (emp_id, initial)
+    d["mouvementsCompteCaisse"] = [
+        m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("transactionId") not in tx_ids
+    ]
+    d["transactions"] = [t for t in (d.get("transactions") or []) if t.get("id") not in tx_ids]
+    for cid, (emp_id, initial) in initials.items():
+        restants = [m for m in d["mouvementsCompteCaisse"] if m.get("compteCaisseId") == cid]
+        if restants and emp_id:
+            d = _recalculer_solde_compte_caisse(d, emp_id, initial)
+        else:
+            solde = float(initial) if initial is not None else 0.0
+            d["comptesCaisse"] = [{**c, "solde": solde} if c["id"] == cid else c for c in d["comptesCaisse"]]
+    return d
+
+
+def supprimer_carnet(d, u, p):
+    """Admin : supprime un carnet, ses mises et les opérations de caisse liées, pour pouvoir le rouvrir."""
+    if not _est_admin(u):
+        return {"erreur": "Seul l'administrateur peut supprimer un carnet."}
+    id_ = p.get("id") or p.get("carnetId")
+    carnet = next((c for c in d.get("carnets") or [] if c["id"] == id_), None)
+    if not carnet:
+        return {"erreur": "Carnet introuvable."}
+
+    d = copy.deepcopy(d)
+    carnet = next((c for c in d["carnets"] if c["id"] == id_), None)
+    txs = _txs_lies_au_carnet(d, carnet)
+    mises = [mi for mi in d.get("mises") or [] if mi.get("carnetId") == id_]
+
+    jours: set[str] = set()
+    ouverture = M.jour_iso_depuis_date(carnet.get("dateOuverture") or "")
+    if ouverture:
+        jours.add(ouverture)
+    for mi in mises:
+        j = M.jour_iso_depuis_date(mi.get("date") or "")
+        if j:
+            jours.add(j)
+    for t in txs:
+        j = M.jour_iso_depuis_date(t.get("date") or "")
+        if j:
+            jours.add(j)
+
+    agence_id = carnet.get("agenceId")
+    zone_id = carnet.get("zoneId")
+    for jour in sorted(jours):
+        if agence_id and M.arret_caisse_agence(d.get("arretsCaisse") or [], agence_id, jour):
+            return {
+                "erreur": f"Impossible : la caisse du {jour} est déjà clôturée. "
+                "Annulez d'abord cette clôture, ou supprimez le carnet avant l'arrêt de caisse."
+            }
+        if zone_id:
+            jz = M.journee_zone_du_jour(d.get("journeesCompteZone") or [], zone_id, jour)
+            if jz and jz.get("cloturee"):
+                return {
+                    "erreur": f"Impossible : la journée tontine de la zone est clôturée pour le {jour}."
+                }
+
+    d["mises"] = [mi for mi in d.get("mises") or [] if mi.get("carnetId") != id_]
+    d = _retirer_txs_et_mouvements_caisse(d, {t["id"] for t in txs})
+    d["carnets"] = [c for c in d["carnets"] if c["id"] != id_]
+    return (None, d, {"clientId": carnet["clientId"], "numero": carnet.get("numero")})
 
 
 def ouvrir_compte(d, u, p):
@@ -2442,6 +2618,63 @@ def arreter_caisse(d, u, p):
     return (None, d, {})
 
 
+def annuler_cloture_caisse(d, u, p):
+    """Annule clôture + toutes les opérations du jour, puis retire l'ouverture."""
+    if not _est_admin(u) and not _est_chef(u):
+        return {"erreur": "Seul l'administrateur ou le chef d'agence peut annuler une clôture."}
+    cible_id = p.get("cibleEmployeId") or p.get("employeId")
+    jour = p.get("journee") or M.aujourd_hui_iso()
+    if not cible_id:
+        return {"erreur": "Caissier non precise."}
+    cible = next((e for e in d["employes"] if e["id"] == cible_id and e.get("actif")), None)
+    if not cible:
+        return {"erreur": "Employe introuvable."}
+    if cible.get("role") == "chef_agence":
+        return {"erreur": "Le chef d'agence n'a pas de caisse."}
+    if _est_chef(u) and cible["agenceId"] != u["agenceId"]:
+        return {"erreur": "Vous ne pouvez annuler que les caisses de votre agence."}
+    d = copy.deepcopy(d)
+    arret = M.arret_caisse_agence(d.get("arretsCaisse") or [], cible["agenceId"], jour)
+    if not arret:
+        return {"erreur": f"La caisse du {jour} n'est pas clôturée."}
+    ecart = float(arret.get("ecart") or 0)
+    date_clot = (arret.get("dateCloture") or arret.get("date") or "")[:10]
+    d["arretsCaisse"] = [a for a in d["arretsCaisse"] if a.get("id") != arret.get("id")]
+    d, compte = _compte_caisse_operateur(d, cible["id"], cible["agenceId"])
+    if compte:
+        cm = float(compte.get("cumulManquant") or 0)
+        cs = float(compte.get("cumulSurplus") or 0)
+        if ecart < 0:
+            cm = max(0.0, cm - abs(ecart))
+        elif ecart > 0:
+            cs = max(0.0, cs - ecart)
+
+        def _est_ajustement_de_cet_arret(m: dict) -> bool:
+            if m.get("type") != "ajustement_arret":
+                return False
+            if m.get("compteCaisseId") != compte["id"]:
+                return False
+            if abs(float(m.get("montant") or 0) - abs(ecart)) > 0.005:
+                return False
+            md = (m.get("date") or "")[:10]
+            return md == date_clot or md == jour
+
+        d["mouvementsCompteCaisse"] = [
+            m for m in (d.get("mouvementsCompteCaisse") or []) if not _est_ajustement_de_cet_arret(m)
+        ]
+        d["comptesCaisse"] = [
+            {**c, "cumulManquant": cm, "cumulSurplus": cs} if c["id"] == compte["id"] else c
+            for c in d["comptesCaisse"]
+        ]
+        d = _recalculer_solde_compte_caisse(d, cible["id"])
+
+    for z in d.get("zones") or []:
+        if z.get("agenceId") == cible["agenceId"]:
+            _rouvrir_journee_zone(d, z["id"], jour)
+
+    return annuler_ouverture_journee_caisse(d, u, {"employeId": cible["id"], "journee": jour})
+
+
 def regulariser_cumul_compte_caisse(d, u, p):
     if not _est_admin(u):
         return {"erreur": "Reserve a l'administrateur."}
@@ -3017,6 +3250,7 @@ ACTIONS = {
     "basculerActifZone": basculer_actif_zone,
     "saisirMontantReelZone": saisir_montant_reel_zone,
     "cloturerJourneeZone": cloturer_journee_zone,
+    "annulerClotureJourneeZone": annuler_cloture_journee_zone,
     "ajusterCumulCompteZone": ajuster_cumul_compte_zone,
     "ajouterClient": ajouter_client,
     "modifierClient": modifier_client,
@@ -3028,6 +3262,7 @@ ACTIONS = {
     "retraitCycle": retrait_cycle,
     "basculerVerrouCarnet": basculer_verrou_carnet,
     "basculerRetraitCarnetAdmin": basculer_retrait_carnet_admin,
+    "supprimerCarnet": supprimer_carnet,
     "ouvrirCompte": ouvrir_compte,
     "validerOuvertureCompte": valider_ouverture_compte,
     "refuserOuvertureCompte": refuser_ouverture_compte,
@@ -3048,6 +3283,7 @@ ACTIONS = {
     "ouvrirJourneeCaisse": ouvrir_journee_caisse,
     "annulerOuvertureJourneeCaisse": annuler_ouverture_journee_caisse,
     "arreterCaisse": arreter_caisse,
+    "annulerClotureCaisse": annuler_cloture_caisse,
     "regulariserCumulCompteCaisse": regulariser_cumul_compte_caisse,
     "reinitialiserDemo": lambda d, u, p: {"erreur": "handled upstream"},
 }

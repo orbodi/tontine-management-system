@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowDownToLine,
   ArrowLeft,
@@ -7,6 +7,7 @@ import {
   Lock,
   LockOpen,
   RefreshCw,
+  Trash2,
 } from 'lucide-react'
 import { NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
@@ -80,6 +81,7 @@ function SelectJourCollecte({
 
 export default function DetailTontine() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const {
     data,
     aDroit,
@@ -89,6 +91,7 @@ export default function DetailTontine() {
     retraitCycle,
     basculerVerrouCarnet,
     basculerRetraitCarnetAdmin,
+    supprimerCarnet,
   } = useStore()
   const { confirmer, alerter } = useConfirmation()
 
@@ -292,6 +295,33 @@ export default function DetailTontine() {
                 }}
               >
                 {carnet.verrouille ? <LockOpen className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+              </button>
+            )}
+            {estAdmin && (
+              <button
+                className="btn-danger"
+                onClick={async () => {
+                  const ok = await confirmer({
+                    titre: 'Supprimer le carnet',
+                    message:
+                      `Supprimer définitivement le carnet ${carnet.numero} (${LIBELLES_CARNET[carnet.typeCarnet]}) ?\n\n` +
+                      `Les mises, la vente de carnet et les opérations de caisse liées seront retirées. ` +
+                      `Vous pourrez ensuite rouvrir un carnet du même type pour ce client.\n\n` +
+                      `Impossible si une journée de caisse ou une collecte zone concernée est déjà clôturée.`,
+                    labelValider: 'Supprimer',
+                    danger: true,
+                  })
+                  if (!ok) return
+                  const err = await supprimerCarnet(carnet.id)
+                  if (err) {
+                    await alerter('Suppression impossible', err)
+                    return
+                  }
+                  navigate(`/clients/${carnet.clientId}`)
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+                Supprimer
               </button>
             )}
             {estAdmin && carteRestreinte && (

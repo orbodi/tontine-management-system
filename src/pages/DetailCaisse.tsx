@@ -47,6 +47,7 @@ export default function DetailCaisse() {
     ouvrirJourneeCaisse,
     annulerOuvertureJourneeCaisse,
     arreterCaisse,
+    annulerClotureCaisse,
     alimenterCompteCaisse,
     regulariserCumulCompteCaisse,
   } = useStore()
@@ -254,6 +255,43 @@ export default function DetailCaisse() {
     )
   }
 
+  const annulerCloture = async (jour: string) => {
+    if (!employe) return
+    const sit = situationCaisse(
+      employe.id,
+      data.transactions,
+      data.arretsCaisse,
+      jour,
+      data.comptesCaisse,
+      data.mouvementsCompteCaisse,
+      data.ouverturesCaisse ?? [],
+      data.employes,
+    )
+    const nbOps = sit.nombreOperations
+    const ok = await confirmer({
+      titre: 'Annuler la journée clôturée',
+      message:
+        `Annuler la clôture du ${formatDate(jour + 'T12:00:00')} ?\n\n` +
+        `Toutes les opérations de ce jour seront reculées (dépôts, retraits, tontine, vente de carnet…). ` +
+        `Les soldes clients et carnets seront rétablis. La journée redeviendra « non ouverte ».`,
+      labelValider: 'Tout annuler',
+      danger: true,
+    })
+    if (!ok) return
+    const res = await annulerClotureCaisse(employe.id, jour)
+    if (res.erreur) {
+      await alerter('Annulation impossible', res.erreur)
+      return
+    }
+    const n = res.operationsAnnulees ?? nbOps
+    await alerter(
+      'Journée annulée',
+      n > 0
+        ? `La journée du ${formatDate(jour + 'T12:00:00')} a été annulée (${n} opération${n > 1 ? 's' : ''} reculée${n > 1 ? 's' : ''}). Vous pouvez la rouvrir.`
+        : `La journée du ${formatDate(jour + 'T12:00:00')} n’est plus clôturée ni ouverte. Vous pouvez la rouvrir.`,
+    )
+  }
+
   const validerArret = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!employe) return
@@ -406,6 +444,16 @@ export default function DetailCaisse() {
                 >
                   <Undo2 className="h-4 w-4" />
                   Annuler l’ouverture
+                </button>
+              )}
+              {peutGerer && situationJour?.cloturee && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void annulerCloture(jourOuverture)}
+                >
+                  <Undo2 className="h-4 w-4" />
+                  Annuler la clôture
                 </button>
               )}
             </div>
@@ -581,6 +629,7 @@ export default function DetailCaisse() {
         <TableauArretsCaisse
           arrets={arretsHistorique}
           titre="État et historique des clôtures"
+          onAnnulerCloture={peutGerer ? (a) => void annulerCloture(a.journee) : undefined}
         />
       </div>
 

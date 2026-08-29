@@ -46,6 +46,7 @@ type Props = {
   journeeSelectionnee?: string
   /** Masquer le filtre période (ex. historique déjà restreint). */
   sansFiltrePeriode?: boolean
+  onAnnulerCloture?: (arret: ArretCaisse) => void
 }
 
 /**
@@ -59,6 +60,7 @@ export function TableauArretsCaisse({
   onSelectionJournee,
   journeeSelectionnee,
   sansFiltrePeriode = false,
+  onAnnulerCloture,
 }: Props) {
   const [modePeriode, setModePeriode] = useState<'mois' | 'intervalle'>('mois')
   const [mois, setMois] = useState(moisEnCoursLocal)
@@ -233,6 +235,7 @@ export function TableauArretsCaisse({
                 <th className="px-5 py-3 text-right">Fermeture th.</th>
                 <th className="px-5 py-3 text-right">Compté</th>
                 <th className="px-5 py-3">Écart</th>
+                {onAnnulerCloture && <th className="px-5 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -272,6 +275,20 @@ export function TableauArretsCaisse({
                     <td className="px-5 py-3">
                       <BadgeEcart ecart={a.ecart} />
                     </td>
+                    {onAnnulerCloture && (
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-rose-700 hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onAnnulerCloture(a)
+                          }}
+                        >
+                          Annuler la clôture
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 )
               })}

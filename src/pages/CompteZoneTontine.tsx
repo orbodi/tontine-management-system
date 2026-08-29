@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Calculator, Scale } from 'lucide-react'
+import { ArrowLeft, Calculator, Scale, Undo2 } from 'lucide-react'
 import { useStore } from '../store'
 import { aujourdHuiIso, compteZoneDe, depotsTontineZoneJour, journeeZoneDuJour } from '../metier'
 import { formatDate, formatDateHeure, formatMontant } from '../utils'
@@ -32,6 +32,7 @@ export default function CompteZoneTontinePage() {
     employeConnecte,
     saisirMontantReelZone,
     cloturerJourneeZone,
+    annulerClotureJourneeZone,
     ajusterCumulCompteZone,
   } = useStore()
   const { alerter, confirmer } = useConfirmation()
@@ -119,6 +120,26 @@ export default function CompteZoneTontinePage() {
       return
     }
     await alerter('Journée clôturée', 'Le calcul d’écart a été enregistré dans l’historique du compte zone.')
+  }
+
+  const annulerCloture = async () => {
+    if (!zoneId) return
+    const ok = await confirmer({
+      titre: 'Annuler la clôture',
+      message:
+        `Annuler la clôture du ${formatDate(dateJour + 'T12:00:00')} ?\n\n` +
+        `La journée redeviendra ouverte. Le montant réel collecté est conservé. ` +
+        `L’écart de cette clôture sera retiré des cumuls. Vous pourrez ajouter des dépôts puis reclôturer.`,
+      labelValider: 'Annuler la clôture',
+      danger: true,
+    })
+    if (!ok) return
+    const err = await annulerClotureJourneeZone(zoneId, dateJour)
+    if (err) {
+      await alerter('Annulation impossible', err)
+      return
+    }
+    await alerter('Clôture annulée', 'La journée n’est plus clôturée.')
   }
 
   const validerAjustement = async (e: React.FormEvent) => {
@@ -220,6 +241,10 @@ export default function CompteZoneTontinePage() {
               </div>
             </div>
             <p className="text-xs text-slate-500">Par {journee.operateurNom}</p>
+            <button type="button" className="btn-secondary mt-2" onClick={() => void annulerCloture()}>
+              <Undo2 className="h-4 w-4" />
+              Annuler la clôture
+            </button>
           </div>
         ) : (
           <>

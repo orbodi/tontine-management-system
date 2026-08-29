@@ -91,6 +91,7 @@ interface StoreApi {
     note?: string,
   ) => Promise<string | null>
   cloturerJourneeZone: (zoneId: string, dateIso?: string) => Promise<string | null>
+  annulerClotureJourneeZone: (zoneId: string, dateIso?: string) => Promise<string | null>
   ajusterCumulCompteZone: (
     zoneId: string,
     type: 'manquant' | 'surplus',
@@ -128,6 +129,7 @@ interface StoreApi {
   retraitCycle: (carnetId: string, cycle: number, nombreCarreaux: number) => Promise<string | null>
   basculerVerrouCarnet: (id: string) => Promise<void>
   basculerRetraitCarnetAdmin: (id: string) => Promise<string | null>
+  supprimerCarnet: (id: string) => Promise<string | null>
   ouvrirCompte: (
     clientId: string,
     type: TypeCompte,
@@ -181,6 +183,10 @@ interface StoreApi {
     journee?: string,
     cibleEmployeId?: string,
   ) => Promise<string | null>
+  annulerClotureCaisse: (
+    employeId: string,
+    journee?: string,
+  ) => Promise<{ erreur: string | null; operationsAnnulees?: number; comptesAnnules?: number }>
   alimenterCompteCaisse: (employeId: string, montant: number, note?: string) => Promise<string | null>
   exporterSauvegardeCsv: () => Promise<void>
   importerSauvegardeCsv: (fichier: File) => Promise<string | null>
@@ -341,6 +347,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const res = await muter('cloturerJourneeZone', { zoneId, dateIso })
         return res.erreur ?? null
       },
+      async annulerClotureJourneeZone(zoneId, dateIso) {
+        const res = await muter('annulerClotureJourneeZone', { zoneId, dateIso })
+        return res.erreur ?? null
+      },
       async ajusterCumulCompteZone(zoneId, type, montant, motif) {
         const res = await muter('ajusterCumulCompteZone', { zoneId, type, montant, motif })
         return res.erreur ?? null
@@ -395,6 +405,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       async basculerRetraitCarnetAdmin(id) {
         const res = await muter('basculerRetraitCarnetAdmin', { id })
+        return res.erreur ?? null
+      },
+      async supprimerCarnet(id) {
+        const res = await muter('supprimerCarnet', { id })
         return res.erreur ?? null
       },
       async ouvrirCompte(clientId, type, promotion = false, caissierId) {
@@ -488,6 +502,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           cibleEmployeId,
         })
         return res.erreur ?? null
+      },
+      async annulerClotureCaisse(employeId, journee) {
+        const res = await muter('annulerClotureCaisse', { employeId, journee, cibleEmployeId: employeId })
+        return {
+          erreur: res.erreur ?? null,
+          operationsAnnulees:
+            typeof res.operationsAnnulees === 'number' ? res.operationsAnnulees : undefined,
+          comptesAnnules: typeof res.comptesAnnules === 'number' ? res.comptesAnnules : undefined,
+        }
       },
       async alimenterCompteCaisse(employeId, montant, note) {
         const res = await muter('alimenterCompteCaisse', { employeId, montant, note })
