@@ -2887,7 +2887,7 @@ def _recalculer_solde_compte_client(d: dict, compte_id: str) -> dict:
 
 
 def _recalculer_solde_compte_caisse(d: dict, employe_id: str, solde_initial: float | None = None) -> dict:
-    """Recalcule solde + soldeApres : somme des mouvements restants (départ 0, pas d'écart fantôme)."""
+    """Recalcule le solde. Un gel remet à zéro : seuls les mouvements après le dernier gel comptent."""
     compte = M.compte_caisse_pour_employe(d.get("comptesCaisse") or [], employe_id, d.get("employes") or [])
     if not compte:
         return d
@@ -2912,9 +2912,13 @@ def _recalculer_solde_compte_caisse(d: dict, employe_id: str, solde_initial: flo
         ]
         return d
 
+    dernier_gel = max((i for i, m in enumerate(mvts) if m.get("type") == "gel"), default=None)
     nouveaux = []
-    for m in mvts:
-        solde += _delta(m)
+    for i, m in enumerate(mvts):
+        if dernier_gel is not None and i == dernier_gel:
+            solde = 0.0
+        else:
+            solde += _delta(m)
         nouveaux.append({**m, "soldeApres": solde})
     ids = {m["id"] for m in nouveaux}
     autres = [m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("id") not in ids]
