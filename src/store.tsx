@@ -115,11 +115,13 @@ interface StoreApi {
     typeCarnet: TypeCarnet,
     mise: number,
     frequence: 'journaliere' | 'hebdomadaire',
+    origineTontine?: 'nouveau' | 'ancien',
   ) => Promise<{ id: string; numero: string } | { erreur: string }>
   encaisserCotisation: (
     carnetId: string,
     montant: number,
     dateCollecte?: string,
+    frais?: { payerAbonnement?: boolean; payerPc?: boolean },
   ) => Promise<string | null>
   renouvelerCarnet: (carnetId: string, dateCollecte?: string) => Promise<string | null>
   changerMiseCarnet: (
@@ -376,17 +378,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const res = await muter('supprimerClient', { id })
         return res.erreur ?? null
       },
-      async ouvrirCarnet(clientId, typeCarnet, mise, frequence) {
-        const res = await muter('ouvrirCarnet', { clientId, typeCarnet, mise, frequence })
+      async ouvrirCarnet(clientId, typeCarnet, mise, frequence, origineTontine) {
+        const res = await muter('ouvrirCarnet', {
+          clientId,
+          typeCarnet,
+          mise,
+          frequence,
+          ...(origineTontine ? { origineTontine } : {}),
+        })
         if (res.erreur) return { erreur: res.erreur }
         if (res.id && res.numero) return { id: res.id, numero: res.numero }
         return { erreur: 'Ouverture impossible.' }
       },
-      async encaisserCotisation(carnetId, montant, dateCollecte) {
+      async encaisserCotisation(carnetId, montant, dateCollecte, frais) {
         const res = await muter('encaisserCotisation', {
           carnetId,
           montant,
           ...(dateCollecte ? { dateCollecte } : {}),
+          ...(frais?.payerAbonnement ? { payerAbonnement: true } : {}),
+          ...(frais?.payerPc ? { payerPc: true } : {}),
         })
         return res.erreur ?? null
       },

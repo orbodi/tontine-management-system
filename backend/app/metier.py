@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 _RE_ANNEE_RENOUVELLEMENT = re.compile(r"carnet\s+(\d+),\s*cycle\s+1/", re.IGNORECASE)
+_RE_CYCLE_PC = re.compile(r"cycle\s+(\d+)", re.IGNORECASE)
 
 TYPES_SORTIE = ["retrait_tontine", "retrait_compte", "octroi_credit"]
 TYPES_OPERATION_CAISSE = [
@@ -85,6 +86,100 @@ def besoin_renouvellement_carnet(carnet: dict, mises: list, transactions: list |
     """True quand l'année de 12 cycles est terminée et le renouvellement (300 F) n'est pas payé."""
     cycle = cycle_courant_effectif(carnet, mises)
     return annee_carnet(cycle) > annee_carnet_ouverte(carnet, mises, transactions)
+
+
+def abonnement_annee1_paye(carnet: dict, transactions: list | None = None) -> bool:
+    """Abonnement des 12 premiers cycles déjà encaissé (ou offert pour un carnet papier)."""
+    if carnet.get("reprisePapier"):
+        return True
+    numero = carnet.get("numero") or ""
+    client_id = carnet.get("clientId")
+    for t in transactions or []:
+        if t.get("type") != "vente_carnet":
+            continue
+        if client_id and t.get("clientId") != client_id:
+            continue
+        desc = t.get("description") or ""
+        if "Renouvellement" in desc:
+            continue
+        if numero and numero not in desc:
+            continue
+        return True
+    return False
+
+
+def abonnement_a_saisir(carnet: dict, mises: list, transactions: list | None = None) -> bool:
+    """Case abonnement : une fois sur les 12 premiers cycles, tant que non payé."""
+    if besoin_renouvellement_carnet(carnet, mises, transactions):
+        return False
+    cycle = cycle_courant_effectif(carnet, mises)
+    if annee_carnet(cycle) > 1:
+        return False
+    return not abonnement_annee1_paye(carnet, transactions)
+
+
+def pc_payee_sur_cycle(carnet: dict, transactions: list | None, cycle: int) -> bool:
+    numero = carnet.get("numero") or ""
+    client_id = carnet.get("clientId")
+    for t in transactions or []:
+        if t.get("type") != "commission_tontine":
+            continue
+        if client_id and t.get("clientId") != client_id:
+            continue
+        desc = t.get("description") or ""
+        if numero and numero not in desc and "carnet" in desc.lower():
+            continue
+        m = _RE_CYCLE_PC.search(desc)
+        if m and int(m.group(1)) == int(cycle):
+            return True
+    return False
+
+
+def pc_a_saisir(carnet: dict, mises: list, transactions: list | None = None) -> bool:
+    """Case P.C. du cycle en cours, tant que non payée (sauf cycle 1 papier)."""
+    cycle = cycle_courant_effectif(carnet, mises)
+    if not pc_due_sur_cycle(carnet, cycle):
+        return False
+    return not pc_payee_sur_cycle(carnet, transactions, cycle)
+
+
+def preparer_depot_tontine(
+    montant: float,
+    mise: float,
+    payer_abonnement: bool,
+    payer_pc: bool,
+) -> dict[str, Any]:
+    """Ventile le montant saisi : frais cochés puis carreaux sur le reste."""
+    if montant <= 0:
+        return {"ok": False, "erreur": "Montant invalide."}
+    if mise <= 0:
+        return {"ok": False, "erreur": "Mise invalide."}
+    frais_abo = PRIX_CARNET if payer_abonnement else 0
+    frais_pc = mise if payer_pc else 0
+    frais = frais_abo + frais_pc
+    if montant < frais:
+        return {"ok": False, "erreur": "Montant insuffisant pour les frais coches."}
+    reste = montant - frais
+    if reste == 0:
+        if not payer_abonnement and not payer_pc:
+            return {"ok": False, "erreur": "Indiquez un depot ou cochez un frais."}
+        return {
+            "ok": True,
+            "nombreMises": 0,
+            "reste": 0,
+            "fraisAbonnement": frais_abo,
+            "fraisPc": frais_pc,
+        }
+    calc = calculer_mises_depuis_montant(reste, mise)
+    if not calc.get("ok"):
+        return calc
+    return {
+        "ok": True,
+        "nombreMises": calc["nombreMises"],
+        "reste": reste,
+        "fraisAbonnement": frais_abo,
+        "fraisPc": frais_pc,
+    }
 
 
 def aujourd_hui_iso() -> str:
@@ -286,7 +381,7 @@ def statut_depuis_ecart(ecart: float) -> str:
     return "manquant" if ecart < 0 else "surplus"
 
 
-TYPES_DEPOT_TONTINE_ZONE = ("mise_tontine", "commission_tontine", "complement_mise")
+TYPES_DEPOT_TONTINE_ZONE = ("mise_tontine", "commission_tontine", "complement_mise", "vente_carnet")
 
 
 def depots_tontine_zone_jour(zone_id: str, date_iso: str, clients: list, transactions: list) -> float:

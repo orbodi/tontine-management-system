@@ -1342,7 +1342,11 @@ def ouvrir_carnet(d, u, p):
         numero = numero_carnet(zone["code"], int(client.get("ordreZone") or 1))
     cid = uid()
     date = _horodate_caisse_agence(d, zone["agenceId"])
-    reprise = _origine_tontine(client.get("origineTontine")) == "ancien"
+    origine = _origine_tontine(p.get("origineTontine") or client.get("origineTontine"))
+    reprise = origine == "ancien"
+    d["clients"] = [
+        {**c, "origineTontine": origine} if c["id"] == client_id else c for c in d["clients"]
+    ]
     d["carnets"].append(
         {
             "id": cid,
@@ -1362,18 +1366,6 @@ def ouvrir_carnet(d, u, p):
             "reprisePapier": reprise,
         }
     )
-    if not reprise:
-        tx = _mk_tx(
-            u,
-            {
-                "type": "vente_carnet",
-                "clientId": client_id,
-                "montant": M.PRIX_CARNET,
-                "date": date,
-                "description": f"Vente du carnet {numero} — {_nom_client(d, client_id)} (cycle 1/12)",
-            },
-        )
-        d = _enregistrer_tx(d, [tx])
     return {"data": d, "id": cid, "numero": numero}
 
 
@@ -1395,23 +1387,66 @@ def encaisser_cotisation(d, u, p):
     if err_jour:
         return {"erreur": err_jour}
 
-    calc = M.calculer_mises_depuis_montant(montant, carnet["mise"])
-    if not calc.get("ok"):
-        return {"erreur": calc["erreur"]}
-    plan = M.repartir_depot_sur_cycles(
-        carnet, d["mises"], calc["nombreMises"], d.get("transactions") or []
-    )
-    if not plan.get("ok"):
-        return {"erreur": plan.get("erreur") or "Depot impossible."}
+    txs = d.get("transactions") or []
+    payer_abo = bool(p.get("payerAbonnement"))
+    payer_pc = bool(p.get("payerPc"))
+    if payer_abo and not M.abonnement_a_saisir(carnet, d["mises"], txs):
+        return {"erreur": "L'abonnement de cette annee est deja regle."}
+    if payer_pc and not M.pc_a_saisir(carnet, d["mises"], txs):
+        return {"erreur": "La P.C. de ce cycle est deja reglee ou non due."}
+
+    prep = M.preparer_depot_tontine(montant, carnet["mise"], payer_abo, payer_pc)
+    if not prep.get("ok"):
+        return {"erreur": prep.get("erreur") or "Depot impossible."}
+
+    plan = {"tranches": [], "cycleFinal": carnet["cycleActuel"]}
+    if prep["nombreMises"] > 0:
+        plan = M.repartir_depot_sur_cycles(carnet, d["mises"], prep["nombreMises"], txs)
+        if not plan.get("ok"):
+            return {"erreur": plan.get("erreur") or "Depot impossible."}
 
     date = M.horodater_sur_jour(jour)
     note_collecte = f" (collecte du {jour})" if jour != M.aujourd_hui_iso() else ""
     nouvelles = []
+    if payer_abo:
+        cycle_abo = M.cycle_courant_effectif(carnet, d["mises"])
+        nouvelles.append(
+            _mk_tx(
+                u,
+                {
+                    "type": "vente_carnet",
+                    "clientId": carnet["clientId"],
+                    "montant": M.PRIX_CARNET,
+                    "date": date,
+                    "description": (
+                        f"Abonnement carnet {carnet['numero']} — {_nom_client(d, carnet['clientId'])} "
+                        f"(carnet {M.annee_carnet(cycle_abo)}, cycle 1/{M.CYCLES_PAR_CARNET}){note_collecte}"
+                    ),
+                },
+            )
+        )
+    if payer_pc:
+        cycle_pc = M.cycle_courant_effectif(carnet, d["mises"])
+        nouvelles.append(
+            _mk_tx(
+                u,
+                {
+                    "type": "commission_tontine",
+                    "clientId": carnet["clientId"],
+                    "montant": carnet["mise"],
+                    "date": date,
+                    "description": (
+                        f"Premiere cotisation (P.C) — {_nom_client(d, carnet['clientId'])} "
+                        f"(carnet {carnet['numero']}, cycle {cycle_pc}){note_collecte}"
+                    ),
+                },
+            )
+        )
+
     nouvelles_mises = []
     for tr in plan["tranches"]:
         cycle_depot = int(tr["cycle"])
         nombre = int(tr["nombre"])
-        payees = int(tr["payeesAvant"])
         nouvelles_mises.append(
             {
                 "id": uid(),
@@ -1422,60 +1457,27 @@ def encaisser_cotisation(d, u, p):
                 "date": date,
             }
         )
-        if tr.get("preleverPc"):
-            nouvelles.append(
-                _mk_tx(
-                    u,
-                    {
-                        "type": "commission_tontine",
-                        "clientId": carnet["clientId"],
-                        "montant": carnet["mise"],
-                        "date": date,
-                        "description": (
-                            f"Premiere cotisation (P.C) — {_nom_client(d, carnet['clientId'])} "
-                            f"(cycle {cycle_depot}){note_collecte}"
-                        ),
-                    },
-                )
+        nouvelles.append(
+            _mk_tx(
+                u,
+                {
+                    "type": "mise_tontine",
+                    "clientId": carnet["clientId"],
+                    "montant": carnet["mise"] * nombre,
+                    "date": date,
+                    "description": (
+                        f"Depot x{nombre} — {_nom_client(d, carnet['clientId'])} "
+                        f"(cycle {cycle_depot}){note_collecte}"
+                    ),
+                },
             )
-            if nombre > 1:
-                nouvelles.append(
-                    _mk_tx(
-                        u,
-                        {
-                            "type": "mise_tontine",
-                            "clientId": carnet["clientId"],
-                            "montant": carnet["mise"] * (nombre - 1),
-                            "date": date,
-                            "description": (
-                                f"Depot x{nombre - 1} — {_nom_client(d, carnet['clientId'])} "
-                                f"(cycle {cycle_depot}){note_collecte}"
-                            ),
-                        },
-                    )
-                )
-        else:
-            note_pc = " (P.C. non prelevee — client ancien)" if payees == 0 else ""
-            nouvelles.append(
-                _mk_tx(
-                    u,
-                    {
-                        "type": "mise_tontine",
-                        "clientId": carnet["clientId"],
-                        "montant": carnet["mise"] * nombre,
-                        "date": date,
-                        "description": (
-                            f"Depot x{nombre} — {_nom_client(d, carnet['clientId'])} "
-                            f"(cycle {cycle_depot}){note_collecte}{note_pc}"
-                        ),
-                    },
-                )
-            )
+        )
 
     d["mises"] = [*d["mises"], *nouvelles_mises]
-    d["carnets"] = [
-        {**c, "cycleActuel": plan["cycleFinal"]} if c["id"] == carnet_id else c for c in d["carnets"]
-    ]
+    if plan.get("cycleFinal") and plan["cycleFinal"] != carnet["cycleActuel"]:
+        d["carnets"] = [
+            {**c, "cycleActuel": plan["cycleFinal"]} if c["id"] == carnet_id else c for c in d["carnets"]
+        ]
     d = _enregistrer_tx(d, nouvelles)
     return (None, d, {})
 

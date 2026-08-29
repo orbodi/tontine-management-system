@@ -33,9 +33,11 @@ export const formulaireClientVide: FormulaireClient = {
 export function ChoixOrigineClient({
   valeur,
   onChange,
+  name = 'origineTontine',
 }: {
   valeur: OrigineTontine
   onChange: (v: OrigineTontine) => void
+  name?: string
 }) {
   return (
     <div>
@@ -51,7 +53,7 @@ export function ChoixOrigineClient({
           <input
             type="radio"
             className="mt-0.5"
-            name="origineTontine"
+            name={name}
             checked={valeur === 'nouveau'}
             onChange={() => onChange('nouveau')}
           />
@@ -72,7 +74,7 @@ export function ChoixOrigineClient({
           <input
             type="radio"
             className="mt-0.5"
-            name="origineTontine"
+            name={name}
             checked={valeur === 'ancien'}
             onChange={() => onChange('ancien')}
           />

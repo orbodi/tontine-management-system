@@ -1,6 +1,7 @@
 import {
   CYCLES_PAR_CARNET,
   MOIS_MIN_RETRAIT_CARTE,
+  PRIX_CARNET,
   type ArretCaisse,
   type CarnetTontine,
   type Client,
@@ -238,6 +239,86 @@ export function besoinRenouvellementCarnet(
   transactions: Transaction[] = [],
 ): boolean {
   return anneeCarnet(cycleCourantEffectif(carnet, mises)) > anneeCarnetOuverte(carnet, mises, transactions)
+}
+
+const RE_CYCLE_PC = /cycle\s+(\d+)/i
+
+export function abonnementAnnee1Paye(
+  carnet: Pick<CarnetTontine, 'clientId' | 'numero' | 'reprisePapier'>,
+  transactions: Transaction[] = [],
+): boolean {
+  if (carnet.reprisePapier) return true
+  return transactions.some((t) => {
+    if (t.type !== 'vente_carnet') return false
+    if (t.clientId !== carnet.clientId) return false
+    if (t.description.includes('Renouvellement')) return false
+    if (carnet.numero && !t.description.includes(carnet.numero)) return false
+    return true
+  })
+}
+
+/** Case abonnement (300 F) : une fois sur les 12 premiers cycles. */
+export function abonnementASaisir(
+  carnet: Pick<CarnetTontine, 'id' | 'clientId' | 'numero' | 'cycleActuel' | 'misesParCycle' | 'reprisePapier'>,
+  mises: MiseTontine[],
+  transactions: Transaction[] = [],
+): boolean {
+  if (besoinRenouvellementCarnet(carnet, mises, transactions)) return false
+  if (anneeCarnet(cycleCourantEffectif(carnet, mises)) > 1) return false
+  return !abonnementAnnee1Paye(carnet, transactions)
+}
+
+export function pcPayeeSurCycle(
+  carnet: Pick<CarnetTontine, 'clientId' | 'numero'>,
+  transactions: Transaction[] = [],
+  cycle: number,
+): boolean {
+  return transactions.some((t) => {
+    if (t.type !== 'commission_tontine') return false
+    if (t.clientId !== carnet.clientId) return false
+    if (carnet.numero && !t.description.includes(carnet.numero) && /carnet/i.test(t.description)) {
+      return false
+    }
+    const m = t.description.match(RE_CYCLE_PC)
+    return !!m && Number(m[1]) === cycle
+  })
+}
+
+/** Case P.C. du cycle en cours, tant que non payée. */
+export function pcASaisir(
+  carnet: Pick<CarnetTontine, 'id' | 'clientId' | 'numero' | 'cycleActuel' | 'misesParCycle' | 'reprisePapier'>,
+  mises: MiseTontine[],
+  transactions: Transaction[] = [],
+): boolean {
+  const cycle = cycleCourantEffectif(carnet, mises)
+  if (!pcDueSurCycle(carnet, cycle)) return false
+  return !pcPayeeSurCycle(carnet, transactions, cycle)
+}
+
+export function preparerDepotTontine(
+  montant: number,
+  mise: number,
+  payerAbonnement: boolean,
+  payerPc: boolean,
+):
+  | { ok: true; nombreMises: number; reste: number; fraisAbonnement: number; fraisPc: number }
+  | { ok: false; erreur: string } {
+  if (montant <= 0) return { ok: false, erreur: 'Montant invalide.' }
+  if (mise <= 0) return { ok: false, erreur: 'Mise invalide.' }
+  const fraisAbonnement = payerAbonnement ? PRIX_CARNET : 0
+  const fraisPc = payerPc ? mise : 0
+  const frais = fraisAbonnement + fraisPc
+  if (montant < frais) return { ok: false, erreur: 'Montant insuffisant pour les frais cochés.' }
+  const reste = montant - frais
+  if (reste === 0) {
+    if (!payerAbonnement && !payerPc) {
+      return { ok: false, erreur: 'Indiquez un dépôt ou cochez un frais.' }
+    }
+    return { ok: true, nombreMises: 0, reste: 0, fraisAbonnement, fraisPc }
+  }
+  const calc = calculerMisesDepuisMontant(reste, mise)
+  if (!calc.ok) return calc
+  return { ok: true, nombreMises: calc.nombreMises, reste, fraisAbonnement, fraisPc }
 }
 
 export function libelleCycleCarnet(cycle: number): string {
@@ -798,6 +879,7 @@ export const TYPES_DEPOT_TONTINE_ZONE: TypeTransaction[] = [
   'mise_tontine',
   'commission_tontine',
   'complement_mise',
+  'vente_carnet',
 ]
 
 /** Dépôts tontine (mises + P.C) d'une zone pour un jour YYYY-MM-DD. */

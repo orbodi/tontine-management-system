@@ -16,7 +16,7 @@ import { CYCLES_PAR_CARNET, PRIX_CARNET, type JourneeCompteZone } from '../types
 import {
   aujourdHuiIso,
   CARNETS_RETRAIT_6_MOIS,
-  anneeCarnet,
+  abonnementASaisir,
   anneeCarnetOuverte,
   besoinRenouvellementCarnet,
   cycleDansAnnee,
@@ -24,7 +24,8 @@ import {
   estPremierCycleRenouvellement,
   LIBELLES_CARNET,
   libelleCycleCarnet,
-  calculerMisesDepuisMontant,
+  pcASaisir,
+  preparerDepotTontine,
   carreauxNets,
   eligibiliteRetraitCarnet,
   journeeZoneDuJour,
@@ -109,6 +110,8 @@ export default function DetailTontine() {
   const [erreur, setErreur] = useState('')
   const [dateCollecte, setDateCollecte] = useState(() => aujourdHuiIso())
   const [modaleRenouvellement, setModaleRenouvellement] = useState(false)
+  const [payerAbonnement, setPayerAbonnement] = useState(false)
+  const [payerPc, setPayerPc] = useState(false)
 
   const carnet = data.carnets.find((c) => c.id === id)
   const client = carnet ? data.clients.find((c) => c.id === carnet.clientId) : undefined
@@ -136,13 +139,24 @@ export default function DetailTontine() {
   const eligibilite = carnet ? eligibiliteRetraitCarnet(carnet, data.mises) : { autorise: true }
   const carteRestreinte = carnet ? CARNETS_RETRAIT_6_MOIS.includes(carnet.typeCarnet) : false
   const retraitAutorise = eligibilite.autorise && !carnet?.verrouille
+  const peutSaisirAbo = carnet
+    ? abonnementASaisir(carnet, data.mises, data.transactions)
+    : false
+  const peutSaisirPc = carnet ? pcASaisir(carnet, data.mises, data.transactions) : false
   const calcDepot = carnet
-    ? calculerMisesDepuisMontant(Number(montantDepot) || 0, carnet.mise)
+    ? preparerDepotTontine(
+        Number(montantDepot) || 0,
+        carnet.mise,
+        payerAbonnement && peutSaisirAbo,
+        payerPc && peutSaisirPc,
+      )
     : null
   const planDepot =
-    carnet && calcDepot?.ok
+    carnet && calcDepot?.ok && calcDepot.nombreMises > 0
       ? repartirDepotSurCycles(carnet, data.mises, calcDepot.nombreMises, data.transactions)
-      : null
+      : carnet && calcDepot?.ok && calcDepot.nombreMises === 0
+        ? { ok: true as const, tranches: [], cycleFinal: carnet.cycleActuel }
+        : null
   const besoinRenouvellement = carnet
     ? besoinRenouvellementCarnet(carnet, data.mises, data.transactions)
     : false
@@ -179,8 +193,8 @@ export default function DetailTontine() {
       setErreur(calcDepot && !calcDepot.ok ? calcDepot.erreur : 'Montant invalide.')
       return
     }
-    if (!planDepot?.ok) {
-      setErreur(planDepot && !planDepot.ok ? planDepot.erreur : 'Dépôt impossible.')
+    if (calcDepot.nombreMises > 0 && planDepot && !planDepot.ok) {
+      setErreur(planDepot.erreur)
       return
     }
     setErreur('')
@@ -190,10 +204,15 @@ export default function DetailTontine() {
   const validerDepot = async () => {
     const montant = Number(montantDepot)
     const avant = carnet.cycleActuel
-    const resultat = await encaisserCotisation(carnet.id, montant, dateCollecte)
+    const resultat = await encaisserCotisation(carnet.id, montant, dateCollecte, {
+      payerAbonnement: payerAbonnement && peutSaisirAbo,
+      payerPc: payerPc && peutSaisirPc,
+    })
     setRecapDepot(false)
     setModaleDepot(false)
     setMontantDepot('')
+    setPayerAbonnement(false)
+    setPayerPc(false)
     setErreur('')
     if (resultat) {
       await alerter('Dépôt échoué', resultat)
@@ -320,6 +339,8 @@ export default function DetailTontine() {
                 }
                 onClick={() => {
                   setMontantDepot('')
+                  setPayerAbonnement(false)
+                  setPayerPc(false)
                   setErreur('')
                   setDateCollecte(dateCollecteParDefaut(joursSaisissables, aujourdhui))
                   setModaleDepot(true)
@@ -560,11 +581,11 @@ export default function DetailTontine() {
         </div>
         <p className="mt-3 text-xs text-slate-500">
             À {carnet.misesParCycle} carreaux, le compte passe automatiquement au mois suivant. Un dépôt
-            peut couvrir plusieurs cycles d’un coup (ex. {formatMontant(carnet.mise * carnet.misesParCycle * 2)}{' '}
-            = 2 × {carnet.misesParCycle} carreaux), dans la même année. Après 12 cycles, utilisez{' '}
-            <strong>Renouveler le carnet</strong> ({formatMontant(PRIX_CARNET)}) pour ouvrir 12 nouveaux
-            cycles — y compris pour un client ancien. Un retrait partiel est possible sur le mois en
-            cours ; le retrait total reste réservé aux mois passés.
+            peut couvrir plusieurs cycles d’un coup. L’abonnement ({formatMontant(PRIX_CARNET)}, une fois
+            pour 12 cycles) et la P.C. (chaque cycle) se règlent en les cochant sur le dépôt — un client
+            peut cotiser avant de les payer. Après 12 cycles, utilisez{' '}
+            <strong>Renouveler le carnet</strong> ({formatMontant(PRIX_CARNET)}). Un retrait partiel est
+            possible sur le mois en cours ; le retrait total reste réservé aux mois passés.
         </p>
         {carteRestreinte && !eligibilite.autorise && (
           <p className="mt-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-800">
@@ -802,23 +823,69 @@ export default function DetailTontine() {
             )}
           </div>
           <div>
-            <label className="label">Montant du dépôt (FCFA) *</label>
+            <label className="label">Montant remis (FCFA) *</label>
             <input
               className="input"
               type="number"
-              min={carnet.mise}
-              step={carnet.mise}
+              min={1}
+              step={1}
               required
               autoFocus
               value={montantDepot}
               onChange={(e) => setMontantDepot(e.target.value)}
             />
             <p className="mt-1 text-xs text-slate-400">
-              Multiple de la mise. Un dépôt peut couvrir plusieurs cycles (ex.{' '}
-              {formatMontant(carnet.mise * carnet.misesParCycle * 2)} = 2 × {carnet.misesParCycle}{' '}
-              carreaux).
+              Le reste après les frais cochés doit être un multiple de la mise.
             </p>
           </div>
+          {(peutSaisirAbo || peutSaisirPc) && (
+            <div className="space-y-2">
+              {peutSaisirAbo && (
+                <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={payerAbonnement}
+                    onChange={(e) => setPayerAbonnement(e.target.checked)}
+                  />
+                  <span>
+                    <span className="font-medium text-slate-900">Abonnement</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">
+                      {formatMontant(PRIX_CARNET)} — une fois pour 12 cycles, déduit du montant
+                    </span>
+                  </span>
+                </label>
+              )}
+              {peutSaisirPc && (
+                <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={payerPc}
+                    onChange={(e) => setPayerPc(e.target.checked)}
+                  />
+                  <span>
+                    <span className="font-medium text-slate-900">P.C. de ce cycle</span>
+                    <span className="mt-0.5 block text-xs text-slate-500">
+                      {formatMontant(carnet.mise)} — déduit du montant
+                    </span>
+                  </span>
+                </label>
+              )}
+            </div>
+          )}
+          {calcDepot?.ok && (
+            <div className="rounded-xl bg-white px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200">
+              {calcDepot.fraisAbonnement > 0 && (
+                <p>Abonnement : −{formatMontant(calcDepot.fraisAbonnement)}</p>
+              )}
+              {calcDepot.fraisPc > 0 && <p>P.C. : −{formatMontant(calcDepot.fraisPc)}</p>}
+              <p>
+                Carreaux : <span className="font-semibold text-slate-900">{calcDepot.nombreMises}</span>
+                {calcDepot.reste > 0 ? ` (${formatMontant(calcDepot.reste)})` : ''}
+              </p>
+            </div>
+          )}
           <SelectJourCollecte
             jours={joursSaisissables}
             value={dateCollecte}
@@ -967,9 +1034,21 @@ export default function DetailTontine() {
           <div className="space-y-4">
             <div className="rounded-xl bg-brand-50 p-4 text-sm text-brand-900">
               <div className="flex justify-between">
-                <span>Montant du dépôt</span>
+                <span>Montant remis</span>
                 <span className="font-bold">{formatMontant(Number(montantDepot))}</span>
               </div>
+              {calcDepot.fraisAbonnement > 0 && (
+                <div className="mt-2 flex justify-between border-t border-brand-200 pt-2">
+                  <span>Abonnement</span>
+                  <span className="font-bold">−{formatMontant(calcDepot.fraisAbonnement)}</span>
+                </div>
+              )}
+              {calcDepot.fraisPc > 0 && (
+                <div className="mt-2 flex justify-between border-t border-brand-200 pt-2">
+                  <span>P.C. ({NOM_APPLICATION})</span>
+                  <span className="font-bold">−{formatMontant(calcDepot.fraisPc)}</span>
+                </div>
+              )}
               <div className="mt-2 flex justify-between border-t border-brand-200 pt-2">
                 <span>Carreaux</span>
                 <span className="text-lg font-bold">{calcDepot.nombreMises}</span>
@@ -989,8 +1068,6 @@ export default function DetailTontine() {
                           <span>
                             {mois.label}{' '}
                             <span className="text-brand-700/70">({libelleCycleCarnet(tr.cycle)})</span>
-                            {tr.preleverPc ? ' · P.C.' : ''}
-                            {tr.renouvellement ? ' · renouvellement' : ''}
                           </span>
                           <span className="font-semibold tabular-nums">{tr.nombre} carreaux</span>
                         </li>
@@ -999,37 +1076,10 @@ export default function DetailTontine() {
                   </ul>
                 </div>
               )}
-              {planDepot.tranches.some((t) => t.renouvellement) && (
-                <p className="mt-2 text-xs text-amber-800">
-                  Renouvellement du carnet :{' '}
-                  {formatMontant(
-                    PRIX_CARNET * planDepot.tranches.filter((t) => t.renouvellement).length,
-                  )}{' '}
-                  à encaisser en plus
-                  {planDepot.tranches
-                    .filter((t) => t.renouvellement)
-                    .map((t) => ` (carnet ${anneeCarnet(t.cycle)})`)
-                    .join('')}
-                  .
-                </p>
-              )}
-              {planDepot.tranches.some((t) => t.preleverPc) && (
-                <p className="mt-2 text-xs text-amber-800">
-                  Dont {planDepot.tranches.filter((t) => t.preleverPc).length} P.C. (
-                  {formatMontant(
-                    carnet.mise * planDepot.tranches.filter((t) => t.preleverPc).length,
-                  )}
-                  ) pour {NOM_APPLICATION}.
-                </p>
-              )}
-              {planDepot.tranches.some((t) => t.payeesAvant === 0 && !t.preleverPc) && (
-                <p className="mt-2 text-xs text-amber-800">
-                  P.C. non prélevée sur le premier cycle (carnet papier).
-                </p>
-              )}
-              {planDepot.tranches[planDepot.tranches.length - 1].payeesAvant +
-                planDepot.tranches[planDepot.tranches.length - 1].nombre >=
-                carnet.misesParCycle && (
+              {planDepot.tranches.length > 0 &&
+                planDepot.tranches[planDepot.tranches.length - 1].payeesAvant +
+                  planDepot.tranches[planDepot.tranches.length - 1].nombre >=
+                  carnet.misesParCycle && (
                 <p className="mt-2 text-xs font-medium text-brand-800">
                   {planDepot.tranches.length > 1
                     ? `Ce dépôt complète ${planDepot.tranches.filter((t) => t.payeesAvant + t.nombre >= carnet.misesParCycle).length} cycle(s) : passage automatique au mois suivant.`

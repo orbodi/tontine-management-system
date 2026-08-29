@@ -31,12 +31,14 @@ import {
   PRIX_CARNET,
   TYPES_CARNET,
   type FrequenceMise,
+  type OrigineTontine,
   type TypeCarnet,
   type TypeCompte,
 } from '../types'
 import { formatDate, formatDateHeure, formatMontant, afficherNumeroClient, texteAlerteDemandeOuverture } from '../utils'
 import { Avatar, BadgeStatutCredit, BoutonsMessage, EnTetePage, Modale } from '../components/ui'
 import {
+  ChoixOrigineClient,
   formulaireClientVide,
   ModaleClient,
   RecapFraisOuvertureCompte,
@@ -74,6 +76,7 @@ export default function DetailClient() {
   const [typeCarnet, setTypeCarnet] = useState<TypeCarnet>('tontine')
   const [mise, setMise] = useState('')
   const [frequence, setFrequence] = useState<FrequenceMise>('journaliere')
+  const [origineCarnet, setOrigineCarnet] = useState<OrigineTontine>('nouveau')
   const [typeCompte, setTypeCompte] = useState<TypeCompte>('courant')
   const [promoCompte, setPromoCompte] = useState(false)
   const [caissierPourCompte, setCaissierPourCompte] = useState('')
@@ -213,7 +216,13 @@ export default function DetailClient() {
       setErreur('Le client doit être rattaché à une agence et une zone.')
       return
     }
-    const resultat = await ouvrirCarnet(client.id, typeCarnet, Number(mise), frequence)
+    const resultat = await ouvrirCarnet(
+      client.id,
+      typeCarnet,
+      Number(mise),
+      frequence,
+      origineCarnet,
+    )
     if ('erreur' in resultat) {
       setErreur(resultat.erreur)
       await alerter('Ouverture impossible', resultat.erreur)
@@ -287,6 +296,7 @@ export default function DetailClient() {
                 onClick={() => {
                   setErreur('')
                   setMise('')
+                  setOrigineCarnet(client.origineTontine === 'ancien' ? 'ancien' : 'nouveau')
                   const dispo = TYPES_CARNET.find((t) => !typesCarnetDejaOuverts.has(t))
                   setTypeCarnet(dispo ?? 'tontine')
                   setModaleCarnet(true)
@@ -526,6 +536,7 @@ export default function DetailClient() {
                   onClick={() => {
                     setErreur('')
                     setMise('')
+                    setOrigineCarnet(client.origineTontine === 'ancien' ? 'ancien' : 'nouveau')
                     const dispo = TYPES_CARNET.find((t) => !typesCarnetDejaOuverts.has(t))
                     setTypeCarnet(dispo ?? 'tontine')
                     setModaleCarnet(true)
@@ -736,14 +747,22 @@ export default function DetailClient() {
               </select>
             </div>
           </div>
+          <ChoixOrigineClient
+            name="origineOuvertureCarnetFiche"
+            valeur={origineCarnet}
+            onChange={setOrigineCarnet}
+          />
           <div className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">
-            {estAncienClient(client) ? (
+            {origineCarnet === 'ancien' ? (
               <>
-                Carnet offert (client ancien) — pas de {formatMontant(PRIX_CARNET)}. Pas de P.C. sur le
-                premier cycle ; 31 carreaux × 12 mois.
+                Client ancien : pas d’abonnement ni de P.C. au 1er cycle. 31 carreaux × 12 mois — les
+                frais se règlent sur les dépôts si besoin.
               </>
             ) : (
-              <>Carnet {formatMontant(PRIX_CARNET)} — 31 carreaux × 12 mois.</>
+              <>
+                Aucun frais à l’ouverture. Abonnement ({formatMontant(PRIX_CARNET)}) et P.C. se cochent
+                sur les dépôts. 31 carreaux × 12 mois.
+              </>
             )}
           </div>
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
