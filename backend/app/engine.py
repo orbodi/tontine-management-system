@@ -1343,7 +1343,6 @@ def ouvrir_carnet(d, u, p):
     cid = uid()
     date = _horodate_caisse_agence(d, zone["agenceId"])
     origine = _origine_tontine(p.get("origineTontine") or client.get("origineTontine"))
-    reprise = origine == "ancien"
     d["clients"] = [
         {**c, "origineTontine": origine} if c["id"] == client_id else c for c in d["clients"]
     ]
@@ -1363,7 +1362,7 @@ def ouvrir_carnet(d, u, p):
             "verrouille": False,
             "retraitActiveParAdmin": type_carnet not in M.CARNETS_RETRAIT_6_MOIS,
             "actif": True,
-            "reprisePapier": reprise,
+            "reprisePapier": False,
         }
     )
     return {"data": d, "id": cid, "numero": numero}
@@ -1444,6 +1443,7 @@ def encaisser_cotisation(d, u, p):
         )
 
     nouvelles_mises = []
+    pc_restant = 1 if payer_pc else 0
     for tr in plan["tranches"]:
         cycle_depot = int(tr["cycle"])
         nombre = int(tr["nombre"])
@@ -1457,21 +1457,27 @@ def encaisser_cotisation(d, u, p):
                 "date": date,
             }
         )
-        nouvelles.append(
-            _mk_tx(
-                u,
-                {
-                    "type": "mise_tontine",
-                    "clientId": carnet["clientId"],
-                    "montant": carnet["mise"] * nombre,
-                    "date": date,
-                    "description": (
-                        f"Depot x{nombre} — {_nom_client(d, carnet['clientId'])} "
-                        f"(cycle {cycle_depot}){note_collecte}"
-                    ),
-                },
+        nombre_cash = nombre
+        if pc_restant and nombre_cash > 0:
+            oter = min(pc_restant, nombre_cash)
+            nombre_cash -= oter
+            pc_restant -= oter
+        if nombre_cash > 0:
+            nouvelles.append(
+                _mk_tx(
+                    u,
+                    {
+                        "type": "mise_tontine",
+                        "clientId": carnet["clientId"],
+                        "montant": carnet["mise"] * nombre_cash,
+                        "date": date,
+                        "description": (
+                            f"Depot x{nombre_cash} — {_nom_client(d, carnet['clientId'])} "
+                            f"(cycle {cycle_depot}){note_collecte}"
+                        ),
+                    },
+                )
             )
-        )
 
     d["mises"] = [*d["mises"], *nouvelles_mises]
     if plan.get("cycleFinal") and plan["cycleFinal"] != carnet["cycleActuel"]:
@@ -2272,6 +2278,18 @@ def supprimer_employe(d, u, p):
         return {"erreur": "Impossible de supprimer votre propre compte."}
     d = copy.deepcopy(d)
     d["employes"] = [e for e in d["employes"] if e["id"] != id_]
+    return d
+
+
+def purger_journal_audit(d, u, p):
+    """Admin : vide le journal des connexions. Les transactions métier restent intactes."""
+    if not _est_admin(u):
+        return {"erreur": "Seul l'administrateur peut purger le journal d'audit."}
+    journal = d.get("journalConnexions") or []
+    if not journal:
+        return {"erreur": "Le journal des connexions est déjà vide."}
+    d = copy.deepcopy(d)
+    d["journalConnexions"] = []
     return d
 
 
@@ -3466,6 +3484,7 @@ ACTIONS = {
     "modifierEmploye": modifier_employe,
     "supprimerEmploye": supprimer_employe,
     "basculerActifEmploye": basculer_actif_employe,
+    "purgerJournalAudit": purger_journal_audit,
     "alimenterCompteCaisse": alimenter_compte_caisse,
     "gelerCompteCaisse": geler_compte_caisse,
     "ouvrirJourneeCaisse": ouvrir_journee_caisse,

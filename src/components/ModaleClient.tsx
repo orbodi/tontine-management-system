@@ -266,10 +266,12 @@ export function ModaleClient({
           )}
         </div>
       )}
-      <ChoixOrigineClient
-        valeur={form.origineTontine}
-        onChange={(origineTontine) => setForm((f) => ({ ...f, origineTontine }))}
-      />
+      {modeBanque && (
+        <ChoixOrigineClient
+          valeur={form.origineTontine}
+          onChange={(origineTontine) => setForm((f) => ({ ...f, origineTontine }))}
+        />
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label">Prénom *</label>

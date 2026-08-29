@@ -175,8 +175,8 @@ export function carreauxRetires(carnet: CarnetTontine, mises: MiseTontine[], cyc
  * Carreaux encore retirables (hors P.C = 1re mise, sauf 1er cycle d’un carnet papier).
  * Un cycle complet à 31 laisse au plus 30 carreaux au client (31 si P.C. non due).
  */
-export function pcDueSurCycle(carnet: Pick<CarnetTontine, 'reprisePapier'>, cycle: number): boolean {
-  return !(carnet.reprisePapier && cycle === 1)
+export function pcDueSurCycle(_carnet: Pick<CarnetTontine, 'reprisePapier'>, cycle: number): boolean {
+  return cycle >= 1
 }
 
 /** Rang 1..12 dans l’année de carnet en cours. */
@@ -247,7 +247,6 @@ export function abonnementAnnee1Paye(
   carnet: Pick<CarnetTontine, 'clientId' | 'numero' | 'reprisePapier'>,
   transactions: Transaction[] = [],
 ): boolean {
-  if (carnet.reprisePapier) return true
   return transactions.some((t) => {
     if (t.type !== 'vente_carnet') return false
     if (t.clientId !== carnet.clientId) return false
@@ -306,19 +305,20 @@ export function preparerDepotTontine(
   if (montant <= 0) return { ok: false, erreur: 'Montant invalide.' }
   if (mise <= 0) return { ok: false, erreur: 'Mise invalide.' }
   const fraisAbonnement = payerAbonnement ? PRIX_CARNET : 0
-  const fraisPc = payerPc ? mise : 0
-  const frais = fraisAbonnement + fraisPc
-  if (montant < frais) return { ok: false, erreur: 'Montant insuffisant pour les frais cochés.' }
-  const reste = montant - frais
-  if (reste === 0) {
-    if (!payerAbonnement && !payerPc) {
-      return { ok: false, erreur: 'Indiquez un dépôt ou cochez un frais.' }
-    }
-    return { ok: true, nombreMises: 0, reste: 0, fraisAbonnement, fraisPc }
+  if (montant < fraisAbonnement) return { ok: false, erreur: 'Montant insuffisant pour l’abonnement.' }
+  const alloueCarreaux = montant - fraisAbonnement
+  if (alloueCarreaux === 0) {
+    if (!payerAbonnement) return { ok: false, erreur: 'Indiquez un dépôt ou cochez un frais.' }
+    if (payerPc) return { ok: false, erreur: 'La P.C. requiert au moins une mise sur le carnet.' }
+    return { ok: true, nombreMises: 0, reste: 0, fraisAbonnement, fraisPc: 0 }
   }
-  const calc = calculerMisesDepuisMontant(reste, mise)
+  const calc = calculerMisesDepuisMontant(alloueCarreaux, mise)
   if (!calc.ok) return calc
-  return { ok: true, nombreMises: calc.nombreMises, reste, fraisAbonnement, fraisPc }
+  if (payerPc && calc.nombreMises < 1) {
+    return { ok: false, erreur: 'La P.C. requiert au moins une mise sur le carnet.' }
+  }
+  const fraisPc = payerPc ? mise : 0
+  return { ok: true, nombreMises: calc.nombreMises, reste: alloueCarreaux - fraisPc, fraisAbonnement, fraisPc }
 }
 
 export function libelleCycleCarnet(cycle: number): string {

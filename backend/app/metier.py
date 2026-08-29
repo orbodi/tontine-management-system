@@ -89,9 +89,7 @@ def besoin_renouvellement_carnet(carnet: dict, mises: list, transactions: list |
 
 
 def abonnement_annee1_paye(carnet: dict, transactions: list | None = None) -> bool:
-    """Abonnement des 12 premiers cycles déjà encaissé (ou offert pour un carnet papier)."""
-    if carnet.get("reprisePapier"):
-        return True
+    """Abonnement des 12 premiers cycles déjà encaissé."""
     numero = carnet.get("numero") or ""
     client_id = carnet.get("clientId")
     for t in transactions or []:
@@ -149,34 +147,42 @@ def preparer_depot_tontine(
     payer_abonnement: bool,
     payer_pc: bool,
 ) -> dict[str, Any]:
-    """Ventile le montant saisi : frais cochés puis carreaux sur le reste."""
+    """Ventile le montant saisi.
+
+    L'abonnement (300 F) n'est pas un carreau. La P.C. est le 1er carreau du cycle :
+    elle est prélevée sur le montant mais reste inscrite sur le carnet.
+    """
     if montant <= 0:
         return {"ok": False, "erreur": "Montant invalide."}
     if mise <= 0:
         return {"ok": False, "erreur": "Mise invalide."}
     frais_abo = PRIX_CARNET if payer_abonnement else 0
-    frais_pc = mise if payer_pc else 0
-    frais = frais_abo + frais_pc
-    if montant < frais:
-        return {"ok": False, "erreur": "Montant insuffisant pour les frais coches."}
-    reste = montant - frais
-    if reste == 0:
-        if not payer_abonnement and not payer_pc:
+    if montant < frais_abo:
+        return {"ok": False, "erreur": "Montant insuffisant pour l'abonnement."}
+    alloue_carreaux = montant - frais_abo
+    if alloue_carreaux == 0:
+        if not payer_abonnement:
             return {"ok": False, "erreur": "Indiquez un depot ou cochez un frais."}
+        if payer_pc:
+            return {"ok": False, "erreur": "La P.C. requiert au moins une mise sur le carnet."}
         return {
             "ok": True,
             "nombreMises": 0,
             "reste": 0,
             "fraisAbonnement": frais_abo,
-            "fraisPc": frais_pc,
+            "fraisPc": 0,
         }
-    calc = calculer_mises_depuis_montant(reste, mise)
+    calc = calculer_mises_depuis_montant(alloue_carreaux, mise)
     if not calc.get("ok"):
         return calc
+    nombre = int(calc["nombreMises"])
+    if payer_pc and nombre < 1:
+        return {"ok": False, "erreur": "La P.C. requiert au moins une mise sur le carnet."}
+    frais_pc = mise if payer_pc else 0
     return {
         "ok": True,
-        "nombreMises": calc["nombreMises"],
-        "reste": reste,
+        "nombreMises": nombre,
+        "reste": alloue_carreaux - frais_pc,
         "fraisAbonnement": frais_abo,
         "fraisPc": frais_pc,
     }
@@ -273,8 +279,8 @@ def carreaux_deposes(carnet: dict, mises: list, cycle: int | None = None) -> int
 
 
 def pc_due_sur_cycle(carnet: dict, cycle: int) -> bool:
-    """P.C. due sauf cycle 1 d'un carnet repris du papier."""
-    return not (bool(carnet.get("reprisePapier")) and int(cycle) == 1)
+    """P.C. due sur chaque cycle (paiement au dépôt, maintenant ou plus tard)."""
+    return int(cycle) >= 1
 
 
 def carreaux_retirables(carnet: dict, mises: list, cycle: int) -> int:

@@ -17,7 +17,10 @@ import {
   aujourdHuiIso,
   CARNETS_RETRAIT_6_MOIS,
   abonnementASaisir,
+  abonnementAnnee1Paye,
+  anneeCarnet,
   anneeCarnetOuverte,
+  cycleCourantEffectif,
   besoinRenouvellementCarnet,
   cycleDansAnnee,
   dateCollecteParDefaut,
@@ -25,6 +28,7 @@ import {
   LIBELLES_CARNET,
   libelleCycleCarnet,
   pcASaisir,
+  pcPayeeSurCycle,
   preparerDepotTontine,
   carreauxNets,
   eligibiliteRetraitCarnet,
@@ -143,6 +147,14 @@ export default function DetailTontine() {
     ? abonnementASaisir(carnet, data.mises, data.transactions)
     : false
   const peutSaisirPc = carnet ? pcASaisir(carnet, data.mises, data.transactions) : false
+  const cycleEff = carnet ? cycleCourantEffectif(carnet, data.mises) : 1
+  const abonnementPaye = carnet
+    ? anneeCarnet(cycleEff) > 1 &&
+      anneeCarnet(cycleEff) <= anneeCarnetOuverte(carnet, data.mises, data.transactions)
+      ? true
+      : abonnementAnnee1Paye(carnet, data.transactions)
+    : false
+  const pcPayeCycle = carnet ? pcPayeeSurCycle(carnet, data.transactions, cycleEff) : false
   const calcDepot = carnet
     ? preparerDepotTontine(
         Number(montantDepot) || 0,
@@ -539,8 +551,23 @@ export default function DetailTontine() {
           </Link>
           <p className="text-sm text-slate-500">
             Mise {formatMontant(carnet.mise)} — ouvert le {formatDate(carnet.dateOuverture)}
-            {carnet.reprisePapier ? ' — carnet papier (P.C. offerte au cycle 1)' : ''}
           </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span
+              className={`badge ${
+                abonnementPaye ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              Abonnement {abonnementPaye ? 'payé' : 'non payé'}
+            </span>
+            <span
+              className={`badge ${
+                pcPayeCycle ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              P.C. {pcPayeCycle ? 'payée' : 'non payée'}
+            </span>
+          </div>
           {carnet.verrouille && (
             <span className="mt-1 inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700">
               <Lock className="mr-1 h-3 w-3" />
@@ -567,6 +594,24 @@ export default function DetailTontine() {
           Mois en cours — {moisActuel?.label}{' '}
           <span className="font-normal text-slate-500">({libelleCycleCarnet(carnet.cycleActuel)})</span>
         </h3>
+        <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
+          <div
+            className={`rounded-xl px-3 py-2 ${
+              abonnementPaye ? 'bg-emerald-50 text-emerald-900' : 'bg-amber-50 text-amber-950'
+            }`}
+          >
+            <p className="text-xs font-medium opacity-80">Abonnement ({formatMontant(PRIX_CARNET)})</p>
+            <p className="font-semibold">{abonnementPaye ? 'Payé' : 'Non payé'}</p>
+          </div>
+          <div
+            className={`rounded-xl px-3 py-2 ${
+              pcPayeCycle ? 'bg-emerald-50 text-emerald-900' : 'bg-amber-50 text-amber-950'
+            }`}
+          >
+            <p className="text-xs font-medium opacity-80">P.C. de ce cycle ({formatMontant(carnet.mise)})</p>
+            <p className="font-semibold">{pcPayeCycle ? 'Payée' : 'Non payée'}</p>
+          </div>
+        </div>
         <div className="mb-2 flex justify-between text-sm text-slate-600">
           <span>
             <span className="font-bold text-slate-900">{payeesActuel}</span> / {carnet.misesParCycle} carreaux
@@ -603,10 +648,8 @@ export default function DetailTontine() {
         <div className="border-b border-slate-200 px-5 py-4">
           <h3 className="font-semibold text-slate-900">Mois (cycles) et état</h3>
           <p className="text-xs text-slate-500">
-            Chaque cycle correspond à un mois. Un mois soldé (retrait total hors P.C) apparaît grisé
-            {carnet.reprisePapier
-              ? '. Cycle 1 : P.C. non prélevée (carnet papier) — les 31 carreaux sont au client.'
-              : `. P.C = 1 carreau pour ${NOM_APPLICATION}.`}{' '}
+            Chaque cycle correspond à un mois. Un mois soldé (retrait total hors P.C) apparaît grisé.
+            P.C. = 1 carreau pour {NOM_APPLICATION}, à régler au dépôt (maintenant ou plus tard).
             Retrait partiel possible aussi sur le mois en cours.
           </p>
         </div>
@@ -633,6 +676,11 @@ export default function DetailTontine() {
                       <span className="badge bg-amber-100 text-amber-800">Mois passé — à retirer</span>
                     )}
                     {et.grise && <span className="badge bg-slate-200 text-slate-600">Mois soldé</span>}
+                    {pcPayeeSurCycle(carnet, data.transactions, et.cycle) ? (
+                      <span className="badge bg-emerald-100 text-emerald-800">P.C. payée</span>
+                    ) : (
+                      <span className="badge bg-amber-100 text-amber-800">P.C. non payée</span>
+                    )}
                     {!et.estActuel && !et.complet && (
                       <span className="badge bg-slate-100 text-slate-600">Mois passé</span>
                     )}
@@ -835,7 +883,8 @@ export default function DetailTontine() {
               onChange={(e) => setMontantDepot(e.target.value)}
             />
             <p className="mt-1 text-xs text-slate-400">
-              Le reste après les frais cochés doit être un multiple de la mise.
+              L’abonnement (s’il est coché) est retiré avant de compter les carreaux. La P.C. reste un
+              carreau du carnet.
             </p>
           </div>
           {(peutSaisirAbo || peutSaisirPc) && (
@@ -867,7 +916,7 @@ export default function DetailTontine() {
                   <span>
                     <span className="font-medium text-slate-900">P.C. de ce cycle</span>
                     <span className="mt-0.5 block text-xs text-slate-500">
-                      {formatMontant(carnet.mise)} — déduit du montant
+                      {formatMontant(carnet.mise)} — 1er carreau du cycle, prélevé sur le montant
                     </span>
                   </span>
                 </label>
@@ -1050,9 +1099,12 @@ export default function DetailTontine() {
                 </div>
               )}
               <div className="mt-2 flex justify-between border-t border-brand-200 pt-2">
-                <span>Carreaux</span>
+                <span>Carreaux inscrits</span>
                 <span className="text-lg font-bold">{calcDepot.nombreMises}</span>
               </div>
+              {calcDepot.fraisPc > 0 && (
+                <p className="mt-1 text-xs text-brand-800">Dont 1 P.C. (1er carreau de ce cycle).</p>
+              )}
               <div className="mt-2 flex justify-between border-t border-brand-200 pt-2">
                 <span>Collecte du</span>
                 <span className="font-bold">{libelleJourCollecte(dateCollecte, aujourdhui)}</span>

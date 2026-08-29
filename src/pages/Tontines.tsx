@@ -6,7 +6,6 @@ import {
   PRIX_CARNET,
   TYPES_CARNET,
   type FrequenceMise,
-  type OrigineTontine,
   type TypeCarnet,
   type TypeTransaction,
 } from '../types'
@@ -24,7 +23,6 @@ import {
 } from '../metier'
 import { formatDateHeure, formatMontant, afficherNumeroClient } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
-import { ChoixOrigineClient } from '../components/ModaleClient'
 import { useConfirmation } from '../components/Confirmation'
 
 const TYPES_TX_CARNET: TypeTransaction[] = [
@@ -70,7 +68,6 @@ export default function Tontines() {
   const [typeNouveauCarnet, setTypeNouveauCarnet] = useState<TypeCarnet>('tontine')
   const [mise, setMise] = useState('')
   const [frequence, setFrequence] = useState<FrequenceMise>('journaliere')
-  const [origineTontine, setOrigineTontine] = useState<OrigineTontine>('nouveau')
   const [erreur, setErreur] = useState('')
 
   const peutOperer = aDroit('operer_comptes')
@@ -126,7 +123,6 @@ export default function Tontines() {
     setRechercheClient(libelleClient(c))
     setAgenceChoisie(c.agenceId)
     setZoneChoisie(c.zoneId)
-    setOrigineTontine(c.origineTontine === 'ancien' ? 'ancien' : 'nouveau')
   }
 
   const ouvrirModale = () => {
@@ -137,7 +133,6 @@ export default function Tontines() {
     setMise('')
     setTypeNouveauCarnet('tontine')
     setFrequence('journaliere')
-    setOrigineTontine('nouveau')
     setErreur('')
     setModaleOuverture(true)
   }
@@ -222,13 +217,7 @@ export default function Tontines() {
       setErreur('Ce client a déjà un carnet de ce type.')
       return
     }
-    const resultat = await ouvrirCarnet(
-      clientChoisi,
-      typeNouveauCarnet,
-      Number(mise),
-      frequence,
-      origineTontine,
-    )
+    const resultat = await ouvrirCarnet(clientChoisi, typeNouveauCarnet, Number(mise), frequence)
     if ('erreur' in resultat) {
       setErreur(resultat.erreur)
       await alerter('Ouverture impossible', resultat.erreur)
@@ -364,9 +353,6 @@ export default function Tontines() {
                     ) : anneeCarnet(carnet.cycleActuel) > 1 ? (
                       <span className="badge bg-sky-100 text-sky-800">Renouvelé</span>
                     ) : null}
-                    {carnet.reprisePapier && (
-                      <span className="badge bg-amber-100 text-amber-800">Papier</span>
-                    )}
                     {carnet.verrouille && (
                       <span className="badge bg-rose-100 text-rose-700">
                         <Lock className="mr-1 h-3 w-3" />
@@ -633,23 +619,9 @@ export default function Tontines() {
               </select>
             </div>
           </div>
-          <ChoixOrigineClient
-            name="origineOuvertureCarnet"
-            valeur={origineTontine}
-            onChange={setOrigineTontine}
-          />
           <div className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">
-            {origineTontine === 'ancien' ? (
-              <>
-                31 carreaux × 12 cycles — client ancien : pas d’abonnement ni de P.C. au 1er cycle. Les
-                frais se règlent ensuite sur les dépôts si besoin.
-              </>
-            ) : (
-              <>
-                31 carreaux × 12 cycles — aucun frais à l’ouverture. Abonnement ({formatMontant(PRIX_CARNET)})
-                et P.C. se cochent sur les dépôts.
-              </>
-            )}
+            31 carreaux × 12 cycles — aucun frais à l’ouverture. Abonnement (
+            {formatMontant(PRIX_CARNET)}) et P.C. se cochent sur les dépôts.
           </div>
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
           <div className="flex justify-end gap-2">

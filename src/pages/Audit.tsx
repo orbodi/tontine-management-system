@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react'
-import { LogIn, LogOut } from 'lucide-react'
+import { LogIn, LogOut, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
+import { useConfirmation } from '../components/Confirmation'
 import { LIBELLES_TYPE, TYPES_SORTIE } from '../metier'
 import { formatDateHeure, formatMontant } from '../utils'
 import { EnTetePage, EtatVide } from '../components/ui'
 
 export default function Audit() {
-  const { data } = useStore()
+  const { data, estAdmin, purgerJournalAudit } = useStore()
+  const { confirmer, alerter } = useConfirmation()
   const [onglet, setOnglet] = useState<'connexions' | 'activites'>('connexions')
   const [employeFiltre, setEmployeFiltre] = useState('tous')
+  const [purgeEnCours, setPurgeEnCours] = useState(false)
 
   const connexions = useMemo(() => {
     return data.journalConnexions
@@ -27,11 +30,46 @@ export default function Audit() {
     return a ? `${a.code} — ${a.nom}` : '—'
   }
 
+  const purger = async () => {
+    const n = data.journalConnexions.length
+    if (n === 0) {
+      await alerter('Purge du journal', 'Le journal des connexions est déjà vide.')
+      return
+    }
+    const ok = await confirmer({
+      titre: 'Purger le journal d’audit',
+      message: `Vider les ${n} entrée${n > 1 ? 's' : ''} du journal des connexions ?\n\nLes opérations (dépôts, retraits…) ne seront pas effacées. Cette action est irréversible.`,
+      labelValider: 'Purger',
+      danger: true,
+    })
+    if (!ok) return
+    setPurgeEnCours(true)
+    try {
+      const err = await purgerJournalAudit()
+      if (err) await alerter('Purge impossible', err)
+    } finally {
+      setPurgeEnCours(false)
+    }
+  }
+
   return (
     <div>
       <EnTetePage
         titre="Audit"
         sousTitre="Historique des connexions et des activités des employés"
+        action={
+          estAdmin ? (
+            <button
+              type="button"
+              className="btn-danger"
+              disabled={purgeEnCours || data.journalConnexions.length === 0}
+              onClick={() => void purger()}
+            >
+              <Trash2 className="h-4 w-4" />
+              {purgeEnCours ? 'Purge…' : 'Purger'}
+            </button>
+          ) : undefined
+        }
       />
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
