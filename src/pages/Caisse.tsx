@@ -12,7 +12,7 @@ import {
   type SituationCaisse,
 } from '../metier'
 import type { Employe } from '../types'
-import { formatDate, formatDateHeure, formatMontant } from '../utils'
+import { formatDate, formatDateHeure, formatMontant, texteAlerteCompteOuvert, texteConfirmationOuvertureCompte } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
 import { TableauArretsCaisse } from '../components/TableauArretsCaisse'
 import { useConfirmation } from '../components/Confirmation'
@@ -206,7 +206,7 @@ function VueGlobaleCaisses() {
             Ouvertures assignées à votre caisse ({mesDemandesAValider.length})
           </h3>
           <p className="mb-4 text-xs text-slate-600">
-            Validez après encaissement de la part sociale et du droit d’adhésion.
+            Validez après encaissement de la part sociale et du droit d’adhésion (sauf client ancien).
           </p>
           <div className="space-y-3">
             {mesDemandesAValider.map((d) => {
@@ -224,8 +224,8 @@ function VueGlobaleCaisses() {
                       {d.promotion ? ' (promo)' : ''}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
-                      {d.demandeurNom} — {formatDateHeure(d.dateDemande)} — total{' '}
-                      {formatMontant(total)}
+                      {d.demandeurNom} — {formatDateHeure(d.dateDemande)} —{' '}
+                      {total <= 0 ? 'aucun frais (ancien)' : `total ${formatMontant(total)}`}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -235,17 +235,13 @@ function VueGlobaleCaisses() {
                       onClick={async () => {
                         const ok = await confirmer({
                           titre: 'Valider l’ouverture',
-                          message: `Confirmez l’encaissement de ${formatMontant(total)}. Le compte sera créé.`,
+                          message: texteConfirmationOuvertureCompte(total),
                           labelValider: 'Valider et créer',
                         })
                         if (!ok) return
                         const err = await validerOuvertureCompte(d.id)
                         if (err) await alerter('Validation impossible', err)
-                        else
-                          await alerter(
-                            'Compte ouvert',
-                            `Compte créé. Total encaissé : ${formatMontant(total)}.`,
-                          )
+                        else await alerter('Compte ouvert', texteAlerteCompteOuvert(total))
                       }}
                     >
                       Valider
@@ -521,7 +517,7 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
             Ouvertures de compte à valider ({demandesAValider.length})
           </h3>
           <p className="mb-4 text-xs text-slate-600">
-            Encaisser part sociale + droit d’adhésion, puis valider. Le compte n’existe qu’après
+            Encaisser part sociale + droit d’adhésion (sauf client ancien), puis valider. Le compte n’existe qu’après
             validation.
           </p>
           <div className="space-y-3">
@@ -544,9 +540,15 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
                         Demandé par {d.demandeurNom} — {formatDateHeure(d.dateDemande)}
                       </p>
                       <ul className="mt-2 space-y-0.5 text-xs text-slate-700">
-                        <li>Part sociale : {formatMontant(d.partSociale)}</li>
-                        <li>Droit d’adhésion : {formatMontant(d.droitAdhesion)}</li>
-                        <li className="font-semibold">Total à encaisser : {formatMontant(total)}</li>
+                        {total <= 0 ? (
+                          <li className="font-semibold text-amber-800">Aucun frais (client ancien)</li>
+                        ) : (
+                          <>
+                            <li>Part sociale : {formatMontant(d.partSociale)}</li>
+                            <li>Droit d’adhésion : {formatMontant(d.droitAdhesion)}</li>
+                            <li className="font-semibold">Total à encaisser : {formatMontant(total)}</li>
+                          </>
+                        )}
                       </ul>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -556,19 +558,13 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
                         onClick={async () => {
                           const ok = await confirmer({
                             titre: 'Valider l’ouverture',
-                            message: `Confirmez l’encaissement de ${formatMontant(total)} (part sociale + droit d’adhésion) pour ${
-                              client ? `${client.prenom} ${client.nom}` : 'ce client'
-                            }. Le compte sera créé immédiatement.`,
+                            message: texteConfirmationOuvertureCompte(total),
                             labelValider: 'Valider et créer',
                           })
                           if (!ok) return
                           const err = await validerOuvertureCompte(d.id)
                           if (err) await alerter('Validation impossible', err)
-                          else
-                            await alerter(
-                              'Compte ouvert',
-                              `Compte créé. Total encaissé : ${formatMontant(total)}.`,
-                            )
+                          else await alerter('Compte ouvert', texteAlerteCompteOuvert(total))
                         }}
                       >
                         Valider

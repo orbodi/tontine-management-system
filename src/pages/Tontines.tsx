@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { ChevronRight, Lock, Plus, Search } from 'lucide-react'
 import { useStore } from '../store'
 import {
-  CYCLES_PAR_CARNET,
   PRIX_CARNET,
   TYPES_CARNET,
   type FrequenceMise,
@@ -16,6 +15,9 @@ import {
   LIBELLES_TYPE,
   TYPES_SORTIE,
   carreauxNets,
+  estAncienClientTontine,
+  libelleCycleCarnet,
+  anneeCarnet,
   moisDuCycle,
   situationsCycles,
 } from '../metier'
@@ -92,7 +94,7 @@ export default function Tontines() {
         )
         return texte.includes(q)
       })
-      .sort((a, b) => a.codeClient.localeCompare(b.codeClient))
+      .sort((a, b) => (a.codeClient ?? '').localeCompare(b.codeClient ?? ''))
       .slice(0, q ? 15 : 30)
   }, [data.clients, agenceChoisie, zoneChoisie, rechercheClient])
 
@@ -150,7 +152,7 @@ export default function Tontines() {
           (zone && zone.code.includes(q)) ||
           (agence && agence.nom.toLowerCase().includes(q)) ||
           (client &&
-            `${client.prenom} ${client.nom} ${client.codeClient} ${afficherNumeroClient(client.codeClient)}`
+            `${client.prenom} ${client.nom} ${client.codeClient ?? ''} ${afficherNumeroClient(client.codeClient)}`
               .toLowerCase()
               .includes(q))
         )
@@ -346,6 +348,12 @@ export default function Tontines() {
                     <span className={`badge ${STYLES_CARNET[carnet.typeCarnet]}`}>
                       {LIBELLES_CARNET[carnet.typeCarnet]}
                     </span>
+                    {anneeCarnet(carnet.cycleActuel) > 1 && (
+                      <span className="badge bg-sky-100 text-sky-800">Renouvelé</span>
+                    )}
+                    {carnet.reprisePapier && (
+                      <span className="badge bg-amber-100 text-amber-800">Papier</span>
+                    )}
                     {carnet.verrouille && (
                       <span className="badge bg-rose-100 text-rose-700">
                         <Lock className="mr-1 h-3 w-3" />
@@ -359,7 +367,7 @@ export default function Tontines() {
                     {data.zones.find((z) => z.id === carnet.zoneId)?.code ?? '—'}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {mois.label} ({carnet.cycleActuel}/{CYCLES_PAR_CARNET}) —{' '}
+                    {mois.label} ({libelleCycleCarnet(carnet.cycleActuel)}) —{' '}
                     <span className="font-medium text-slate-700">
                       {payees}/{carnet.misesParCycle}
                     </span>{' '}
@@ -613,7 +621,17 @@ export default function Tontines() {
             </div>
           </div>
           <div className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">
-            31 carreaux × 12 cycles — carnet {formatMontant(PRIX_CARNET)}. À 31 carreaux, passage auto au mois suivant.
+            {estAncienClientTontine(clientSelectionne) ? (
+              <>
+                31 carreaux × 12 cycles — carnet offert (client ancien, pas de {formatMontant(PRIX_CARNET)}
+                ). P.C. non prélevée sur le premier cycle.
+              </>
+            ) : (
+              <>
+                31 carreaux × 12 cycles — carnet {formatMontant(PRIX_CARNET)}. À 31 carreaux, passage auto au
+                mois suivant.
+              </>
+            )}
           </div>
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
           <div className="flex justify-end gap-2">

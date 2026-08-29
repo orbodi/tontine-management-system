@@ -29,19 +29,22 @@ export function Modale({
   onFermer,
   children,
   large,
+  xl,
 }: {
   titre: string
   ouverte: boolean
   onFermer: () => void
   children: ReactNode
   large?: boolean
+  xl?: boolean
 }) {
   if (!ouverte) return null
+  const largeur = xl ? 'max-w-4xl' : large ? 'max-w-2xl' : 'max-w-md'
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onFermer} />
       <div
-        className={`relative flex max-h-[90vh] w-full flex-col ${large ? 'max-w-2xl' : 'max-w-md'} overflow-hidden rounded-2xl bg-white shadow-xl`}
+        className={`relative flex max-h-[90vh] w-full flex-col ${largeur} overflow-hidden rounded-2xl bg-white shadow-xl`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4">
           <h2 className="text-lg font-bold text-slate-900">{titre}</h2>

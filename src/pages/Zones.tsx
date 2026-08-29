@@ -109,7 +109,7 @@ export default function Zones() {
       .filter((c) => c.zoneId === zoneClients.id)
       .sort(
         (a, b) =>
-          (a.ordreZone ?? 0) - (b.ordreZone ?? 0) || a.codeClient.localeCompare(b.codeClient),
+          (a.ordreZone ?? 0) - (b.ordreZone ?? 0) || (a.codeClient ?? '').localeCompare(b.codeClient ?? ''),
       )
   }, [data.clients, zoneClients])
 

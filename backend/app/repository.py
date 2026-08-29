@@ -140,13 +140,16 @@ def replace_state(db: Session, data: dict[str, Any], *, hash_plain_passwords: bo
         )
 
     for c in data.get("clients", []):
+        oz = c.get("ordreZone")
         db.add(
             m.Client(
                 id=c["id"],
-                code_client=c["codeClient"],
+                code_client=c.get("codeClient") or None,
                 agence_id=c["agenceId"],
-                zone_id=c["zoneId"],
-                ordre_zone=c["ordreZone"],
+                zone_id=c.get("zoneId") or None,
+                ordre_zone=int(oz) if oz is not None and oz != "" else None,
+                ordre_banque=c.get("ordreBanque"),
+                code_client_banque=c.get("codeClientBanque"),
                 nom=c["nom"],
                 prenom=c["prenom"],
                 sexe=c["sexe"],
@@ -157,6 +160,7 @@ def replace_state(db: Session, data: dict[str, Any], *, hash_plain_passwords: bo
                 piece_identite=c.get("pieceIdentite"),
                 date_inscription=c["dateInscription"],
                 actif=c.get("actif", True),
+                origine_tontine=c.get("origineTontine") or "nouveau",
             )
         )
 
@@ -177,6 +181,7 @@ def replace_state(db: Session, data: dict[str, Any], *, hash_plain_passwords: bo
                 verrouille=c.get("verrouille", False),
                 retrait_active_par_admin=c.get("retraitActiveParAdmin", True),
                 actif=c.get("actif", True),
+                reprise_papier=bool(c.get("reprisePapier")),
             )
         )
 
@@ -492,6 +497,8 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "agenceId": c.agence_id,
                 "zoneId": c.zone_id,
                 "ordreZone": c.ordre_zone,
+                "ordreBanque": getattr(c, "ordre_banque", None),
+                "codeClientBanque": getattr(c, "code_client_banque", None),
                 "nom": c.nom,
                 "prenom": c.prenom,
                 "sexe": c.sexe,
@@ -502,6 +509,7 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "pieceIdentite": c.piece_identite,
                 "dateInscription": c.date_inscription,
                 "actif": c.actif,
+                "origineTontine": getattr(c, "origine_tontine", None) or "nouveau",
             }
             for c in db.query(m.Client).order_by(m.Client.zone_id, m.Client.ordre_zone, m.Client.code_client).all()
         ],
@@ -521,6 +529,7 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "verrouille": c.verrouille,
                 "retraitActiveParAdmin": c.retrait_active_par_admin,
                 "actif": c.actif,
+                "reprisePapier": bool(getattr(c, "reprise_papier", False)),
             }
             for c in db.query(m.Carnet).all()
         ],
@@ -720,6 +729,7 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
             "compte": 0,
             "credit": 0,
             "compteCaisse": 0,
+            "clientBanque": 0,
             **{r.cle: r.valeur for r in db.query(m.Compteur).all()},
         },
     }

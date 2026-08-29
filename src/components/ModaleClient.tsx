@@ -1,6 +1,6 @@
-import type { Client, Sexe } from '../types'
+import type { Client, OrigineTontine, Sexe } from '../types'
 import { useStore } from '../store'
-import { afficherNumeroClient } from '../utils'
+import { afficherNumeroClient, formatMontant } from '../utils'
 
 export interface FormulaireClient {
   agenceId: string
@@ -13,6 +13,7 @@ export interface FormulaireClient {
   profession: string
   adresse: string
   pieceIdentite: string
+  origineTontine: OrigineTontine
 }
 
 export const formulaireClientVide: FormulaireClient = {
@@ -26,6 +27,97 @@ export const formulaireClientVide: FormulaireClient = {
   profession: '',
   adresse: '',
   pieceIdentite: '',
+  origineTontine: 'nouveau',
+}
+
+export function ChoixOrigineClient({
+  valeur,
+  onChange,
+}: {
+  valeur: OrigineTontine
+  onChange: (v: OrigineTontine) => void
+}) {
+  return (
+    <div>
+      <label className="label">Type de client *</label>
+      <div className="grid grid-cols-2 gap-2">
+        <label
+          className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+            valeur === 'nouveau'
+              ? 'border-brand-400 bg-brand-50 text-brand-900'
+              : 'border-slate-200 bg-white text-slate-700'
+          }`}
+        >
+          <input
+            type="radio"
+            className="mt-0.5"
+            name="origineTontine"
+            checked={valeur === 'nouveau'}
+            onChange={() => onChange('nouveau')}
+          />
+          <span>
+            <span className="font-medium">Nouveau</span>
+            <span className="mt-0.5 block text-xs text-slate-500">
+              Carnet, P.C., part sociale et adhésion
+            </span>
+          </span>
+        </label>
+        <label
+          className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+            valeur === 'ancien'
+              ? 'border-amber-400 bg-amber-50 text-amber-950'
+              : 'border-slate-200 bg-white text-slate-700'
+          }`}
+        >
+          <input
+            type="radio"
+            className="mt-0.5"
+            name="origineTontine"
+            checked={valeur === 'ancien'}
+            onChange={() => onChange('ancien')}
+          />
+          <span>
+            <span className="font-medium">Ancien (papier)</span>
+            <span className="mt-0.5 block text-xs text-slate-500">
+              Pas de 300 F, P.C. 1er cycle, part sociale ni adhésion
+            </span>
+          </span>
+        </label>
+      </div>
+      {valeur === 'ancien' && (
+        <p className="mt-1.5 text-xs text-amber-800">
+          Déjà client sur le papier : pas de vente de carnet, pas de P.C. au premier cycle dans
+          l’app, pas de part sociale ni de droit d’adhésion.
+        </p>
+      )}
+    </div>
+  )
+}
+
+export function RecapFraisOuvertureCompte({
+  frais,
+}: {
+  frais: { partSociale: number; droitAdhesion: number; total: number; offerts: boolean }
+}) {
+  if (frais.offerts) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+        Client ancien : pas de part sociale ni de droit d’adhésion.
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+      <p className="font-medium text-slate-900">À encaisser en caisse</p>
+      <ul className="mt-2 space-y-1 text-xs">
+        <li>
+          Part sociale (microfinance) : {formatMontant(frais.partSociale)}
+        </li>
+        <li>Droit d’adhésion (crédité sur le compte) : {formatMontant(frais.droitAdhesion)}</li>
+        <li className="font-semibold text-slate-900">Total : {formatMontant(frais.total)}</li>
+      </ul>
+    </div>
+  )
 }
 
 interface Props {
@@ -150,6 +242,10 @@ export function ModaleClient({
           )}
         </div>
       )}
+      <ChoixOrigineClient
+        valeur={form.origineTontine}
+        onChange={(origineTontine) => setForm((f) => ({ ...f, origineTontine }))}
+      />
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label">Prénom *</label>

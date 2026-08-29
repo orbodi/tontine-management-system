@@ -89,10 +89,11 @@ class Employe(Base):
 class Client(Base):
     __tablename__ = "clients"
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    code_client: Mapped[str] = mapped_column(String, unique=True)
+    # N° tontine ZZxxxx — absent pour un client banque seul (agence, sans zone).
+    code_client: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
     agence_id: Mapped[str] = mapped_column(String, index=True)
-    zone_id: Mapped[str] = mapped_column(String, index=True)
-    ordre_zone: Mapped[int] = mapped_column(Integer)
+    zone_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    ordre_zone: Mapped[int | None] = mapped_column(Integer, nullable=True)
     nom: Mapped[str] = mapped_column(String)
     prenom: Mapped[str] = mapped_column(String)
     sexe: Mapped[str] = mapped_column(String)
@@ -103,6 +104,9 @@ class Client(Base):
     piece_identite: Mapped[str | None] = mapped_column(String, nullable=True)
     date_inscription: Mapped[str] = mapped_column(String)
     actif: Mapped[bool] = mapped_column(Boolean, default=True)
+    ordre_banque: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    code_client_banque: Mapped[str | None] = mapped_column(String, nullable=True)
+    origine_tontine: Mapped[str] = mapped_column(String, default="nouveau")
 
 
 class Carnet(Base):
@@ -122,6 +126,7 @@ class Carnet(Base):
     verrouille: Mapped[bool] = mapped_column(Boolean, default=False)
     retrait_active_par_admin: Mapped[bool] = mapped_column(Boolean, default=True)
     actif: Mapped[bool] = mapped_column(Boolean, default=True)
+    reprise_papier: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Mise(Base):

@@ -82,6 +82,7 @@ def _empty_app_data() -> dict:
             "compte": 0,
             "credit": 0,
             "compteCaisse": 0,
+            "clientBanque": 0,
         },
         "compteursOrdreZone": {},
     }

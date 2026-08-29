@@ -262,7 +262,7 @@ export function genererDonneesDemo(): AppData {
       },
     ],
     compteursOrdreZone,
-    compteurs: { client: clients.length, compte: 0, credit: 0, compteCaisse: 0 },
+    compteurs: { client: clients.length, compte: 0, credit: 0, compteCaisse: 0, clientBanque: 0 },
   }
 
   const nomComplet = (c: Client) => `${c.prenom} ${c.nom}`
@@ -414,6 +414,12 @@ export function genererDonneesDemo(): AppData {
     }
     data.comptes.push(compte)
     comptesParCle.set(`${ic}-${type}`, compte)
+
+    if (!client.codeClientBanque) {
+      data.compteurs.clientBanque = (data.compteurs.clientBanque ?? 0) + 1
+      client.ordreBanque = data.compteurs.clientBanque
+      client.codeClientBanque = pad4(data.compteurs.clientBanque)
+    }
 
     const nbMouvements = 3 + (i % 4)
     for (let k = 0; k < nbMouvements; k++) {

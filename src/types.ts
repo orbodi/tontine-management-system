@@ -116,13 +116,20 @@ export interface Employe {
 
 // ---------- Clients ----------
 
+export type OrigineTontine = 'nouveau' | 'ancien'
+
 export interface Client {
   id: string
-  codeClient: string // stocké 010001 (zone + ordre) ; affiché 0001
-  agenceId: string // dérivé de la zone
-  zoneId: string
+  /** N° client tontine stocké 010001 (zone + ordre) ; affiché 0001. Absent si client banque seul. */
+  codeClient?: string | null
+  agenceId: string
+  /** Zone tontine — absente pour un client banque rattaché seulement à l’agence. */
+  zoneId?: string | null
   /** Ordre local dans la zone : suffixe du N° Client / n° carnet (xxxx). */
-  ordreZone: number
+  ordreZone?: number | null
+  /** N° client banque 0001, 0002… — attribué au premier compte, indépendant de la zone. */
+  codeClientBanque?: string | null
+  ordreBanque?: number | null
   nom: string
   prenom: string
   sexe: Sexe
@@ -133,6 +140,11 @@ export interface Client {
   pieceIdentite?: string
   dateInscription: string
   actif: boolean
+  /**
+   * Nouveau : vente de carnet (300 F), P.C. chaque cycle, part sociale et adhésion.
+   * Ancien (papier) : pas de 300 F, pas de P.C. au 1er cycle, pas de part sociale ni d’adhésion.
+   */
+  origineTontine?: OrigineTontine
 }
 
 // ---------- Comptes à carnet (tontine et cartes, 31 carreaux, 12 cycles) ----------
@@ -161,7 +173,7 @@ export interface CarnetTontine {
   mise: number
   frequence: FrequenceMise
   misesParCycle: number
-  cycleActuel: number // 1..12
+  cycleActuel: number // 1, 2, … (12 mois par carnet ; 13 = 1er mois du renouvellement)
   dateOuverture: string
   verrouille: boolean
   /**
@@ -170,6 +182,8 @@ export interface CarnetTontine {
    */
   retraitActiveParAdmin: boolean
   actif: boolean
+  /** Ouvert pour un client ancien : pas de P.C. sur le cycle 1 dans l’app. */
+  reprisePapier?: boolean
 }
 
 export interface MiseTontine {
@@ -442,6 +456,7 @@ export interface LigneEcriture {
   id: string
   compteId: string
   compteNumero: string
+  intitule?: string
   libelle?: string | null
   debit: number
   credit: number
@@ -471,6 +486,7 @@ export interface BilanInitialLigne {
   exerciceId: string
   compteId: string
   compteNumero: string
+  intitule?: string
   sens: SensBilan
   montant: number
 }
@@ -526,5 +542,5 @@ export interface AppData {
   journalConnexions: JournalConnexion[]
   /** Ordre client par zone (clé = zoneId). */
   compteursOrdreZone: Record<string, number>
-  compteurs: { client: number; compte: number; credit: number; compteCaisse: number }
+  compteurs: { client: number; compte: number; credit: number; compteCaisse: number; clientBanque: number }
 }

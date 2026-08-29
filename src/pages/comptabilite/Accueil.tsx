@@ -68,27 +68,11 @@ export default function ComptabiliteAccueil() {
     }
   }
 
-  const sync = async () => {
-    try {
-      await comptaApi.syncAuto()
-      await alerter('Synchronisé', 'Écritures auto générées depuis les opérations métier.')
-    } catch (e) {
-      await alerter('Impossible', e instanceof Error ? e.message : 'Erreur')
-    }
-  }
-
   return (
     <div>
       <EnTetePage
         titre="Comptabilité"
-        sousTitre="Comptabilité générale SYSCOHADA — double entrée"
-        action={
-          peutEcrire ? (
-            <button type="button" className="btn-secondary text-sm" onClick={() => void sync()}>
-              Sync. écritures auto
-            </button>
-          ) : undefined
-        }
+        sousTitre="Module indépendant — plan SYSCOHADA, journaux, grand livre et balance (saisie manuelle)"
       />
 
       <div className="mb-8 grid gap-4 sm:grid-cols-3">

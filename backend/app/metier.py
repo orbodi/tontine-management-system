@@ -25,6 +25,21 @@ CYCLES_PAR_CARNET = 12
 MOIS_MIN_RETRAIT_CARTE = 6
 
 
+def cycle_dans_annee(cycle: int) -> int:
+    """Rang 1..12 dans l'année de carnet en cours."""
+    return ((int(cycle) - 1) % CYCLES_PAR_CARNET) + 1
+
+
+def annee_carnet(cycle: int) -> int:
+    """1 = premier carnet, 2 = premier renouvellement, etc."""
+    return (int(cycle) - 1) // CYCLES_PAR_CARNET + 1
+
+
+def est_premier_cycle_renouvellement(cycle: int) -> bool:
+    """Premier mois d'un carnet renouvelé (13, 25, …) : vente 300 F due."""
+    return int(cycle) > 1 and cycle_dans_annee(cycle) == 1
+
+
 def aujourd_hui_iso() -> str:
     d = datetime.now()
     return f"{d.year:04d}-{d.month:02d}-{d.day:02d}"
@@ -113,6 +128,19 @@ def carreaux_deposes(carnet: dict, mises: list, cycle: int | None = None) -> int
         for m in mises
         if m["carnetId"] == carnet["id"] and m["cycle"] == c and m["nombreMises"] > 0
     )
+
+
+def pc_due_sur_cycle(carnet: dict, cycle: int) -> bool:
+    """P.C. due sauf cycle 1 d'un carnet repris du papier."""
+    return not (bool(carnet.get("reprisePapier")) and int(cycle) == 1)
+
+
+def carreaux_retirables(carnet: dict, mises: list, cycle: int) -> int:
+    nets = carreaux_nets(carnet, mises, cycle)
+    if nets <= 0:
+        return 0
+    reserve_pc = 1 if pc_due_sur_cycle(carnet, cycle) else 0
+    return max(0, nets - reserve_pc)
 
 
 def calculer_mises_depuis_montant(montant: float, mise: float) -> dict[str, Any]:

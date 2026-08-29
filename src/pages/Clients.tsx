@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronRight, MapPinned, Search, Users } from 'lucide-react'
+import { ArrowLeft, ChevronRight, MapPinned, Search, Users } from 'lucide-react'
 import { useStore } from '../store'
 import { EnTetePage, EtatVide } from '../components/ui'
 
@@ -27,12 +27,23 @@ export default function Clients() {
       .sort((a, b) => a.code.localeCompare(b.code))
   }, [data.zones, data.agences, agenceRestreinte, recherche])
 
-  const totalClients = data.clients.length
+  const totalClients = (agenceRestreinte
+    ? data.clients.filter((c) => c.agenceId === agenceRestreinte && c.zoneId)
+    : data.clients.filter((c) => c.zoneId)
+  ).length
 
   return (
     <div>
+      <Link
+        to="/clients"
+        className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Retour aux types de clients
+      </Link>
+
       <EnTetePage
-        titre="Clients"
+        titre="Clients tontine"
         sousTitre={`${totalClients} client${totalClients > 1 ? 's' : ''} — parcourez par zone`}
       />
 

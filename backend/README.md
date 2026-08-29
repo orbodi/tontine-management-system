@@ -63,6 +63,8 @@ Chaque id s’applique **une fois**. Les fonctions restent idempotentes. Après 
 | `003_numeros_clients_zzxxxx` | données | N° client/carnet `ZZxxxx` |
 | `004_caisse_unique_agence` | données | Une caisse par agence |
 | `005_realigner_numeros_zzxxxx` | données | Réapplique `ZZxxxx` si l’ancien format 4 chiffres est encore là |
+| `006_clients_numero_banque` | schéma | Colonnes n° client banque |
+| `007_attribuer_numeros_clients_banque` | données | N° banque `0001`, `0002`… au premier compte |
 
 `GET /api/health` liste les ids déjà appliqués (`migrations`). Pour ajouter une évolution : une entrée dans `MIGRATIONS` (jamais modifier un id déjà livré). Les copies `data/backups/app-avant-*.db` ne sont pas purgées automatiquement.
 

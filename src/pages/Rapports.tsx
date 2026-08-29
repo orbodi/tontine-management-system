@@ -269,7 +269,7 @@ export default function Rapports() {
         if (!q) return true
         return (
           c.numero.toLowerCase().includes(q) ||
-          client.codeClient.toLowerCase().includes(q) ||
+          client.codeClient?.toLowerCase().includes(q) ||
           afficherNumeroClient(client.codeClient).includes(q) ||
           `${client.prenom} ${client.nom}`.toLowerCase().includes(q)
         )
@@ -340,14 +340,14 @@ export default function Rapports() {
         }
         if (!q) return true
         return (
-          c.codeClient.toLowerCase().includes(q) ||
+          (c.codeClient ?? '').toLowerCase().includes(q) ||
           afficherNumeroClient(c.codeClient).includes(q) ||
           c.nom.toLowerCase().includes(q) ||
           c.prenom.toLowerCase().includes(q) ||
           c.telephone.toLowerCase().includes(q)
         )
       })
-      .sort((a, b) => a.codeClient.localeCompare(b.codeClient))
+      .sort((a, b) => (a.codeClient ?? '').localeCompare(b.codeClient ?? ''))
   }, [data.clients, rechercheClient, estChefAgence, agenceFiltreOperations])
 
   const employesRapport = useMemo(() => {

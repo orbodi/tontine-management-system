@@ -11,6 +11,38 @@ echo  DON DE DIEU - demarrage API + Front
 echo ========================================
 echo.
 
+echo [Git] Mise a jour du code...
+where git >nul 2>&1
+if errorlevel 1 (
+  echo [Git] git introuvable - skip pull.
+  goto apres_git
+)
+if not exist ".git\" (
+  echo [Git] Pas de depot git - skip pull.
+  goto apres_git
+)
+
+set "GIT_ONLINE=0"
+powershell -NoProfile -Command "$h='github.com'; $u=git config --get remote.origin.url 2>$null; if ($u -match '@([^:/]+)') { $h=$Matches[1] } elseif ($u -match 'https?://([^/]+)') { $h=$Matches[1] }; try { $c=New-Object System.Net.Sockets.TcpClient; $iar=$c.BeginConnect($h,443,$null,$null); if (-not $iar.AsyncWaitHandle.WaitOne(3000,$false)) { $c.Close(); exit 1 }; $c.EndConnect($iar); $c.Close(); exit 0 } catch { exit 1 }" >nul 2>&1
+if not errorlevel 1 set "GIT_ONLINE=1"
+if "%GIT_ONLINE%"=="0" (
+  ping -n 1 -w 2000 1.1.1.1 >nul 2>&1
+  if not errorlevel 1 set "GIT_ONLINE=1"
+)
+if "%GIT_ONLINE%"=="0" (
+  echo [Git] Pas de connexion - skip pull.
+  goto apres_git
+)
+
+git pull --ff-only
+if errorlevel 1 (
+  echo [Git] Pull impossible - demarrage avec le code local.
+) else (
+  echo [Git] Code a jour.
+)
+echo.
+
+:apres_git
 where node >nul 2>&1
 if errorlevel 1 goto err_node
 

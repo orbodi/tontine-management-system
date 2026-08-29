@@ -6,6 +6,38 @@ export function formatMontant(n: number): string {
   return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n) + ' FCFA'
 }
 
+export function texteAlerteCompteOuvert(total: number): string {
+  if (total <= 0) {
+    return 'Compte créé. Aucun frais (client ancien).'
+  }
+  return `Compte créé. Total encaissé : ${formatMontant(total)}.`
+}
+
+export function texteConfirmationOuvertureCompte(total: number): string {
+  if (total <= 0) {
+    return 'Aucun frais à encaisser (client ancien). Le compte sera créé.'
+  }
+  return `Confirmez l’encaissement de ${formatMontant(total)}. Le compte sera créé.`
+}
+
+export function texteAlerteDemandeOuverture(
+  caissierNom: string,
+  frais: { partSociale: number; droitAdhesion: number; total: number; offerts: boolean },
+): string {
+  const intro =
+    `Demande d’ouverture enregistrée.\n` +
+    `Le compte sera créé après validation par ${caissierNom}.\n`
+  if (frais.offerts) {
+    return intro + 'Client ancien : pas de part sociale ni de droit d’adhésion.'
+  }
+  return (
+    intro +
+    `Part sociale : ${formatMontant(frais.partSociale)}\n` +
+    `Droit d'adhésion : ${formatMontant(frais.droitAdhesion)}\n` +
+    `Total à encaisser : ${formatMontant(frais.total)}`
+  )
+}
+
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', {
     day: '2-digit',
@@ -42,7 +74,7 @@ export function numeroCarnet(codeZone: string, ordreClient: number): string {
 }
 
 /** Affichage N° Client : masque le préfixe zone. Ex. 010001 → 0001 */
-export function afficherNumeroClient(codeClient: string): string {
+export function afficherNumeroClient(codeClient?: string | null): string {
   const digits = (codeClient || '').replace(/\D/g, '')
   if (digits.length >= 4) return digits.slice(-4).padStart(4, '0')
   return codeClient || '—'

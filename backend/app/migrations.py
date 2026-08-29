@@ -23,7 +23,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from .config import DATA_DIR, settings
-from .db import SessionLocal, engine, migrate_carnets_unicite_numero_type, migrate_comptes_frais_ouverture
+from .db import SessionLocal, engine, migrate_carnets_unicite_numero_type, migrate_comptes_frais_ouverture, migrate_clients_numero_banque, migrate_clients_zone_nullable, migrate_clients_origine_tontine
 from .models.entities import SchemaMigration
 
 logger = logging.getLogger("app.migrations")
@@ -88,6 +88,12 @@ def _migrate_caisse_unique_agence(db: Session) -> None:
     consolider_caisses_agence_persist(db)
 
 
+def _migrate_numeros_clients_banque(db: Session) -> None:
+    from .engine import attribuer_numeros_clients_banque_persist
+
+    attribuer_numeros_clients_banque_persist(db)
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         id="001_comptes_frais_ouverture",
@@ -118,6 +124,30 @@ MIGRATIONS: tuple[Migration, ...] = (
         kind="data",
         description="Réapplique ZZxxxx si l'ancien n° client (4 chiffres) est encore présent",
         apply=_migrate_numeros_clients_zzxxxx,
+    ),
+    Migration(
+        id="006_clients_numero_banque",
+        kind="schema",
+        description="Colonnes n° client banque (ordre_banque / code_client_banque)",
+        apply=migrate_clients_numero_banque,
+    ),
+    Migration(
+        id="007_attribuer_numeros_clients_banque",
+        kind="data",
+        description="N° client banque 0001, 0002… au premier compte",
+        apply=_migrate_numeros_clients_banque,
+    ),
+    Migration(
+        id="008_clients_zone_nullable",
+        kind="schema",
+        description="Client banque rattaché à l’agence ; zone et n° tontine optionnels",
+        apply=migrate_clients_zone_nullable,
+    ),
+    Migration(
+        id="009_clients_origine_tontine",
+        kind="schema",
+        description="Client ancien (papier) : pas de 300 F ni de P.C. au 1er cycle",
+        apply=migrate_clients_origine_tontine,
     ),
 )
 
@@ -180,7 +210,12 @@ def run_data_migrations() -> list[str]:
 
 def repair_data_after_replace(db: Session) -> None:
     """Répare les données après import / réinit (idempotent, hors journal des migrations)."""
-    from .engine import consolider_caisses_agence_persist, realigner_numeros_persist
+    from .engine import (
+        attribuer_numeros_clients_banque_persist,
+        consolider_caisses_agence_persist,
+        realigner_numeros_persist,
+    )
 
     realigner_numeros_persist(db)
+    attribuer_numeros_clients_banque_persist(db)
     consolider_caisses_agence_persist(db)

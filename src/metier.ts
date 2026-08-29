@@ -1,4 +1,5 @@
 import {
+  CYCLES_PAR_CARNET,
   MOIS_MIN_RETRAIT_CARTE,
   type ArretCaisse,
   type CarnetTontine,
@@ -170,13 +171,64 @@ export function carreauxRetires(carnet: CarnetTontine, mises: MiseTontine[], cyc
 }
 
 /**
- * Carreaux encore retirables (hors P.C = 1re mise).
- * Un cycle complet à 31 laisse au plus 30 carreaux au client.
+ * Carreaux encore retirables (hors P.C = 1re mise, sauf 1er cycle d’un carnet papier).
+ * Un cycle complet à 31 laisse au plus 30 carreaux au client (31 si P.C. non due).
  */
+export function pcDueSurCycle(carnet: Pick<CarnetTontine, 'reprisePapier'>, cycle: number): boolean {
+  return !(carnet.reprisePapier && cycle === 1)
+}
+
+/** Rang 1..12 dans l’année de carnet en cours. */
+export function cycleDansAnnee(cycle: number): number {
+  return ((cycle - 1) % CYCLES_PAR_CARNET) + 1
+}
+
+/** 1 = premier carnet, 2 = premier renouvellement, etc. */
+export function anneeCarnet(cycle: number): number {
+  return Math.floor((cycle - 1) / CYCLES_PAR_CARNET) + 1
+}
+
+/** Premier mois d’un carnet renouvelé (13, 25, …) : vente 300 F due. */
+export function estPremierCycleRenouvellement(cycle: number): boolean {
+  return cycle > 1 && cycleDansAnnee(cycle) === 1
+}
+
+export function libelleCycleCarnet(cycle: number): string {
+  const annee = anneeCarnet(cycle)
+  const rang = cycleDansAnnee(cycle)
+  if (annee <= 1) return `cycle ${rang}/${CYCLES_PAR_CARNET}`
+  return `carnet ${annee}, cycle ${rang}/${CYCLES_PAR_CARNET}`
+}
+
+export function estAncienClient(client: Pick<Client, 'origineTontine'> | undefined): boolean {
+  return client?.origineTontine === 'ancien'
+}
+
+/** @deprecated préférer estAncienClient — le flag s’applique aussi aux comptes. */
+export const estAncienClientTontine = estAncienClient
+
+export function fraisOuvertureComptePour(
+  client: Pick<Client, 'origineTontine'> | undefined,
+  tarifs: { partSociale: number; droitAdhesion: number; droitAdhesionPromo: number },
+  promo: boolean,
+): { partSociale: number; droitAdhesion: number; total: number; offerts: boolean } {
+  if (estAncienClient(client)) {
+    return { partSociale: 0, droitAdhesion: 0, total: 0, offerts: true }
+  }
+  const droit = promo ? tarifs.droitAdhesionPromo : tarifs.droitAdhesion
+  return {
+    partSociale: tarifs.partSociale,
+    droitAdhesion: droit,
+    total: tarifs.partSociale + droit,
+    offerts: false,
+  }
+}
+
 export function carreauxRetirables(carnet: CarnetTontine, mises: MiseTontine[], cycle: number): number {
   const nets = carreauxNets(carnet, mises, cycle)
   if (nets <= 0) return 0
-  return Math.max(0, nets - 1)
+  const reservePc = pcDueSurCycle(carnet, cycle) ? 1 : 0
+  return Math.max(0, nets - reservePc)
 }
 
 export type EtatCycle = {

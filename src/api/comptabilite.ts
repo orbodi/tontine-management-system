@@ -22,6 +22,7 @@ export interface BilanResponse {
   totalActif: number
   totalPassif: number
   equilibre: boolean
+  pieceOuverture?: string | null
 }
 
 export const comptaApi = {
@@ -39,6 +40,11 @@ export const comptaApi = {
       method: 'POST',
     }),
   journaux: () => apiFetch<JournalComptable[]>('/api/comptabilite/journaux'),
+  creerJournal: (body: { code: string; libelle: string }) =>
+    apiFetch<{ ok: boolean; journal: JournalComptable }>('/api/comptabilite/journaux', {
+      method: 'POST',
+      json: body,
+    }),
   ouvrirExercice: (annee: number) =>
     apiFetch<{ ok: boolean; exercice: ExerciceComptable }>('/api/comptabilite/exercices', {
       method: 'POST',
@@ -106,5 +112,4 @@ export const comptaApi = {
     const qs = sp.toString()
     return apiFetch<LigneBalance[]>(`/api/comptabilite/balance${qs ? `?${qs}` : ''}`)
   },
-  syncAuto: () => apiFetch<{ ok: boolean }>('/api/comptabilite/sync-auto', { method: 'POST' }),
 }

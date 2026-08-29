@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Banknote,
@@ -18,6 +18,9 @@ import {
   CARNETS_RETRAIT_6_MOIS,
   LIBELLES_CARNET,
   TYPES_SORTIE,
+  estAncienClient,
+  fraisOuvertureComptePour,
+  libelleCycleCarnet,
   moisDuCycle,
   situationCredit,
   situationsCycles,
@@ -29,8 +32,9 @@ import {
   type TypeCarnet,
   type TypeCompte,
 } from '../types'
-import { formatDate, formatDateHeure, formatMontant, afficherNumeroClient } from '../utils'
+import { formatDate, formatDateHeure, formatMontant, afficherNumeroClient, texteAlerteDemandeOuverture } from '../utils'
 import { Avatar, BadgeStatutCredit, BoutonsMessage, EnTetePage, Modale } from '../components/ui'
+import { RecapFraisOuvertureCompte } from '../components/ModaleClient'
 import { useConfirmation } from '../components/Confirmation'
 
 const LIBELLES_FREQUENCE: Record<FrequenceMise, string> = {
@@ -40,6 +44,7 @@ const LIBELLES_FREQUENCE: Record<FrequenceMise, string> = {
 
 export default function DetailClient() {
   const { id } = useParams()
+  const [params] = useSearchParams()
   const navigate = useNavigate()
   const { data, aDroit, estAdmin, estCaissier, employeConnecte, basculerActifClient, supprimerClient, supprimerCompte, ouvrirCarnet, ouvrirCompte } =
     useStore()
@@ -104,14 +109,21 @@ export default function DetailClient() {
     return { carnets, comptes, credits, transactions, soldeTontine, soldeEpargne, detteCredits }
   }, [client, data, estCaissier, employeConnecte])
 
-  const retourClients = client ? `/clients/zone/${client.zoneId}` : '/clients'
+  const depuisBanque = params.get('depuis') === 'banque' || !client?.zoneId
+  const retourClients =
+    depuisBanque && client?.agenceId
+      ? `/clients/banque/agence/${client.agenceId}`
+      : client?.zoneId
+        ? `/clients/zone/${client.zoneId}`
+        : '/clients'
+  const labelRetour = depuisBanque ? 'Retour aux clients banque' : 'Retour à la zone'
 
   if (!client || !activite) {
     return (
       <div>
-        <Link to="/clients" className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700">
+        <Link to={depuisBanque ? '/clients/banque' : '/clients/tontine'} className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700">
           <ArrowLeft className="h-4 w-4" />
-          Retour aux zones
+          {depuisBanque ? 'Retour aux clients banque' : 'Retour aux zones'}
         </Link>
         <p className="text-slate-600">Client introuvable.</p>
       </div>
@@ -119,7 +131,7 @@ export default function DetailClient() {
   }
 
   const typesCarnetDejaOuverts = new Set(activite.carnets.map((c) => c.typeCarnet))
-  const peutOuvrirCarnet = peutOperer && client.actif && typesCarnetDejaOuverts.size < 4
+  const peutOuvrirCarnet = peutOperer && client.actif && !!client.zoneId && typesCarnetDejaOuverts.size < 4
   const peutOuvrirCompte = peutOperer && !estCaissier && client.actif
 
   const creditEnRetard = MODULE_CREDITS_ACTIF
@@ -165,7 +177,7 @@ export default function DetailClient() {
   const creerCompte = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!caissierPourCompte) {
-      setErreur('Indiquez la caisse qui encaissera part sociale et droit d’adhésion.')
+      setErreur('Indiquez le caissier qui validera l’ouverture.')
       return
     }
     const resultat = await ouvrirCompte(client.id, typeCompte, promoCompte, caissierPourCompte)
@@ -175,18 +187,14 @@ export default function DetailClient() {
       return
     }
     const caissier = data.employes.find((x) => x.id === caissierPourCompte)
+    const frais = fraisOuvertureComptePour(client, fraisCompte, promoCompte)
     setModaleCompte(false)
     setErreur('')
     setPromoCompte(false)
     setCaissierPourCompte('')
-    const droit = promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion
     await alerter(
       'Demande envoyée',
-      `Demande d’ouverture enregistrée pour ${client.prenom} ${client.nom}.\n` +
-        `Le compte sera créé après encaissement et validation par ${caissier?.nomComplet ?? 'le caissier'}.\n` +
-        `Part sociale : ${formatMontant(fraisCompte.partSociale)}\n` +
-        `Droit d'adhésion : ${formatMontant(droit)}\n` +
-        `Total à encaisser : ${formatMontant(fraisCompte.partSociale + droit)}`,
+      texteAlerteDemandeOuverture(caissier?.nomComplet ?? 'le caissier', frais),
     )
   }
 
@@ -199,12 +207,21 @@ export default function DetailClient() {
     <div>
       <Link to={retourClients} className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700">
         <ArrowLeft className="h-4 w-4" />
-        Retour à la zone
+        {labelRetour}
       </Link>
 
       <EnTetePage
         titre={`${client.prenom} ${client.nom}`}
-        sousTitre={`${afficherNumeroClient(client.codeClient)} — ${client.profession ?? 'Profession non renseignée'}`}
+        sousTitre={`${
+          [
+            client.codeClientBanque ? `n° banque ${client.codeClientBanque}` : null,
+            client.zoneId ? `n° tontine ${afficherNumeroClient(client.codeClient)}` : null,
+            estAncienClient(client) ? 'ancien (papier)' : null,
+            client.profession ?? 'Profession non renseignée',
+          ]
+            .filter(Boolean)
+            .join(' — ')
+        }`}
         action={
           <div className="flex flex-wrap gap-2">
             {peutOuvrirCarnet && (
@@ -256,7 +273,13 @@ export default function DetailClient() {
                 onClick={async () => {
                   const ok = await confirmer({
                     titre: 'Supprimer le client',
-                    message: `Supprimer définitivement ${client.prenom} ${client.nom} (n° ${afficherNumeroClient(client.codeClient)}) ? Impossible s’il a déjà des carnets, comptes ou crédits.`,
+                    message: `Supprimer définitivement ${client.prenom} ${client.nom}${
+                      client.codeClientBanque
+                        ? ` (n° banque ${client.codeClientBanque})`
+                        : client.zoneId
+                          ? ` (n° ${afficherNumeroClient(client.codeClient)})`
+                          : ''
+                    } ? Impossible s’il a déjà des carnets, comptes ou crédits.`,
                     labelValider: 'Supprimer',
                     danger: true,
                   })
@@ -290,6 +313,7 @@ export default function DetailClient() {
                   : '—'}
               </dd>
             </div>
+            {client.zoneId ? (
             <div>
               <dt className="text-xs text-slate-500">Zone</dt>
               <dd className="font-medium text-slate-900">
@@ -299,6 +323,7 @@ export default function DetailClient() {
                 })()}
               </dd>
             </div>
+            ) : null}
             <div>
               <dt className="text-xs text-slate-500">Téléphone</dt>
               <dd className="font-medium text-slate-900">{client.telephone}</dd>
@@ -318,6 +343,16 @@ export default function DetailClient() {
             <div>
               <dt className="text-xs text-slate-500">Inscrit le</dt>
               <dd className="font-medium text-slate-900">{formatDate(client.dateInscription)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Type de client</dt>
+              <dd>
+                {estAncienClient(client) ? (
+                  <span className="badge bg-amber-100 text-amber-800">Ancien (papier)</span>
+                ) : (
+                  <span className="badge bg-slate-100 text-slate-700">Nouveau</span>
+                )}
+              </dd>
             </div>
             <div>
               <dt className="text-xs text-slate-500">Statut</dt>
@@ -486,7 +521,7 @@ export default function DetailClient() {
                     <span className="text-slate-600">
                       <span className="font-mono text-xs font-semibold text-brand-700">{carnet.numero}</span>{' '}
                       {LIBELLES_CARNET[carnet.typeCarnet]} — mise {formatMontant(carnet.mise)} — {mois.label} (
-                      {carnet.cycleActuel}/12)
+                      {libelleCycleCarnet(carnet.cycleActuel)})
                       {carnet.verrouille && <span className="badge ml-2 bg-rose-100 text-rose-700">Verrouillé</span>}
                     </span>
                     <span className="font-bold text-slate-900">
@@ -617,7 +652,14 @@ export default function DetailClient() {
             </div>
           </div>
           <div className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">
-            Carnet {formatMontant(PRIX_CARNET)} — 31 carreaux × 12 mois.
+            {estAncienClientTontine(client) ? (
+              <>
+                Carnet offert (client ancien) — pas de {formatMontant(PRIX_CARNET)}. Pas de P.C. sur le
+                premier cycle ; 31 carreaux × 12 mois.
+              </>
+            ) : (
+              <>Carnet {formatMontant(PRIX_CARNET)} — 31 carreaux × 12 mois.</>
+            )}
           </div>
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
           <div className="flex justify-end gap-2">
@@ -645,6 +687,7 @@ export default function DetailClient() {
               <option value="epargne">Compte épargne (n° Bxxxx)</option>
             </select>
           </div>
+          {!estAncienClient(client) && (
           <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
             <input
               type="checkbox"
@@ -659,8 +702,9 @@ export default function DetailClient() {
               </span>
             </span>
           </label>
+          )}
           <div>
-            <label className="label">Caisse (encaissement) *</label>
+            <label className="label">Caisse (validation) *</label>
             <select
               className="input"
               required
@@ -675,26 +719,12 @@ export default function DetailClient() {
               ))}
             </select>
             <p className="mt-1 text-xs text-slate-400">
-              Le compte n’est créé qu’après validation et encaissement par ce caissier.
+              Le compte n’est créé qu’après validation par ce caissier.
             </p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
-            <p className="font-medium text-slate-900">À encaisser en caisse</p>
-            <ul className="mt-2 space-y-1 text-xs">
-              <li>Part sociale (microfinance) : {formatMontant(fraisCompte.partSociale)}</li>
-              <li>
-                Droit d’adhésion (crédité sur le compte) :{' '}
-                {formatMontant(promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion)}
-              </li>
-              <li className="font-semibold text-slate-900">
-                Total :{' '}
-                {formatMontant(
-                  fraisCompte.partSociale +
-                    (promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion),
-                )}
-              </li>
-            </ul>
-          </div>
+          <RecapFraisOuvertureCompte
+            frais={fraisOuvertureComptePour(client, fraisCompte, promoCompte)}
+          />
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-secondary" onClick={() => setModaleCompte(false)}>

@@ -135,6 +135,74 @@ def numero_client(ordre: int) -> str:
     return pad4(ordre)
 
 
+def numero_client_banque(ordre: int) -> str:
+    """N° client banque : 0001, 0002… (indépendant du n° tontine ZZxxxx)."""
+    return pad4(ordre)
+
+
+def attribuer_numeros_clients_banque(d: dict) -> bool:
+    """Assigne un n° banque aux clients qui ont un compte et pas encore de codeClientBanque."""
+    ids_compte = {co.get("clientId") for co in d.get("comptes") or [] if co.get("clientId")}
+    if not ids_compte:
+        return False
+    premiere_date: dict[str, str] = {}
+    for co in d.get("comptes") or []:
+        cid = co.get("clientId")
+        if not cid:
+            continue
+        dt = co.get("dateOuverture") or ""
+        if cid not in premiere_date or dt < premiere_date[cid]:
+            premiere_date[cid] = dt
+    deja = [
+        int(c.get("ordreBanque") or 0)
+        for c in d.get("clients") or []
+        if c.get("ordreBanque")
+    ]
+    n = max(int((d.get("compteurs") or {}).get("clientBanque") or 0), max(deja, default=0))
+    par_id = {c["id"]: c for c in d.get("clients") or []}
+    a_numeroter = [
+        par_id[cid]
+        for cid in sorted(ids_compte, key=lambda i: (premiere_date.get(i) or "", i))
+        if cid in par_id and not par_id[cid].get("codeClientBanque")
+    ]
+    if not a_numeroter:
+        compteurs = dict(d.get("compteurs") or {})
+        if int(compteurs.get("clientBanque") or 0) < n:
+            d["compteurs"] = {**compteurs, "clientBanque": n}
+            return True
+        return False
+    for c in a_numeroter:
+        n += 1
+        par_id[c["id"]] = {
+            **c,
+            "ordreBanque": n,
+            "codeClientBanque": numero_client_banque(n),
+        }
+    d["clients"] = [par_id.get(c["id"], c) for c in d["clients"]]
+    d["compteurs"] = {**(d.get("compteurs") or {}), "clientBanque": n}
+    return True
+
+
+def attribuer_numeros_clients_banque_persist(db: Session) -> None:
+    d = load_state(db, include_password_hashes=True)
+    if attribuer_numeros_clients_banque(d):
+        _persist(db, d)
+
+
+def _assurer_numero_client_banque(d: dict, client_id: str) -> None:
+    """Attribue le prochain n° banque (0001, 0002…) au premier compte du client."""
+    client = next((c for c in d.get("clients") or [] if c["id"] == client_id), None)
+    if not client or client.get("codeClientBanque"):
+        return
+    deja = [int(c.get("ordreBanque") or 0) for c in d.get("clients") or [] if c.get("ordreBanque")]
+    n = max(int((d.get("compteurs") or {}).get("clientBanque") or 0), max(deja, default=0)) + 1
+    d["clients"] = [
+        {**c, "ordreBanque": n, "codeClientBanque": numero_client_banque(n)} if c["id"] == client_id else c
+        for c in d["clients"]
+    ]
+    d["compteurs"] = {**(d.get("compteurs") or {}), "clientBanque": n}
+
+
 def numero_compte_solde(ordre: int) -> str:
     return f"B{pad4(ordre)}"
 
@@ -514,6 +582,10 @@ def _nom_client(d: dict, client_id: str) -> str:
     return f"{c['prenom']} {c['nom']}" if c else "Inconnu"
 
 
+def _origine_tontine(valeur) -> str:
+    return "ancien" if valeur == "ancien" else "nouveau"
+
+
 def _verif_caisse(d: dict, u: dict) -> str | None:
     if _est_admin(u):
         return None
@@ -591,13 +663,12 @@ def run_mutation(db: Session, current_user_id: str, action: str, payload: dict) 
         err, new_d, extra = result[0], result[1], (result[2] if len(result) > 2 else {})
         if err:
             return {"erreur": err}
+        extra = dict(extra or {})
         data = _persist(db, new_d)
-        _sync_compta(db, new_d, u)
-        return {"ok": True, "data": data, **(extra or {})}
+        return {"ok": True, "data": data, **extra}
 
     if isinstance(result, dict) and "data" in result:
         data = _persist(db, result["data"])
-        _sync_compta(db, result["data"], u)
         out = {"ok": True, "data": data}
         for k, v in result.items():
             if k not in ("data", "erreur"):
@@ -607,20 +678,9 @@ def run_mutation(db: Session, current_user_id: str, action: str, payload: dict) 
     # handler returned new state dict directly
     if isinstance(result, dict) and "employes" in result:
         data = _persist(db, result)
-        _sync_compta(db, result, u)
         return {"ok": True, "data": data}
 
     return {"erreur": "Resultat de mutation invalide."}
-
-
-def _sync_compta(db: Session, state: dict, user: dict) -> None:
-    try:
-        from .comptabilite import sync_auto_from_state
-
-        sync_auto_from_state(db, state, user)
-    except Exception:  # noqa: BLE001
-        # Ne bloque pas l'opération métier si la compta échoue
-        pass
 
 
 # ---- Actions ----
@@ -899,33 +959,71 @@ def ajuster_cumul_compte_zone(d, u, p):
 def ajouter_client(d, u, p):
     if not _a_droit(u, "gerer_clients") and not _est_admin(u):
         return {"erreur": "Droit insuffisant."}
-    zone_id = p.get("zoneId")
-    zone = next((z for z in d["zones"] if z["id"] == zone_id), None)
-    if not zone:
+    zone_id = p.get("zoneId") or None
+    agence_id = p.get("agenceId") or None
+    zone = next((z for z in d["zones"] if z["id"] == zone_id), None) if zone_id else None
+    if zone_id and not zone:
         return {"erreur": "Zone introuvable."}
+    if zone:
+        agence_id = zone["agenceId"]
+        if not _est_admin(u) and agence_id != u.get("agenceId"):
+            return {"erreur": "Cette zone n'appartient pas à votre agence."}
+    elif agence_id:
+        agence = next((a for a in d["agences"] if a["id"] == agence_id), None)
+        if not agence:
+            return {"erreur": "Agence introuvable."}
+        if not _est_admin(u) and agence_id != u.get("agenceId"):
+            return {"erreur": "Cette agence n'est pas la vôtre."}
+    else:
+        return {"erreur": "Indiquez une agence (client banque) ou une zone (client tontine)."}
+
     d = copy.deepcopy(d)
-    ordre_zone = _prochain_ordre_zone(d, zone_id, code_zone=zone["code"])
     cid = uid()
-    d["clients"].append(
-        {
-            "id": cid,
-            "codeClient": numero_carnet(zone["code"], ordre_zone),
-            "agenceId": zone["agenceId"],
-            "zoneId": zone_id,
-            "ordreZone": ordre_zone,
-            "nom": p.get("nom", ""),
-            "prenom": p.get("prenom", ""),
-            "sexe": p.get("sexe", "M"),
-            "telephone": p.get("telephone", ""),
-            "email": p.get("email"),
-            "profession": p.get("profession"),
-            "adresse": p.get("adresse"),
-            "pieceIdentite": p.get("pieceIdentite"),
-            "dateInscription": M.maintenant(),
-            "actif": True,
-        }
-    )
-    d["compteursOrdreZone"] = {**d.get("compteursOrdreZone", {}), zone_id: ordre_zone}
+    origine = _origine_tontine(p.get("origineTontine"))
+    if zone:
+        ordre_zone = _prochain_ordre_zone(d, zone_id, code_zone=zone["code"])
+        d["clients"].append(
+            {
+                "id": cid,
+                "codeClient": numero_carnet(zone["code"], ordre_zone),
+                "agenceId": zone["agenceId"],
+                "zoneId": zone_id,
+                "ordreZone": ordre_zone,
+                "nom": p.get("nom", ""),
+                "prenom": p.get("prenom", ""),
+                "sexe": p.get("sexe", "M"),
+                "telephone": p.get("telephone", ""),
+                "email": p.get("email"),
+                "profession": p.get("profession"),
+                "adresse": p.get("adresse"),
+                "pieceIdentite": p.get("pieceIdentite"),
+                "dateInscription": M.maintenant(),
+                "actif": True,
+                "origineTontine": origine,
+            }
+        )
+        d["compteursOrdreZone"] = {**d.get("compteursOrdreZone", {}), zone_id: ordre_zone}
+    else:
+        d["clients"].append(
+            {
+                "id": cid,
+                "codeClient": None,
+                "agenceId": agence_id,
+                "zoneId": None,
+                "ordreZone": None,
+                "nom": p.get("nom", ""),
+                "prenom": p.get("prenom", ""),
+                "sexe": p.get("sexe", "M"),
+                "telephone": p.get("telephone", ""),
+                "email": p.get("email"),
+                "profession": p.get("profession"),
+                "adresse": p.get("adresse"),
+                "pieceIdentite": p.get("pieceIdentite"),
+                "dateInscription": M.maintenant(),
+                "actif": True,
+                "origineTontine": origine,
+            }
+        )
     return (None, d, {"id": cid})
 
 
@@ -952,12 +1050,15 @@ def modifier_client(d, u, p):
         "profession",
         "adresse",
         "pieceIdentite",
+        "origineTontine",
     }
     simple = {k: v for k, v in patch.items() if k in champs_simples}
+    if "origineTontine" in simple:
+        simple["origineTontine"] = _origine_tontine(simple.get("origineTontine"))
 
     new_zone_id = patch.get("zoneId")
     extra: dict[str, Any] = {}
-    if new_zone_id is not None and new_zone_id != client["zoneId"]:
+    if new_zone_id is not None and new_zone_id != client.get("zoneId"):
         zone = next((z for z in d["zones"] if z["id"] == new_zone_id), None)
         if not zone:
             return {"erreur": "Zone introuvable."}
@@ -1060,6 +1161,8 @@ def ouvrir_carnet(d, u, p):
     client = next((c for c in d["clients"] if c["id"] == client_id), None)
     if not client:
         return {"erreur": "Client introuvable."}
+    if not client.get("zoneId"):
+        return {"erreur": "Rattachez ce client à une zone pour ouvrir un carnet tontine."}
     zone = next((z for z in d["zones"] if z["id"] == client["zoneId"]), None)
     if not zone:
         return {"erreur": "Zone introuvable."}
@@ -1074,16 +1177,7 @@ def ouvrir_carnet(d, u, p):
         numero = numero_carnet(zone["code"], int(client.get("ordreZone") or 1))
     cid = uid()
     date = M.maintenant()
-    tx = _mk_tx(
-        u,
-        {
-            "type": "vente_carnet",
-            "clientId": client_id,
-            "montant": M.PRIX_CARNET,
-            "date": date,
-            "description": f"Vente du carnet {numero} — {_nom_client(d, client_id)} (cycle 1/12)",
-        },
-    )
+    reprise = _origine_tontine(client.get("origineTontine")) == "ancien"
     d["carnets"].append(
         {
             "id": cid,
@@ -1100,9 +1194,21 @@ def ouvrir_carnet(d, u, p):
             "verrouille": False,
             "retraitActiveParAdmin": type_carnet not in M.CARNETS_RETRAIT_6_MOIS,
             "actif": True,
+            "reprisePapier": reprise,
         }
     )
-    d = _enregistrer_tx(d, [tx])
+    if not reprise:
+        tx = _mk_tx(
+            u,
+            {
+                "type": "vente_carnet",
+                "clientId": client_id,
+                "montant": M.PRIX_CARNET,
+                "date": date,
+                "description": f"Vente du carnet {numero} — {_nom_client(d, client_id)} (cycle 1/12)",
+            },
+        )
+        d = _enregistrer_tx(d, [tx])
     return {"data": d, "id": cid, "numero": numero}
 
 
@@ -1119,10 +1225,12 @@ def encaisser_cotisation(d, u, p):
     if carnet.get("verrouille"):
         return {"erreur": "Ce carnet est verrouille."}
 
-    # avance cycles complets
-    while carnet["cycleActuel"] < M.CYCLES_PAR_CARNET and M.carreaux_nets(carnet, d["mises"]) >= carnet["misesParCycle"]:
+    # avance cycles complets (y compris après 12 mois → renouvellement)
+    garde = 0
+    while garde < 200 and M.carreaux_nets(carnet, d["mises"]) >= carnet["misesParCycle"]:
         carnet = {**carnet, "cycleActuel": carnet["cycleActuel"] + 1}
         d["carnets"] = [carnet if c["id"] == carnet_id else c for c in d["carnets"]]
+        garde += 1
 
     jour = _jour_collecte_payload(p)
     err_jour = _erreur_date_collecte(d, carnet["zoneId"], jour)
@@ -1152,7 +1260,24 @@ def encaisser_cotisation(d, u, p):
         "date": date,
     }
     nouvelles = []
-    if payees == 0:
+    if payees == 0 and M.est_premier_cycle_renouvellement(cycle_depot):
+        nouvelles.append(
+            _mk_tx(
+                u,
+                {
+                    "type": "vente_carnet",
+                    "clientId": carnet["clientId"],
+                    "montant": M.PRIX_CARNET,
+                    "date": date,
+                    "description": (
+                        f"Renouvellement du carnet {carnet['numero']} — {_nom_client(d, carnet['clientId'])} "
+                        f"(carnet {M.annee_carnet(cycle_depot)}, cycle 1/{M.CYCLES_PAR_CARNET}){note_collecte}"
+                    ),
+                },
+            )
+        )
+    prelever_pc = payees == 0 and M.pc_due_sur_cycle(carnet, cycle_depot)
+    if prelever_pc:
         nouvelles.append(
             _mk_tx(
                 u,
@@ -1179,6 +1304,7 @@ def encaisser_cotisation(d, u, p):
                 )
             )
     else:
+        note_pc = " (P.C. non prelevee — client ancien)" if payees == 0 else ""
         nouvelles.append(
             _mk_tx(
                 u,
@@ -1187,14 +1313,14 @@ def encaisser_cotisation(d, u, p):
                     "clientId": carnet["clientId"],
                     "montant": mise_entree["montant"],
                     "date": date,
-                    "description": f"Depot x{nombre} — {_nom_client(d, carnet['clientId'])} (cycle {cycle_depot}){note_collecte}",
+                    "description": f"Depot x{nombre} — {_nom_client(d, carnet['clientId'])} (cycle {cycle_depot}){note_collecte}{note_pc}",
                 },
             )
         )
 
     d["mises"] = [*d["mises"], mise_entree]
     nets_apres = payees + nombre
-    if nets_apres >= carnet["misesParCycle"] and carnet["cycleActuel"] < M.CYCLES_PAR_CARNET:
+    if nets_apres >= carnet["misesParCycle"]:
         d["carnets"] = [
             {**c, "cycleActuel": c["cycleActuel"] + 1} if c["id"] == carnet_id else c for c in d["carnets"]
         ]
@@ -1300,8 +1426,8 @@ def retrait_cycle(d, u, p):
     elig = M.eligibilite_retrait_carnet(carnet, d["mises"])
     if not elig.get("autorise"):
         return {"erreur": "Retrait non autorise pour ce type de carnet."}
-    nets = M.carreaux_nets(carnet, d["mises"], cycle)
-    if nombre > nets:
+    retirables = M.carreaux_retirables(carnet, d["mises"], cycle)
+    if nombre > retirables:
         return {"erreur": "Pas assez de carreaux."}
     montant = carnet["mise"] * nombre
     err2 = _verif_solde_sortie(d, u, montant)
@@ -1369,17 +1495,21 @@ def ouvrir_compte(d, u, p):
     promotion = bool(p.get("promotion") or False)
     caissier_id = p.get("caissierId") or ""
     if not caissier_id:
-        return {"erreur": "Indiquez la caisse (caissier) qui encaissera part sociale et droit d'adhésion."}
+        return {"erreur": "Indiquez le caissier qui validera l'ouverture."}
 
     from .config import settings
 
-    part_sociale = float(settings.part_sociale_montant)
-    droit = float(
-        settings.droit_adhesion_promo_montant if promotion else settings.droit_adhesion_montant
-    )
     client = next((c for c in d["clients"] if c["id"] == client_id), None)
     if not client:
         return {"erreur": "Client introuvable."}
+    if _origine_tontine(client.get("origineTontine")) == "ancien":
+        part_sociale = 0.0
+        droit = 0.0
+    else:
+        part_sociale = float(settings.part_sociale_montant)
+        droit = float(
+            settings.droit_adhesion_promo_montant if promotion else settings.droit_adhesion_montant
+        )
     caissier = next((e for e in d["employes"] if e["id"] == caissier_id and e.get("actif")), None)
     if not caissier or caissier.get("role") != "caissier":
         return {"erreur": "Indiquez un caissier de l'agence (le chef d'agence n'a pas de caisse)."}
@@ -1437,6 +1567,7 @@ def _appliquer_ouverture_compte_validee(d, operateur, demande):
     promotion = bool(demande.get("promotion"))
     part_sociale = float(demande.get("partSociale") or 0)
     droit = float(demande.get("droitAdhesion") or 0)
+    _assurer_numero_client_banque(d, client_id)
     ordre = int(d["compteurs"].get("compte", 0)) + 1
     cid = uid()
     numero = numero_compte_solde(ordre)
@@ -1456,39 +1587,46 @@ def _appliquer_ouverture_compte_validee(d, operateur, demande):
             "promotion": promotion,
         }
     )
-    d["mouvements"].append(
-        {
-            "id": uid(),
-            "compteId": cid,
-            "type": "depot",
-            "montant": droit,
-            "date": date,
-            "note": f"Droit d'adhésion{' (promo)' if promotion else ''}",
-        }
-    )
-    txs = [
-        _mk_tx(
-            operateur,
+    if droit > 0:
+        d["mouvements"].append(
             {
-                "type": "part_sociale",
-                "clientId": client_id,
-                "montant": part_sociale,
-                "date": date,
-                "description": f"Part sociale ouverture {numero} ({type_}) — {_nom_client(d, client_id)}",
-            },
-        ),
-        _mk_tx(
-            operateur,
-            {
-                "type": "droit_adhesion",
-                "clientId": client_id,
+                "id": uid(),
+                "compteId": cid,
+                "type": "depot",
                 "montant": droit,
                 "date": date,
-                "description": f"Droit d'adhésion{' promo' if promotion else ''} {numero} ({type_}) — {_nom_client(d, client_id)} (crédité sur le compte)",
-            },
-        ),
-    ]
-    d = _enregistrer_tx(d, txs)
+                "note": f"Droit d'adhésion{' (promo)' if promotion else ''}",
+            }
+        )
+    txs = []
+    if part_sociale > 0:
+        txs.append(
+            _mk_tx(
+                operateur,
+                {
+                    "type": "part_sociale",
+                    "clientId": client_id,
+                    "montant": part_sociale,
+                    "date": date,
+                    "description": f"Part sociale ouverture {numero} ({type_}) — {_nom_client(d, client_id)}",
+                },
+            )
+        )
+    if droit > 0:
+        txs.append(
+            _mk_tx(
+                operateur,
+                {
+                    "type": "droit_adhesion",
+                    "clientId": client_id,
+                    "montant": droit,
+                    "date": date,
+                    "description": f"Droit d'adhésion{' promo' if promotion else ''} {numero} ({type_}) — {_nom_client(d, client_id)} (crédité sur le compte)",
+                },
+            )
+        )
+    if txs:
+        d = _enregistrer_tx(d, txs)
     return d, cid, numero
 
 
@@ -1940,6 +2078,268 @@ def ouvrir_journee_caisse(d, u, p):
     return (None, d, {})
 
 
+def _txs_caisse_du_jour(d: dict, agence_id: str, jour: str) -> list[dict]:
+    op_ids = M.operateurs_caisse_agence(d.get("employes") or [], agence_id)
+    return [
+        t
+        for t in d.get("transactions") or []
+        if M.est_operation_caisse(t.get("type") or "")
+        and M.jour_iso_depuis_date(t.get("date") or "") == jour
+        and (t.get("agenceId") == agence_id or t.get("operateurId") in op_ids)
+    ]
+
+
+def annuler_ouverture_journee_caisse(d, u, p):
+    """Annule l'ouverture et recule toutes les opérations de caisse du jour (agence)."""
+    if not _est_admin(u) and not _est_chef(u):
+        return {"erreur": "Seul l'administrateur ou le chef d'agence peut annuler une ouverture de journée."}
+    employe_id = p["employeId"]
+    jour = p.get("journee") or M.aujourd_hui_iso()
+    cible = next((e for e in d["employes"] if e["id"] == employe_id and e.get("actif")), None)
+    if not cible:
+        return {"erreur": "Employe introuvable."}
+    if cible.get("role") == "chef_agence":
+        return {"erreur": "Le chef d'agence n'a pas de caisse."}
+    if _est_chef(u) and cible["agenceId"] != u["agenceId"]:
+        return {"erreur": "Vous ne pouvez annuler que les caisses de votre agence."}
+    agence_id = cible["agenceId"]
+    ouverture = M.ouverture_caisse_agence(d.get("ouverturesCaisse") or [], agence_id, jour)
+    if not ouverture:
+        return {"erreur": f"Aucune ouverture de journée pour le {jour}."}
+    if M.arret_caisse_agence(d["arretsCaisse"], agence_id, jour):
+        return {"erreur": "Impossible d'annuler : la journée est déjà clôturée."}
+
+    d = copy.deepcopy(d)
+    txs = _txs_caisse_du_jour(d, agence_id, jour)
+    types_tontine = {
+        "mise_tontine",
+        "commission_tontine",
+        "complement_mise",
+        "retrait_tontine",
+        "vente_carnet",
+    }
+    for tx in txs:
+        if tx.get("type") not in types_tontine:
+            continue
+        client = next((c for c in d["clients"] if c["id"] == tx.get("clientId")), None)
+        zone_id = (client or {}).get("zoneId")
+        if not zone_id:
+            ca = next(
+                (
+                    x
+                    for x in d.get("carnets") or []
+                    if x.get("clientId") == tx.get("clientId")
+                    and M.jour_iso_depuis_date(x.get("dateOuverture") or "") == jour
+                ),
+                None,
+            )
+            zone_id = (ca or {}).get("zoneId")
+        jz = M.journee_zone_du_jour(d.get("journeesCompteZone") or [], zone_id, jour) if zone_id else None
+        if jz and jz.get("cloturee"):
+            return {
+                "erreur": "Impossible d'annuler : une journée zone tontine de cette date est déjà clôturée."
+            }
+
+    tx_ids = {t["id"] for t in txs}
+    carnets_agence = {c["id"] for c in d.get("carnets") or [] if c.get("agenceId") == agence_id}
+
+    # Compléments de mise : rétablir l'ancienne mise (plus récent d'abord)
+    complements = sorted(
+        [t for t in txs if t.get("type") == "complement_mise"],
+        key=lambda t: t.get("date") or "",
+        reverse=True,
+    )
+    for tx in complements:
+        m = re.search(
+            r"Complement mise\s+(\d+)\s*(?:→|->)\s*(\d+)",
+            tx.get("description") or "",
+            re.IGNORECASE,
+        )
+        if not m:
+            continue
+        ancienne = int(m.group(1))
+        montant_tx = float(tx.get("montant") or 0)
+        mise_comp = next(
+            (
+                mi
+                for mi in d.get("mises") or []
+                if mi.get("carnetId") in carnets_agence
+                and M.jour_iso_depuis_date(mi.get("date") or "") == jour
+                and int(mi.get("nombreMises") or 0) == 0
+                and abs(float(mi.get("montant") or 0) - montant_tx) < 0.005
+            ),
+            None,
+        )
+        cid = (mise_comp or {}).get("carnetId")
+        if cid:
+            d["carnets"] = [
+                {**c, "mise": float(ancienne)} if c["id"] == cid else c for c in d["carnets"]
+            ]
+
+    # Mises tontine du jour (agence)
+    mises_gardees = [
+        mi
+        for mi in d.get("mises") or []
+        if not (
+            mi.get("carnetId") in carnets_agence
+            and M.jour_iso_depuis_date(mi.get("date") or "") == jour
+        )
+    ]
+    carnets_touches = {
+        mi.get("carnetId")
+        for mi in d.get("mises") or []
+        if mi.get("carnetId") in carnets_agence
+        and M.jour_iso_depuis_date(mi.get("date") or "") == jour
+    }
+    d["mises"] = mises_gardees
+    for cid in carnets_touches:
+        d = _recalculer_cycle_actuel_carnet(d, cid)
+
+    # Carnets ouverts ce jour, plus aucune mise
+    carnets_restants = []
+    for ca in d.get("carnets") or []:
+        if (
+            ca.get("agenceId") == agence_id
+            and M.jour_iso_depuis_date(ca.get("dateOuverture") or "") == jour
+            and not any(mi.get("carnetId") == ca["id"] for mi in d.get("mises") or [])
+        ):
+            continue
+        carnets_restants.append(ca)
+    d["carnets"] = carnets_restants
+
+    # Remboursements de crédit du jour
+    credits_par_id = {c["id"]: c for c in d.get("credits") or []}
+    remb_gardes = []
+    credits_a_rouvrir: set[str] = set()
+    for r in d.get("remboursements") or []:
+        if M.jour_iso_depuis_date(r.get("date") or "") != jour:
+            remb_gardes.append(r)
+            continue
+        cred = credits_par_id.get(r.get("creditId") or "")
+        if cred and any(
+            t.get("type") == "remboursement_credit"
+            and t.get("clientId") == cred.get("clientId")
+            and abs(float(t.get("montant") or 0) - float(r.get("montant") or 0)) < 0.005
+            for t in txs
+        ):
+            credits_a_rouvrir.add(cred["id"])
+            continue
+        remb_gardes.append(r)
+    d["remboursements"] = remb_gardes
+    d["credits"] = [
+        {**c, "statut": "en_cours"}
+        if c["id"] in credits_a_rouvrir and c.get("statut") == "rembourse"
+        else c
+        for c in d.get("credits") or []
+    ]
+
+    # Octrois du jour : crédit revient en attente
+    d["credits"] = [
+        {**c, "statut": "en_attente", "dateOctroi": None}
+        if M.jour_iso_depuis_date(c.get("dateOctroi") or "") == jour
+        and any(
+            t.get("type") == "octroi_credit" and t.get("clientId") == c.get("clientId") for t in txs
+        )
+        else c
+        for c in d.get("credits") or []
+    ]
+
+    # Mouvements comptes clients du jour (agence)
+    clients_agence = {c["id"] for c in d.get("clients") or [] if c.get("agenceId") == agence_id}
+    comptes_agence = [c for c in d.get("comptes") or [] if c.get("clientId") in clients_agence]
+    ids_comptes = {c["id"] for c in comptes_agence}
+    d["mouvements"] = [
+        mv
+        for mv in d.get("mouvements") or []
+        if not (
+            mv.get("compteId") in ids_comptes
+            and M.jour_iso_depuis_date(mv.get("date") or "") == jour
+        )
+    ]
+    comptes_ouverts_jour = [
+        c["id"]
+        for c in comptes_agence
+        if M.jour_iso_depuis_date(c.get("dateOuverture") or "") == jour
+    ]
+    comptes_restants = []
+    comptes_supprimes: set[str] = set()
+    for c in d.get("comptes") or []:
+        if c["id"] in comptes_ouverts_jour and not any(
+            mv.get("compteId") == c["id"] for mv in d.get("mouvements") or []
+        ):
+            comptes_supprimes.add(c["id"])
+            continue
+        comptes_restants.append(c)
+    d["comptes"] = comptes_restants
+    for c in d["comptes"]:
+        if c.get("clientId") in clients_agence:
+            d = _recalculer_solde_compte_client(d, c["id"])
+
+    d["demandesOuvertureCompte"] = [
+        {
+            **x,
+            "statut": "en_attente",
+            "dateTraitement": None,
+            "compteId": None,
+            "motifRefus": None,
+        }
+        if x.get("compteId") in comptes_supprimes
+        else x
+        for x in (d.get("demandesOuvertureCompte") or [])
+    ]
+    ids_avec_compte = {c.get("clientId") for c in d["comptes"]}
+    d["clients"] = [
+        {**c, "codeClientBanque": None, "ordreBanque": None}
+        if c.get("agenceId") == agence_id and c["id"] not in ids_avec_compte and c.get("codeClientBanque")
+        else c
+        for c in d["clients"]
+    ]
+
+    # Transactions du jour
+    d["transactions"] = [t for t in d.get("transactions") or [] if t.get("id") not in tx_ids]
+
+    # Mouvements de caisse du jour + recalcul du solde
+    titulaire_id = ouverture.get("employeId") or cible["id"]
+    compte_caisse = M.compte_caisse_agence(d.get("comptesCaisse") or [], agence_id) or M.compte_caisse_de(
+        d.get("comptesCaisse") or [], titulaire_id
+    )
+    solde_initial = _solde_caisse_avant_premier_mouvement(d, titulaire_id)
+    if compte_caisse:
+        cid = compte_caisse["id"]
+        d["mouvementsCompteCaisse"] = [
+            m
+            for m in d.get("mouvementsCompteCaisse") or []
+            if not (
+                m.get("compteCaisseId") == cid
+                and M.jour_iso_depuis_date(m.get("date") or "") == jour
+            )
+        ]
+        restants = [m for m in d["mouvementsCompteCaisse"] if m.get("compteCaisseId") == cid]
+        if restants:
+            d = _recalculer_solde_compte_caisse(d, titulaire_id, solde_initial)
+        else:
+            solde = float(solde_initial) if solde_initial is not None else 0.0
+            d["comptesCaisse"] = [
+                {**c, "solde": solde} if c["id"] == cid else c for c in d["comptesCaisse"]
+            ]
+
+    d["ouverturesCaisse"] = [
+        o
+        for o in (d.get("ouverturesCaisse") or [])
+        if not (o.get("agenceId") == agence_id and o.get("journee") == jour)
+    ]
+
+    nb_ops = len(txs)
+    return (
+        None,
+        d,
+        {
+            "operationsAnnulees": nb_ops,
+            "comptesAnnules": len(comptes_supprimes),
+        },
+    )
+
+
 def arreter_caisse(d, u, p):
     if not _est_admin(u) and not _est_chef(u):
         return {"erreur": "Seul l'administrateur ou le chef d'agence peut effectuer un arret de caisse."}
@@ -2228,28 +2628,14 @@ def _cycle_depuis_description(description: str) -> int | None:
 
 
 def _recalculer_cycle_actuel_carnet(d: dict, carnet_id: str) -> dict:
-    """Recalcule cycleActuel d'après les carreaux nets de chaque cycle."""
+    """Recalcule cycleActuel d'après les carreaux nets de chaque cycle (sans plafond à 12)."""
     carnet = next((c for c in d["carnets"] if c["id"] == carnet_id), None)
     if not carnet:
         return d
-    max_cycle = M.CYCLES_PAR_CARNET
     par_cycle = int(carnet.get("misesParCycle") or M.CARREAUX_PAR_CYCLE)
-    cycles_vus = {
-        int(m["cycle"])
-        for m in d.get("mises") or []
-        if m.get("carnetId") == carnet_id and m.get("cycle") is not None
-    }
-    dernier = max(cycles_vus) if cycles_vus else 1
     cycle = 1
-    while cycle < max_cycle and M.carreaux_nets(carnet, d["mises"], cycle) >= par_cycle:
+    while cycle < 500 and M.carreaux_nets(carnet, d["mises"], cycle) >= par_cycle:
         cycle += 1
-    # Si le dernier cycle connu est plus avancé et partiellement rempli, le respecter
-    if dernier > cycle and M.carreaux_nets(carnet, d["mises"], dernier) > 0:
-        # Vérifie que les cycles intermédiaires sont complets
-        ok = all(M.carreaux_nets(carnet, d["mises"], c) >= par_cycle for c in range(1, dernier))
-        if ok:
-            cycle = dernier
-    cycle = max(1, min(cycle, max_cycle))
     d["carnets"] = [{**c, "cycleActuel": cycle} if c["id"] == carnet_id else c for c in d["carnets"]]
     return d
 
@@ -2660,6 +3046,7 @@ ACTIONS = {
     "basculerActifEmploye": basculer_actif_employe,
     "alimenterCompteCaisse": alimenter_compte_caisse,
     "ouvrirJourneeCaisse": ouvrir_journee_caisse,
+    "annulerOuvertureJourneeCaisse": annuler_ouverture_journee_caisse,
     "arreterCaisse": arreter_caisse,
     "regulariserCumulCompteCaisse": regulariser_cumul_compte_caisse,
     "reinitialiserDemo": lambda d, u, p: {"erreur": "handled upstream"},

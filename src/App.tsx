@@ -4,8 +4,10 @@ import { MODULE_CREDITS_ACTIF } from './config'
 import { useStore } from './store'
 import Connexion from './pages/Connexion'
 import TableauDeBord from './pages/TableauDeBord'
+import AccueilClients from './pages/AccueilClients'
 import Clients from './pages/Clients'
 import ClientsZone from './pages/ClientsZone'
+import ClientsBanque from './pages/ClientsBanque'
 import DetailClient from './pages/DetailClient'
 import Tontines from './pages/Tontines'
 import DetailTontine from './pages/DetailTontine'
@@ -46,8 +48,11 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<TableauDeBord />} />
-        <Route path="/clients" element={<Clients />} />
+        <Route path="/clients" element={<AccueilClients />} />
+        <Route path="/clients/tontine" element={<Clients />} />
         <Route path="/clients/zone/:zoneId" element={<ClientsZone />} />
+        <Route path="/clients/banque" element={<ClientsBanque />} />
+        <Route path="/clients/banque/agence/:agenceId" element={<ClientsBanque />} />
         <Route path="/clients/:id" element={<DetailClient />} />
         <Route path="/tontines" element={<Tontines />} />
         <Route path="/tontines/:id" element={<DetailTontine />} />

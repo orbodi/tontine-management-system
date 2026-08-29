@@ -33,16 +33,16 @@ export default function ClientsZone() {
         (c) =>
           !q ||
           `${c.prenom} ${c.nom}`.toLowerCase().includes(q) ||
-          c.codeClient.toLowerCase().includes(q) ||
+          (c.codeClient ?? '').toLowerCase().includes(q) ||
           afficherNumeroClient(c.codeClient).includes(q) ||
           c.telephone.replace(/\s/g, '').includes(q.replace(/\s/g, '')) ||
           (c.profession ?? '').toLowerCase().includes(q),
       )
-      .sort((a, b) => a.codeClient.localeCompare(b.codeClient))
+      .sort((a, b) => (a.codeClient ?? '').localeCompare(b.codeClient ?? ''))
   }, [data.clients, zoneId, recherche])
 
   if (!zone) {
-    return <Navigate to="/clients" replace />
+    return <Navigate to="/clients/tontine" replace />
   }
 
   const ouvrirCreation = () => {
@@ -61,7 +61,7 @@ export default function ClientsZone() {
     setClientEnEdition(c)
     setForm({
       agenceId: c.agenceId,
-      zoneId: c.zoneId,
+      zoneId: c.zoneId ?? '',
       nom: c.nom,
       prenom: c.prenom,
       telephone: c.telephone,
@@ -70,6 +70,7 @@ export default function ClientsZone() {
       profession: c.profession ?? '',
       adresse: c.adresse ?? '',
       pieceIdentite: c.pieceIdentite ?? '',
+      origineTontine: c.origineTontine === 'ancien' ? 'ancien' : 'nouveau',
     })
     setErreur('')
     setModaleOuverte(true)
@@ -86,6 +87,7 @@ export default function ClientsZone() {
       profession: form.profession.trim() || undefined,
       adresse: form.adresse.trim() || undefined,
       pieceIdentite: form.pieceIdentite.trim() || undefined,
+      origineTontine: form.origineTontine,
     }
     if (clientEnEdition) {
       if (!form.zoneId) {
@@ -144,7 +146,7 @@ export default function ClientsZone() {
   return (
     <div>
       <Link
-        to="/clients"
+        to="/clients/tontine"
         className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -223,6 +225,9 @@ export default function ClientsZone() {
                       <span className="font-medium text-slate-900">
                         {c.prenom} {c.nom}
                       </span>
+                      {c.origineTontine === 'ancien' && (
+                        <span className="badge ml-2 bg-amber-100 text-amber-800">Ancien</span>
+                      )}
                     </Link>
                   </td>
                   <td className="px-5 py-3 text-slate-600">{c.telephone}</td>

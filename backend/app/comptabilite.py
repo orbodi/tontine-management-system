@@ -151,6 +151,38 @@ def journal_par_code(db: Session, code: str) -> m.JournalComptable | None:
     return db.query(m.JournalComptable).filter_by(code=code).first()
 
 
+def creer_journal(db: Session, code: str, libelle: str) -> tuple[str | None, m.JournalComptable | None]:
+    brut = (code or "").strip().upper().replace(" ", "")
+    nom = (libelle or "").strip()
+    if len(brut) < 2 or len(brut) > 12:
+        return "Le code doit faire entre 2 et 12 caractères.", None
+    if not brut.isalnum():
+        return "Le code ne doit contenir que des lettres et des chiffres (ex. VENTES, PAIE).", None
+    if len(nom) < 2:
+        return "Indiquez le libellé du journal.", None
+    if len(nom) > 120:
+        return "Libellé trop long.", None
+    exist = journal_par_code(db, brut)
+    if exist:
+        return f"Le journal {brut} existe déjà.", None
+    j = m.JournalComptable(id=_uid("jr"), code=brut, libelle=nom, actif=True)
+    db.add(j)
+    db.commit()
+    db.refresh(j)
+    return None, j
+
+
+def _lignes_non_vides(lignes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out = []
+    for lig in lignes:
+        d, c = float(lig.get("debit") or 0), float(lig.get("credit") or 0)
+        num = str(lig.get("compteNumero") or lig.get("compte_numero") or "").strip()
+        if not num or (d == 0 and c == 0):
+            continue
+        out.append(lig)
+    return out
+
+
 def _valider_lignes(lignes: list[dict[str, Any]]) -> str | None:
     if len(lignes) < 2:
         return "Une écriture doit comporter au moins deux lignes."
@@ -166,7 +198,27 @@ def _valider_lignes(lignes: list[dict[str, Any]]) -> str | None:
             return "Une ligne ne peut pas être à la fois débit et crédit."
         if d == 0 and c == 0:
             return "Ligne à zéro interdite."
+        if not str(lig.get("compteNumero") or lig.get("compte_numero") or "").strip():
+            return "Chaque ligne doit avoir un compte."
     return None
+
+
+def prochain_numero_piece(db: Session, journal: m.JournalComptable, annee: int) -> str:
+    prefix = f"{journal.code}-{annee}-"
+    pieces = (
+        db.query(m.EcritureComptable.numero_piece)
+        .filter(
+            m.EcritureComptable.journal_id == journal.id,
+            m.EcritureComptable.numero_piece.like(f"{prefix}%"),
+        )
+        .all()
+    )
+    max_n = 0
+    for (piece,) in pieces:
+        suffix = str(piece)[len(prefix) :]
+        if suffix.isdigit():
+            max_n = max(max_n, int(suffix))
+    return f"{prefix}{max_n + 1:04d}"
 
 
 def creer_ecriture(
@@ -192,6 +244,18 @@ def creer_ecriture(
     journal = journal_par_code(db, journal_code)
     if not journal:
         return f"Journal {journal_code} introuvable.", None
+    if not journal.actif:
+        return f"Journal {journal_code} inactif.", None
+
+    date_iso = (date or _today())[:10]
+    if date_iso < ex.date_debut or date_iso > ex.date_fin:
+        return f"Date hors exercice ({ex.date_debut} → {ex.date_fin}).", None
+
+    lib = (libelle or "").strip()
+    if not lib:
+        return "Libellé obligatoire.", None
+
+    lignes = _lignes_non_vides(lignes)
     err = _valider_lignes(lignes)
     if err:
         return err, None
@@ -205,15 +269,15 @@ def creer_ecriture(
         if exist:
             return None, exist
 
-    piece = numero_piece or f"{journal.code}-{_today().replace('-', '')}-{secrets.token_hex(3).upper()}"
+    piece = numero_piece or prochain_numero_piece(db, journal, ex.annee)
     eid = _uid("ec")
     ecriture = m.EcritureComptable(
         id=eid,
         exercice_id=exercice_id,
         journal_id=journal.id,
-        date=date[:10] if date else _today(),
+        date=date_iso,
         numero_piece=piece,
-        libelle=libelle,
+        libelle=lib,
         source=source,
         source_type=source_type,
         source_id=source_id,
@@ -229,6 +293,9 @@ def creer_ecriture(
         if not compte:
             db.rollback()
             return f"Compte {num} introuvable.", None
+        if not compte.actif:
+            db.rollback()
+            return f"Compte {num} inactif.", None
         db.add(
             m.LigneEcriture(
                 id=_uid("le"),
@@ -243,6 +310,27 @@ def creer_ecriture(
     db.commit()
     db.refresh(ecriture)
     return None, ecriture
+
+
+def supprimer_ecritures_auto(db: Session, source_type: str, source_ids: list[str]) -> int:
+    """Supprime les écritures automatiques liées à des sources métier (transactions annulées)."""
+    if not source_ids:
+        return 0
+    n = 0
+    for sid in source_ids:
+        exist = (
+            db.query(m.EcritureComptable)
+            .filter_by(source_type=source_type, source_id=sid)
+            .first()
+        )
+        if not exist:
+            continue
+        db.query(m.LigneEcriture).filter_by(ecriture_id=exist.id).delete()
+        db.delete(exist)
+        n += 1
+    if n:
+        db.commit()
+    return n
 
 
 def poster_transaction_auto(
@@ -320,7 +408,7 @@ def actualiser_ecriture_transaction(db: Session, tx: dict[str, Any]) -> None:
 
 
 def sync_auto_from_state(db: Session, data: dict[str, Any], user: dict[str, Any] | None = None) -> None:
-    """Poste les transactions / mouvements caisse non encore comptabilisés."""
+    """Ancien pont métier → compta. Non appelé : le module comptable est indépendant."""
     ensure_comptabilite_seed(db)
     for tx in data.get("transactions", []):
         exist = (
@@ -417,6 +505,11 @@ def serialize_journal(j: m.JournalComptable) -> dict[str, Any]:
 def serialize_ecriture(db: Session, e: m.EcritureComptable) -> dict[str, Any]:
     lignes = db.query(m.LigneEcriture).filter_by(ecriture_id=e.id).all()
     journal = db.query(m.JournalComptable).filter_by(id=e.journal_id).first()
+    numeros = {lig.compte_numero for lig in lignes}
+    intitules: dict[str, str] = {}
+    if numeros:
+        for c in db.query(m.CompteComptable).filter(m.CompteComptable.numero.in_(numeros)).all():
+            intitules[c.numero] = c.intitule
     return {
         "id": e.id,
         "exerciceId": e.exercice_id,
@@ -436,6 +529,7 @@ def serialize_ecriture(db: Session, e: m.EcritureComptable) -> dict[str, Any]:
                 "id": lig.id,
                 "compteId": lig.compte_id,
                 "compteNumero": lig.compte_numero,
+                "intitule": intitules.get(lig.compte_numero, ""),
                 "libelle": lig.libelle,
                 "debit": lig.debit,
                 "credit": lig.credit,
@@ -448,18 +542,33 @@ def serialize_ecriture(db: Session, e: m.EcritureComptable) -> dict[str, Any]:
 
 
 def list_bilan(db: Session, exercice_id: str) -> list[dict[str, Any]]:
-    rows = db.query(m.BilanInitialLigne).filter_by(exercice_id=exercice_id).all()
-    return [
-        {
-            "id": r.id,
-            "exerciceId": r.exercice_id,
-            "compteId": r.compte_id,
-            "compteNumero": r.compte_numero,
-            "sens": r.sens,
-            "montant": r.montant,
-        }
-        for r in rows
-    ]
+    rows = (
+        db.query(m.BilanInitialLigne)
+        .filter_by(exercice_id=exercice_id)
+        .order_by(m.BilanInitialLigne.compte_numero)
+        .all()
+    )
+    out = []
+    for r in rows:
+        compte = compte_par_numero(db, r.compte_numero)
+        out.append(
+            {
+                "id": r.id,
+                "exerciceId": r.exercice_id,
+                "compteId": r.compte_id,
+                "compteNumero": r.compte_numero,
+                "intitule": compte.intitule if compte else "",
+                "sens": r.sens,
+                "montant": r.montant,
+            }
+        )
+    return out
+
+
+def _sens_bilan(compte: m.CompteComptable, sens: str | None) -> str:
+    if sens in ("actif", "passif"):
+        return sens
+    return "passif" if compte.type == "passif" else "actif"
 
 
 def sauvegarder_bilan(
@@ -473,17 +582,29 @@ def sauvegarder_bilan(
     if ex.statut != "ouvert":
         return "Exercice clôturé."
 
-    db.query(m.BilanInitialLigne).filter_by(exercice_id=exercice_id).delete()
+    prepares: list[tuple[m.CompteComptable, str, float]] = []
+    vus: set[str] = set()
     for lig in lignes:
-        num = str(lig.get("compteNumero") or "")
-        compte = compte_par_numero(db, num)
-        if not compte:
-            db.rollback()
-            return f"Compte {num} introuvable."
+        num = str(lig.get("compteNumero") or "").strip()
+        if not num:
+            continue
         montant = float(lig.get("montant") or 0)
         if montant <= 0:
             continue
-        sens = lig.get("sens") or ("actif" if compte.type == "actif" else "passif")
+        compte = compte_par_numero(db, num)
+        if not compte:
+            return f"Compte {num} introuvable."
+        if compte.classe not in (1, 2, 3, 4, 5):
+            return f"Le compte {num} n’est pas un compte de bilan (classes 1 à 5)."
+        if compte.type not in ("actif", "passif"):
+            return f"Le compte {num} n’est ni un actif ni un passif."
+        if num in vus:
+            return f"Compte {num} en double."
+        vus.add(num)
+        prepares.append((compte, _sens_bilan(compte, lig.get("sens")), montant))
+
+    db.query(m.BilanInitialLigne).filter_by(exercice_id=exercice_id).delete()
+    for compte, sens, montant in prepares:
         db.add(
             m.BilanInitialLigne(
                 id=_uid("bi"),
@@ -504,6 +625,8 @@ def valider_bilan(db: Session, exercice_id: str, user: dict[str, Any]) -> str | 
         return "Exercice introuvable."
     if ex.bilan_valide:
         return "Bilan déjà validé."
+    if ex.statut != "ouvert":
+        return "Exercice clôturé."
     rows = db.query(m.BilanInitialLigne).filter_by(exercice_id=exercice_id).all()
     total_actif = sum(r.montant for r in rows if r.sens == "actif")
     total_passif = sum(r.montant for r in rows if r.sens == "passif")

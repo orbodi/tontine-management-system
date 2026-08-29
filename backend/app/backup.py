@@ -187,6 +187,7 @@ def _coerce_row(row: dict[str, str], template: dict[str, Any] | None) -> dict[st
                 pass
         if k in (
             "ordreZone",
+            "ordreBanque",
             "cycle",
             "cycleActuel",
             "misesParCycle",
@@ -211,7 +212,7 @@ def import_zip_bytes(db: Session, raw: bytes) -> dict[str, Any]:
     names = set(zf.namelist())
     current = load_state(db, include_password_hashes=True)
     data: dict[str, Any] = {k: [] for k in LIST_KEYS}
-    data["compteurs"] = {"client": 0, "compte": 0, "credit": 0, "compteCaisse": 0}
+    data["compteurs"] = {"client": 0, "compte": 0, "credit": 0, "compteCaisse": 0, "clientBanque": 0}
     data["compteursOrdreZone"] = {}
 
     for key in LIST_KEYS:

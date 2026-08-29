@@ -63,7 +63,7 @@ const DATA_VIDE: AppData = {
   arretsCaisse: [],
   journalConnexions: [],
   compteursOrdreZone: {},
-  compteurs: { client: 0, compte: 0, credit: 0, compteCaisse: 0 },
+  compteurs: { client: 0, compte: 0, credit: 0, compteCaisse: 0, clientBanque: 0 },
 }
 
 interface StoreApi {
@@ -98,8 +98,11 @@ interface StoreApi {
     motif: string,
   ) => Promise<string | null>
   ajouterClient: (
-    c: Omit<Client, 'id' | 'codeClient' | 'ordreZone' | 'agenceId' | 'dateInscription' | 'actif'>,
-  ) => Promise<boolean>
+    c: Omit<
+      Client,
+      'id' | 'codeClient' | 'ordreZone' | 'agenceId' | 'dateInscription' | 'actif' | 'codeClientBanque' | 'ordreBanque'
+    > & { agenceId?: string; zoneId?: string | null },
+  ) => Promise<string | null>
   modifierClient: (
     id: string,
     patch: Partial<Client>,
@@ -162,6 +165,10 @@ interface StoreApi {
     note?: string,
     journee?: string,
   ) => Promise<string | null>
+  annulerOuvertureJourneeCaisse: (
+    employeId: string,
+    journee?: string,
+  ) => Promise<{ erreur: string | null; operationsAnnulees?: number; comptesAnnules?: number }>
   regulariserCumulCompteCaisse: (
     employeId: string,
     type: 'manquant' | 'surplus',
@@ -242,6 +249,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id?: string
         numero?: string
         codeClient?: string
+        operationsAnnulees?: number
+        comptesAnnules?: number
       }>(`/api/mutations/${action}`, { method: 'POST', json: { payload } })
       if (res.data) appliquerData(res.data)
       return res
@@ -338,7 +347,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       async ajouterClient(c) {
         const res = await muter('ajouterClient', c as unknown as Record<string, unknown>)
-        return !res.erreur
+        if (res.erreur) return null
+        return typeof res.id === 'string' ? res.id : null
       },
       async modifierClient(id, patch) {
         const res = await muter('modifierClient', { id, patch })
@@ -456,6 +466,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       async ouvrirJourneeCaisse(employeId, soldeOuverture, note, journee) {
         const res = await muter('ouvrirJourneeCaisse', { employeId, soldeOuverture, note, journee })
         return res.erreur ?? null
+      },
+      async annulerOuvertureJourneeCaisse(employeId, journee) {
+        const res = await muter('annulerOuvertureJourneeCaisse', { employeId, journee })
+        return {
+          erreur: res.erreur ?? null,
+          operationsAnnulees:
+            typeof res.operationsAnnulees === 'number' ? res.operationsAnnulees : undefined,
+          comptesAnnules: typeof res.comptesAnnules === 'number' ? res.comptesAnnules : undefined,
+        }
       },
       async regulariserCumulCompteCaisse(employeId, type, montant, motif) {
         const res = await muter('regulariserCumulCompteCaisse', { employeId, type, montant, motif })

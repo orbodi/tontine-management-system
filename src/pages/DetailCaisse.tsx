@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Banknote, DoorOpen, Scale } from 'lucide-react'
+import { ArrowLeft, Banknote, DoorOpen, Scale, Undo2 } from 'lucide-react'
 import { useStore } from '../store'
 import {
   aujourdHuiIso,
@@ -45,11 +45,12 @@ export default function DetailCaisse() {
     employeConnecte,
     agenceFiltreOperations,
     ouvrirJourneeCaisse,
+    annulerOuvertureJourneeCaisse,
     arreterCaisse,
     alimenterCompteCaisse,
     regulariserCumulCompteCaisse,
   } = useStore()
-  const { alerter } = useConfirmation()
+  const { alerter, confirmer } = useConfirmation()
   const [modaleOuverture, setModaleOuverture] = useState(false)
   const [modaleArret, setModaleArret] = useState(false)
   const [modaleAlim, setModaleAlim] = useState(false)
@@ -193,6 +194,63 @@ export default function DetailCaisse() {
     await alerter(
       'Journée ouverte',
       `Ouverture enregistrée pour ${employe.nomComplet} — ${formatDate(jourOuverture + 'T12:00:00')} — ${formatMontant(montant)}.`,
+    )
+  }
+
+  const annulerOuverture = async (jour: string) => {
+    if (!employe) return
+    const sit = situationCaisse(
+      employe.id,
+      data.transactions,
+      data.arretsCaisse,
+      jour,
+      data.comptesCaisse,
+      data.mouvementsCompteCaisse,
+      data.ouverturesCaisse ?? [],
+      data.employes,
+    )
+    const nbOps = sit.nombreOperations
+    const alims = (data.mouvementsCompteCaisse ?? []).filter(
+      (m) =>
+        m.type === 'alimentation' &&
+        m.date.slice(0, 10) === jour &&
+        compteCaisse &&
+        m.compteCaisseId === compteCaisse.id,
+    ).length
+    const comptesDuJour = data.comptes.filter((c) => {
+      const client = data.clients.find((x) => x.id === c.clientId)
+      return client?.agenceId === employe.agenceId && c.dateOuverture.slice(0, 10) === jour
+    }).length
+    const lignes = [
+      nbOps > 0 ? `${nbOps} opération${nbOps > 1 ? 's' : ''} de caisse (dépôts, retraits, tontine…)` : null,
+      alims > 0 ? `${alims} alimentation${alims > 1 ? 's' : ''} de caisse` : null,
+      comptesDuJour > 0
+        ? `${comptesDuJour} compte${comptesDuJour > 1 ? 's' : ''} ouvert${comptesDuJour > 1 ? 's' : ''} ce jour (la demande redevient en attente)`
+        : null,
+    ].filter(Boolean)
+    const ok = await confirmer({
+      titre: 'Annuler l’ouverture de journée',
+      message:
+        `Annuler l’ouverture du ${formatDate(jour + 'T12:00:00')} ?\n\n` +
+        (lignes.length
+          ? `Toutes les saisies de ce jour seront reculées :\n- ${lignes.join('\n- ')}\n\n`
+          : 'Aucune opération saisie : seule l’ouverture sera retirée.\n\n') +
+        `Les soldes clients et carnets seront rétablis. La journée redeviendra « non ouverte ».`,
+      labelValider: 'Annuler l’ouverture',
+      danger: true,
+    })
+    if (!ok) return
+    const res = await annulerOuvertureJourneeCaisse(employe.id, jour)
+    if (res.erreur) {
+      await alerter('Annulation impossible', res.erreur)
+      return
+    }
+    const n = res.operationsAnnulees ?? nbOps
+    await alerter(
+      'Ouverture annulée',
+      n > 0
+        ? `La journée du ${formatDate(jour + 'T12:00:00')} a été annulée (${n} opération${n > 1 ? 's' : ''} reculée${n > 1 ? 's' : ''}). Vous pouvez la rouvrir.`
+        : `La journée du ${formatDate(jour + 'T12:00:00')} n’est plus ouverte. Vous pouvez la rouvrir.`,
     )
   }
 
@@ -340,6 +398,16 @@ export default function DetailCaisse() {
                   Clôturer la journée
                 </button>
               )}
+              {peutCloturerAujourdhui && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void annulerOuverture(jourOuverture)}
+                >
+                  <Undo2 className="h-4 w-4" />
+                  Annuler l’ouverture
+                </button>
+              )}
             </div>
           ) : undefined
         }
@@ -402,14 +470,26 @@ export default function DetailCaisse() {
           {peutGerer && (
             <div className="mt-2 flex flex-wrap gap-2">
               {joursRattrapage.map((j) => (
+                <div key={j} className="flex flex-wrap gap-2">
                 <button
-                  key={j}
                   type="button"
                   className="btn-secondary !py-1.5 text-xs"
                   onClick={() => ouvrirModaleCloture(j)}
                 >
                   Clôturer le {formatDate(j + 'T12:00:00')}
                 </button>
+                {(data.ouverturesCaisse ?? []).some(
+                  (o) => o.agenceId === employe.agenceId && o.journee === j,
+                ) && (
+                  <button
+                    type="button"
+                    className="btn-secondary !py-1.5 text-xs"
+                    onClick={() => void annulerOuverture(j)}
+                  >
+                    Annuler l’ouverture du {formatDate(j + 'T12:00:00')}
+                  </button>
+                )}
+                </div>
               ))}
             </div>
           )}

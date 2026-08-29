@@ -88,6 +88,24 @@ def list_journaux(
     return [C.serialize_journal(j) for j in db.query(m.JournalComptable).order_by(m.JournalComptable.code).all()]
 
 
+class JournalIn(BaseModel):
+    code: str
+    libelle: str
+
+
+@router.post("/journaux")
+def creer_journal(
+    body: JournalIn,
+    user: Annotated[dict[str, Any], Depends(require_compta_ecriture)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict[str, Any]:
+    C.ensure_comptabilite_seed(db)
+    err, j = C.creer_journal(db, body.code, body.libelle)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    return {"ok": True, "journal": C.serialize_journal(j) if j else None}
+
+
 class OuvrirExerciceBody(BaseModel):
     annee: int
 
@@ -133,12 +151,18 @@ def get_bilan(
     lignes = C.list_bilan(db, exercice_id)
     total_actif = sum(l["montant"] for l in lignes if l["sens"] == "actif")
     total_passif = sum(l["montant"] for l in lignes if l["sens"] == "passif")
+    ecr = (
+        db.query(m.EcritureComptable)
+        .filter_by(source_type="bilan_initial", source_id=exercice_id)
+        .first()
+    )
     return {
         "exercice": C.serialize_exercice(ex),
         "lignes": lignes,
         "totalActif": total_actif,
         "totalPassif": total_passif,
-        "equilibre": abs(total_actif - total_passif) < 0.005,
+        "equilibre": abs(total_actif - total_passif) < 0.005 and total_actif > 0,
+        "pieceOuverture": ecr.numero_piece if ecr else None,
     }
 
 
@@ -197,8 +221,9 @@ def list_ecritures(
             q = q.filter_by(exercice_id=ouvert.id)
     if journal_code:
         journal = C.journal_par_code(db, journal_code)
-        if journal:
-            q = q.filter_by(journal_id=journal.id)
+        if not journal:
+            return []
+        q = q.filter_by(journal_id=journal.id)
     if date_debut:
         q = q.filter(m.EcritureComptable.date >= date_debut)
     if date_fin:
@@ -307,15 +332,3 @@ def balance_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="balance-generale.csv"'},
     )
-
-
-@router.post("/sync-auto")
-def sync_auto(
-    user: Annotated[dict[str, Any], Depends(require_compta_ecriture)],
-    db: Annotated[Session, Depends(get_db)],
-) -> dict[str, Any]:
-    from ..repository import load_state
-
-    data = load_state(db, include_password_hashes=False)
-    C.sync_auto_from_state(db, data, user)
-    return {"ok": True}

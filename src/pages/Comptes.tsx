@@ -13,8 +13,10 @@ import {
 } from 'lucide-react'
 import { useStore } from '../store'
 import { type Compte, type TypeCompte } from '../types'
-import { formatDate, formatDateHeure, formatMontant, afficherNumeroClient } from '../utils'
+import { formatDate, formatDateHeure, formatMontant, afficherNumeroClient, texteAlerteCompteOuvert, texteAlerteDemandeOuverture, texteConfirmationOuvertureCompte } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
+import { RecapFraisOuvertureCompte } from '../components/ModaleClient'
+import { estAncienClient, fraisOuvertureComptePour } from '../metier'
 import {
   FicheOperationCompteDouble,
   type DonneesFicheOperationCompte,
@@ -97,7 +99,7 @@ export default function Comptes() {
           !q ||
           c.numero.toLowerCase().includes(q) ||
           (client &&
-            `${client.prenom} ${client.nom} ${client.codeClient} ${afficherNumeroClient(client.codeClient)}`
+            `${client.prenom} ${client.nom} ${client.codeClient ?? ''} ${afficherNumeroClient(client.codeClient)} ${client.codeClientBanque ?? ''}`
               .toLowerCase()
               .includes(q))
         )
@@ -114,6 +116,9 @@ export default function Comptes() {
       .filter((e) => !client?.agenceId || e.agenceId === client.agenceId)
       .sort((a, b) => a.nomComplet.localeCompare(b.nomComplet))
   }, [data.employes, data.clients, clientPourCompte])
+
+  const clientOuverture = data.clients.find((c) => c.id === clientPourCompte)
+  const fraisOuverture = fraisOuvertureComptePour(clientOuverture, fraisCompte, promoCompte)
 
   const demandesEnAttente = useMemo(
     () =>
@@ -163,7 +168,7 @@ export default function Comptes() {
       soldeAvant,
       soldeApres,
       clientNom: client ? `${client.prenom} ${client.nom}` : '—',
-      clientCode: client ? afficherNumeroClient(client.codeClient) : '—',
+      clientCode: client ? (client.codeClientBanque ?? afficherNumeroClient(client.codeClient)) : '—',
       clientTelephone: client?.telephone,
       caissierNom: employeConnecte?.nomComplet ?? '—',
       agenceNom: agence ? `${agence.code} — ${agence.nom}` : undefined,
@@ -266,9 +271,11 @@ export default function Comptes() {
                         {d.promotion ? ' (promo)' : ''}
                       </p>
                       <p className="text-xs text-slate-500">
-                        Caisse : {caissier?.nomComplet ?? '—'} — total{' '}
-                        {formatMontant(d.partSociale + d.droitAdhesion)} —{' '}
-                        {formatDateHeure(d.dateDemande)}
+                        Caisse : {caissier?.nomComplet ?? '—'} —{' '}
+                        {d.partSociale + d.droitAdhesion <= 0
+                          ? 'aucun frais (ancien)'
+                          : `total ${formatMontant(d.partSociale + d.droitAdhesion)}`}{' '}
+                        — {formatDateHeure(d.dateDemande)}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -280,17 +287,13 @@ export default function Comptes() {
                             const total = d.partSociale + d.droitAdhesion
                             const ok = await confirmer({
                               titre: 'Valider l’ouverture',
-                              message: `Confirmez l’encaissement de ${formatMontant(total)}. Le compte sera créé.`,
+                              message: texteConfirmationOuvertureCompte(total),
                               labelValider: 'Valider et créer',
                             })
                             if (!ok) return
                             const err = await validerOuvertureCompte(d.id)
                             if (err) await alerter('Validation impossible', err)
-                            else
-                              await alerter(
-                                'Compte ouvert',
-                                `Compte créé. Total encaissé : ${formatMontant(total)}.`,
-                              )
+                            else await alerter('Compte ouvert', texteAlerteCompteOuvert(total))
                           }}
                         >
                           Valider
@@ -487,7 +490,7 @@ export default function Comptes() {
               e.preventDefault()
               if (!clientPourCompte) return
               if (!caissierPourCompte) {
-                setErreur('Indiquez la caisse qui encaissera part sociale et droit d’adhésion.')
+                setErreur('Indiquez le caissier qui validera l’ouverture.')
                 return
               }
               const resultat = await ouvrirCompte(
@@ -501,7 +504,8 @@ export default function Comptes() {
                 await alerter('Demande impossible', resultat.erreur)
                 return
               }
-              const droit = promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion
+              const clientSel = data.clients.find((c) => c.id === clientPourCompte)
+              const frais = fraisOuvertureComptePour(clientSel, fraisCompte, promoCompte)
               const caissier = data.employes.find((x) => x.id === caissierPourCompte)
               setModaleOuverture(false)
               setClientPourCompte('')
@@ -510,11 +514,7 @@ export default function Comptes() {
               setErreur('')
               await alerter(
                 'Demande envoyée',
-                `Demande d’ouverture enregistrée.\n` +
-                  `Le compte sera créé après encaissement et validation par ${caissier?.nomComplet ?? 'le caissier'}.\n` +
-                  `Part sociale : ${formatMontant(fraisCompte.partSociale)}\n` +
-                  `Droit d'adhésion : ${formatMontant(droit)}\n` +
-                  `Total à encaisser : ${formatMontant(fraisCompte.partSociale + droit)}`,
+                texteAlerteDemandeOuverture(caissier?.nomComplet ?? 'le caissier', frais),
               )
             }}
             className="space-y-4"
@@ -547,17 +547,19 @@ export default function Comptes() {
                 <option value="">— Choisir un client —</option>
                 {clientsActifs().map((c) => (
                   <option key={c.id} value={c.id}>
-                    {afficherNumeroClient(c.codeClient)} — {c.prenom} {c.nom}
+                    {c.codeClientBanque ? `${c.codeClientBanque} · ` : ''}
+                    {c.zoneId ? `${afficherNumeroClient(c.codeClient)} — ` : ''}
+                    {c.prenom} {c.nom}
+                    {estAncienClient(c) ? ' (ancien)' : ''}
                   </option>
                 ))}
               </select>
               <p className="mt-1 text-xs text-slate-400">
-                Frais dus à chaque ouverture (part sociale + droit d’adhésion), encaissés en caisse après
-                validation.
+                Frais dus à chaque ouverture (part sociale + droit d’adhésion), sauf client ancien.
               </p>
             </div>
             <div>
-              <label className="label">Caisse (encaissement) *</label>
+              <label className="label">Caisse (validation) *</label>
               <select
                 className="input"
                 required
@@ -573,9 +575,10 @@ export default function Comptes() {
                 ))}
               </select>
               <p className="mt-1 text-xs text-slate-400">
-                Le compte n’est créé qu’après validation et encaissement par ce caissier.
+                Le compte n’est créé qu’après validation par ce caissier.
               </p>
             </div>
+            {!fraisOuverture.offerts && (
             <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
               <input
                 type="checkbox"
@@ -591,24 +594,8 @@ export default function Comptes() {
                 </span>
               </span>
             </label>
-            <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-700">
-              <p>
-                Part sociale (microfinance) : <strong>{formatMontant(fraisCompte.partSociale)}</strong>
-              </p>
-              <p>
-                Droit d’adhésion (sur le compte) :{' '}
-                <strong>
-                  {formatMontant(promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion)}
-                </strong>
-              </p>
-              <p className="mt-1 font-semibold">
-                Total caisse :{' '}
-                {formatMontant(
-                  fraisCompte.partSociale +
-                    (promoCompte ? fraisCompte.droitAdhesionPromo : fraisCompte.droitAdhesion),
-                )}
-              </p>
-            </div>
+            )}
+            <RecapFraisOuvertureCompte frais={fraisOuverture} />
             {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
             <div className="flex justify-end gap-2">
               <button

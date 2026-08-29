@@ -100,6 +100,116 @@ def migrate_carnets_unicite_numero_type(conn) -> None:
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_carnets_numero ON carnets (numero)"))
 
 
+def migrate_clients_numero_banque(conn) -> None:
+    """N° client banque (0001, 0002…) indépendant du n° tontine ZZxxxx."""
+    try:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(clients)")).fetchall()}
+    except Exception:  # noqa: BLE001
+        return
+    if "ordre_banque" not in cols:
+        conn.execute(text("ALTER TABLE clients ADD COLUMN ordre_banque INTEGER"))
+    if "code_client_banque" not in cols:
+        conn.execute(text("ALTER TABLE clients ADD COLUMN code_client_banque VARCHAR"))
+
+
+def migrate_clients_zone_nullable(conn) -> None:
+    """Client banque : agence obligatoire, zone / n° tontine optionnels."""
+    try:
+        info = conn.execute(text("PRAGMA table_info(clients)")).fetchall()
+    except Exception:  # noqa: BLE001
+        return
+    if not info:
+        return
+    cols = {row[1]: row for row in info}
+    if "zone_id" not in cols:
+        return
+    zone_nn = int(cols["zone_id"][3] or 0)
+    code_nn = int(cols.get("code_client", (0, 0, 0, 1))[3] or 0)
+    ordre_nn = int(cols.get("ordre_zone", (0, 0, 0, 1))[3] or 0)
+    if not zone_nn and not code_nn and not ordre_nn:
+        return
+    conn.execute(
+        text(
+            """
+            CREATE TABLE clients_new (
+                id VARCHAR PRIMARY KEY,
+                code_client VARCHAR,
+                agence_id VARCHAR,
+                zone_id VARCHAR,
+                ordre_zone INTEGER,
+                nom VARCHAR,
+                prenom VARCHAR,
+                sexe VARCHAR,
+                telephone VARCHAR,
+                email VARCHAR,
+                profession VARCHAR,
+                adresse VARCHAR,
+                piece_identite VARCHAR,
+                date_inscription VARCHAR,
+                actif BOOLEAN,
+                ordre_banque INTEGER,
+                code_client_banque VARCHAR,
+                UNIQUE (code_client)
+            )
+            """
+        )
+    )
+    has_banque = "ordre_banque" in cols
+    if has_banque:
+        conn.execute(
+            text(
+                """
+                INSERT INTO clients_new (
+                    id, code_client, agence_id, zone_id, ordre_zone,
+                    nom, prenom, sexe, telephone, email, profession, adresse,
+                    piece_identite, date_inscription, actif,
+                    ordre_banque, code_client_banque
+                )
+                SELECT
+                    id, NULLIF(code_client, ''), agence_id, NULLIF(zone_id, ''), ordre_zone,
+                    nom, prenom, sexe, telephone, email, profession, adresse,
+                    piece_identite, date_inscription, actif,
+                    ordre_banque, code_client_banque
+                FROM clients
+                """
+            )
+        )
+    else:
+        conn.execute(
+            text(
+                """
+                INSERT INTO clients_new (
+                    id, code_client, agence_id, zone_id, ordre_zone,
+                    nom, prenom, sexe, telephone, email, profession, adresse,
+                    piece_identite, date_inscription, actif
+                )
+                SELECT
+                    id, NULLIF(code_client, ''), agence_id, NULLIF(zone_id, ''), ordre_zone,
+                    nom, prenom, sexe, telephone, email, profession, adresse,
+                    piece_identite, date_inscription, actif
+                FROM clients
+                """
+            )
+        )
+    conn.execute(text("DROP TABLE clients"))
+    conn.execute(text("ALTER TABLE clients_new RENAME TO clients"))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_clients_agence_id ON clients (agence_id)"))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_clients_zone_id ON clients (zone_id)"))
+
+
+def migrate_clients_origine_tontine(conn) -> None:
+    """Client ancien (papier) : origine_tontine + reprise_papier sur les carnets."""
+    try:
+        cols_c = {row[1] for row in conn.execute(text("PRAGMA table_info(clients)")).fetchall()}
+        cols_k = {row[1] for row in conn.execute(text("PRAGMA table_info(carnets)")).fetchall()}
+    except Exception:  # noqa: BLE001
+        return
+    if "origine_tontine" not in cols_c:
+        conn.execute(text("ALTER TABLE clients ADD COLUMN origine_tontine VARCHAR DEFAULT 'nouveau'"))
+    if "reprise_papier" not in cols_k:
+        conn.execute(text("ALTER TABLE carnets ADD COLUMN reprise_papier BOOLEAN DEFAULT 0"))
+
+
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:

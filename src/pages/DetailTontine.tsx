@@ -10,12 +10,16 @@ import {
 } from 'lucide-react'
 import { NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
-import { CYCLES_PAR_CARNET, type JourneeCompteZone } from '../types'
+import { CYCLES_PAR_CARNET, PRIX_CARNET, type JourneeCompteZone } from '../types'
 import {
   aujourdHuiIso,
   CARNETS_RETRAIT_6_MOIS,
+  anneeCarnet,
+  cycleDansAnnee,
   dateCollecteParDefaut,
+  estPremierCycleRenouvellement,
   LIBELLES_CARNET,
+  libelleCycleCarnet,
   calculerMisesDepuisMontant,
   carreauxNets,
   eligibiliteRetraitCarnet,
@@ -23,6 +27,7 @@ import {
   joursCollecteSaisissables,
   moisDuCycle,
   montantComplementMise,
+  pcDueSurCycle,
   situationsCycles,
   type EtatCycle,
 } from '../metier'
@@ -183,7 +188,9 @@ export default function DetailTontine() {
       'Dépôt effectué',
       `Le dépôt de ${formatMontant(montant)} a été enregistré pour ${client.prenom} ${client.nom} (carnet ${carnet.numero}), collecte du ${libelleJourCollecte(dateCollecte, aujourdhui)}.` +
         (payeesActuel + (calcDepot?.ok ? calcDepot.nombreMises : 0) >= carnet.misesParCycle
-          ? `\n\n${moisDuCycle(carnet, avant).label} complet : passage automatique au mois suivant.`
+          ? cycleDansAnnee(avant) === CYCLES_PAR_CARNET
+            ? `\n\n${moisDuCycle(carnet, avant).label} complet : année de carnet terminée. Le prochain dépôt renouvelle le carnet (${formatMontant(PRIX_CARNET)}) et ouvre un nouveau cycle.`
+            : `\n\n${moisDuCycle(carnet, avant).label} complet : passage automatique au mois suivant.`
           : ''),
     )
     void apres
@@ -237,7 +244,9 @@ export default function DetailTontine() {
                     : !collecteOuverte
                       ? 'Saisissez d’abord le montant réel collecté (journée du jour ou journée antérieure encore ouverte)'
                       : payeesActuel >= carnet.misesParCycle
-                        ? 'Mois complet : le prochain dépôt passera au mois suivant'
+                        ? cycleDansAnnee(carnet.cycleActuel) === CYCLES_PAR_CARNET
+                          ? 'Année complète : le prochain dépôt renouvelle le carnet (300 F)'
+                          : 'Mois complet : le prochain dépôt passera au mois suivant'
                         : undefined
                 }
                 onClick={() => {
@@ -402,6 +411,7 @@ export default function DetailTontine() {
           </Link>
           <p className="text-sm text-slate-500">
             Mise {formatMontant(carnet.mise)} — ouvert le {formatDate(carnet.dateOuverture)}
+            {carnet.reprisePapier ? ' — carnet papier (P.C. offerte au cycle 1)' : ''}
           </p>
           {carnet.verrouille && (
             <span className="mt-1 inline-flex items-center rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-700">
@@ -427,9 +437,7 @@ export default function DetailTontine() {
       <div className="card mb-6">
         <h3 className="mb-3 font-semibold text-slate-900">
           Mois en cours — {moisActuel?.label}{' '}
-          <span className="font-normal text-slate-500">
-            (cycle {carnet.cycleActuel}/{CYCLES_PAR_CARNET})
-          </span>
+          <span className="font-normal text-slate-500">({libelleCycleCarnet(carnet.cycleActuel)})</span>
         </h3>
         <div className="mb-2 flex justify-between text-sm text-slate-600">
           <span>
@@ -444,8 +452,10 @@ export default function DetailTontine() {
           />
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          À {carnet.misesParCycle} carreaux, le compte passe automatiquement au mois suivant. Un retrait partiel
-          est possible sur le mois en cours ; le retrait total reste réservé aux mois passés.
+            À {carnet.misesParCycle} carreaux, le compte passe automatiquement au mois suivant. Après 12
+            mois, le carnet se renouvelle ({formatMontant(PRIX_CARNET)} + P.C. au premier dépôt), y compris
+            pour un client ancien. Un retrait partiel est possible sur le mois en cours ; le retrait total
+            reste réservé aux mois passés.
         </p>
         {carteRestreinte && !eligibilite.autorise && (
           <p className="mt-2 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-800">
@@ -463,8 +473,11 @@ export default function DetailTontine() {
         <div className="border-b border-slate-200 px-5 py-4">
           <h3 className="font-semibold text-slate-900">Mois (cycles) et état</h3>
           <p className="text-xs text-slate-500">
-            Chaque cycle correspond à un mois. Un mois soldé (retrait total hors P.C) apparaît grisé. P.C = 1 carreau
-            pour {NOM_APPLICATION}. Retrait partiel possible aussi sur le mois en cours.
+            Chaque cycle correspond à un mois. Un mois soldé (retrait total hors P.C) apparaît grisé
+            {carnet.reprisePapier
+              ? '. Cycle 1 : P.C. non prélevée (carnet papier) — les 31 carreaux sont au client.'
+              : `. P.C = 1 carreau pour ${NOM_APPLICATION}.`}{' '}
+            Retrait partiel possible aussi sur le mois en cours.
           </p>
         </div>
         <div className="divide-y divide-slate-100">
@@ -481,9 +494,10 @@ export default function DetailTontine() {
                     <span className={`text-base font-bold ${et.grise ? 'text-slate-500' : 'text-slate-900'}`}>
                       {et.moisLabel}
                     </span>
-                    <span className="text-xs text-slate-500">
-                      (cycle {et.cycle}/{CYCLES_PAR_CARNET})
-                    </span>
+                    <span className="text-xs text-slate-500">({libelleCycleCarnet(et.cycle)})</span>
+                    {estPremierCycleRenouvellement(et.cycle) && (
+                      <span className="badge bg-sky-100 text-sky-800">Renouvellement</span>
+                    )}
                     {et.estActuel && <span className="badge bg-brand-100 text-brand-700">En cours</span>}
                     {!et.estActuel && et.complet && !et.grise && (
                       <span className="badge bg-amber-100 text-amber-800">Mois passé — à retirer</span>
@@ -801,9 +815,23 @@ export default function DetailTontine() {
                 <span>Collecte du</span>
                 <span className="font-bold">{libelleJourCollecte(dateCollecte, aujourdhui)}</span>
               </div>
-              {payeesActuel === 0 && (
+              {estPremierCycleRenouvellement(carnet.cycleActuel) && payeesActuel === 0 && (
+                <p className="mt-2 text-xs text-amber-800">
+                  Renouvellement du carnet : {formatMontant(PRIX_CARNET)} à encaisser
+                  {anneeCarnet(carnet.cycleActuel) > 1
+                    ? ` (carnet ${anneeCarnet(carnet.cycleActuel)})`
+                    : ''}
+                  .
+                </p>
+              )}
+              {payeesActuel === 0 && pcDueSurCycle(carnet, carnet.cycleActuel) && (
                 <p className="mt-2 text-xs text-amber-800">
                   Dont 1 P.C ({formatMontant(carnet.mise)}) pour {NOM_APPLICATION}.
+                </p>
+              )}
+              {payeesActuel === 0 && !pcDueSurCycle(carnet, carnet.cycleActuel) && (
+                <p className="mt-2 text-xs text-amber-800">
+                  P.C. non prélevée sur ce cycle (carnet papier).
                 </p>
               )}
               {payeesActuel + calcDepot.nombreMises >= carnet.misesParCycle && (
