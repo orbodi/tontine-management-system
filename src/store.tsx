@@ -188,6 +188,7 @@ interface StoreApi {
     journee?: string,
   ) => Promise<{ erreur: string | null; operationsAnnulees?: number; comptesAnnules?: number }>
   alimenterCompteCaisse: (employeId: string, montant: number, note?: string) => Promise<string | null>
+  gelerCompteCaisse: (employeId: string, motif: string) => Promise<string | null>
   exporterSauvegardeCsv: () => Promise<void>
   importerSauvegardeCsv: (fichier: File) => Promise<string | null>
 }
@@ -514,6 +515,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       async alimenterCompteCaisse(employeId, montant, note) {
         const res = await muter('alimenterCompteCaisse', { employeId, montant, note })
+        return res.erreur ?? null
+      },
+      async gelerCompteCaisse(employeId, motif) {
+        const res = await muter('gelerCompteCaisse', { employeId, motif })
         return res.erreur ?? null
       },
       async exporterSauvegardeCsv() {

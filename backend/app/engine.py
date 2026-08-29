@@ -433,7 +433,24 @@ def consolider_caisses_par_agence(d: dict) -> bool:
 
         if agence_changed:
             changed = True
-            _recalculer_solde_compte_caisse(d, keeper["employeId"])
+            _recalculer_solde_compte_caisse(d, keeper["employeId"], 0.0)
+
+    tx_ids = {t["id"] for t in d.get("transactions") or []}
+    mvts = d.get("mouvementsCompteCaisse") or []
+    propres = [
+        m for m in mvts if not (m.get("transactionId") and m.get("transactionId") not in tx_ids)
+    ]
+    if len(propres) != len(mvts):
+        d["mouvementsCompteCaisse"] = propres
+        changed = True
+    for c in d.get("comptesCaisse") or []:
+        if not c.get("actif") or not c.get("employeId"):
+            continue
+        avant = float(c.get("solde") or 0)
+        d = _recalculer_solde_compte_caisse(d, c["employeId"], 0.0)
+        apres = next((x for x in d["comptesCaisse"] if x["id"] == c["id"]), None)
+        if apres and abs(float(apres.get("solde") or 0) - avant) > 0.005:
+            changed = True
 
     return changed
 
@@ -524,6 +541,62 @@ def _compte_caisse_operateur(d: dict, operateur_id: str, agence_id: str | None =
         d = _ouvrir_compte_caisse_si_besoin(d, op["id"])
         return d, M.compte_caisse_agence(d["comptesCaisse"], aid)
     return d, None
+
+
+def _journee_caisse_en_cours(d: dict, agence_id: str | None) -> str | None:
+    """Journée de caisse ouverte (non clôturée) de l'agence — aujourd'hui si plusieurs."""
+    if not agence_id:
+        return None
+    ouvertes = [
+        o["journee"]
+        for o in (d.get("ouverturesCaisse") or [])
+        if o.get("agenceId") == agence_id
+        and o.get("journee")
+        and not M.arret_caisse_agence(d.get("arretsCaisse") or [], agence_id, o["journee"])
+    ]
+    if not ouvertes:
+        return None
+    auj = M.aujourd_hui_iso()
+    return auj if auj in ouvertes else max(ouvertes)
+
+
+def _horodate_caisse_agence(d: dict, agence_id: str | None) -> str:
+    """Horodate une opération de caisse sur la journée ouverte (pas « maintenant »)."""
+    jour = _journee_caisse_en_cours(d, agence_id) or M.aujourd_hui_iso()
+    return M.horodater_sur_jour(jour)
+
+
+def _purger_mouvements_caisse_du_jour(
+    d: dict,
+    *,
+    compte_id: str,
+    jour: str,
+    tx_ids: set[str],
+    date_ouverture: str | None = None,
+) -> dict:
+    """Retire les mouvements du jour : par date, par transaction, et l'ajustement d'ouverture."""
+    date_ouv = (date_ouverture or "")[:10]
+
+    def _a_retirer(m: dict) -> bool:
+        if m.get("compteCaisseId") != compte_id:
+            return False
+        if m.get("type") == "gel":
+            return False
+        if m.get("transactionId") and m.get("transactionId") in tx_ids:
+            return True
+        md = M.jour_iso_depuis_date(m.get("date") or "")
+        if md == jour:
+            return True
+        if m.get("type") == "ouverture_journee" and (
+            m.get("journee") == jour or (date_ouv and md == date_ouv)
+        ):
+            return True
+        return False
+
+    d["mouvementsCompteCaisse"] = [
+        m for m in (d.get("mouvementsCompteCaisse") or []) if not _a_retirer(m)
+    ]
+    return d
 
 
 def _appliquer_tx_caisse(d: dict, tx: dict) -> dict:
@@ -1228,7 +1301,7 @@ def ouvrir_carnet(d, u, p):
     if suffixe_ordre_numero(numero) <= 0 or len(re.sub(r"\D", "", numero)) < 6:
         numero = numero_carnet(zone["code"], int(client.get("ordreZone") or 1))
     cid = uid()
-    date = M.maintenant()
+    date = _horodate_caisse_agence(d, zone["agenceId"])
     reprise = _origine_tontine(client.get("origineTontine")) == "ancien"
     d["carnets"].append(
         {
@@ -1485,7 +1558,7 @@ def retrait_cycle(d, u, p):
     err2 = _verif_solde_sortie(d, u, montant)
     if err2:
         return {"erreur": err2}
-    date = M.maintenant()
+    date = _horodate_caisse_agence(d, carnet.get("agenceId") or u.get("agenceId"))
     d["mises"].append(
         {
             "id": uid(),
@@ -1590,25 +1663,17 @@ def _retirer_txs_et_mouvements_caisse(d: dict, tx_ids: set[str]) -> dict:
         if m.get("transactionId") in tx_ids:
             comptes_ids.add(m.get("compteCaisseId") or "")
     comptes_ids.discard("")
-    initials: dict[str, tuple[str, float | None]] = {}
-    for cid in comptes_ids:
-        compte = next((c for c in d.get("comptesCaisse") or [] if c["id"] == cid), None)
-        if not compte:
-            continue
-        emp_id = compte.get("employeId") or ""
-        initial = _solde_caisse_avant_premier_mouvement(d, emp_id) if emp_id else float(compte.get("solde") or 0)
-        initials[cid] = (emp_id, initial)
     d["mouvementsCompteCaisse"] = [
         m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("transactionId") not in tx_ids
     ]
     d["transactions"] = [t for t in (d.get("transactions") or []) if t.get("id") not in tx_ids]
-    for cid, (emp_id, initial) in initials.items():
-        restants = [m for m in d["mouvementsCompteCaisse"] if m.get("compteCaisseId") == cid]
-        if restants and emp_id:
-            d = _recalculer_solde_compte_caisse(d, emp_id, initial)
+    for cid in comptes_ids:
+        compte = next((c for c in d.get("comptesCaisse") or [] if c["id"] == cid), None)
+        emp_id = (compte or {}).get("employeId") or ""
+        if emp_id:
+            d = _recalculer_solde_compte_caisse(d, emp_id, 0.0)
         else:
-            solde = float(initial) if initial is not None else 0.0
-            d["comptesCaisse"] = [{**c, "solde": solde} if c["id"] == cid else c for c in d["comptesCaisse"]]
+            d["comptesCaisse"] = [{**c, "solde": 0.0} if c["id"] == cid else c for c in d["comptesCaisse"]]
     return d
 
 
@@ -1747,7 +1812,7 @@ def _appliquer_ouverture_compte_validee(d, operateur, demande):
     ordre = int(d["compteurs"].get("compte", 0)) + 1
     cid = uid()
     numero = numero_compte_solde(ordre)
-    date = M.maintenant()
+    date = _horodate_caisse_agence(d, operateur.get("agenceId"))
     d["compteurs"] = {**d["compteurs"], "compte": ordre}
     d["comptes"].append(
         {
@@ -1895,7 +1960,7 @@ def deposer_compte(d, u, p):
         return {"erreur": "Compte introuvable."}
     if compte.get("verrouille"):
         return {"erreur": "Ce compte est verrouille."}
-    date = M.maintenant()
+    date = _horodate_caisse_agence(d, u.get("agenceId"))
     d["comptes"] = [
         {**c, "solde": c["solde"] + montant} if c["id"] == compte_id else c for c in d["comptes"]
     ]
@@ -1937,7 +2002,7 @@ def retirer_compte(d, u, p):
     err2 = _verif_solde_sortie(d, u, montant)
     if err2:
         return {"erreur": err2}
-    date = M.maintenant()
+    date = _horodate_caisse_agence(d, u.get("agenceId"))
     d["comptes"] = [
         {**c, "solde": c["solde"] - montant} if c["id"] == compte_id else c for c in d["comptes"]
     ]
@@ -2020,7 +2085,7 @@ def approuver_credit(d, u, p):
     err = _verif_solde_sortie(d, u, credit["montant"])
     if err:
         return {"erreur": err}
-    date = M.maintenant()
+    date = _horodate_caisse_agence(d, u.get("agenceId"))
     d["credits"] = [
         {**c, "statut": "en_cours", "dateOctroi": date} if c["id"] == credit_id else c for c in d["credits"]
     ]
@@ -2060,7 +2125,7 @@ def rembourser_credit(d, u, p):
     credit = next((c for c in d["credits"] if c["id"] == credit_id), None)
     if not credit or credit["statut"] not in ("en_cours", "en_retard"):
         return {"erreur": "Credit introuvable."}
-    date = M.maintenant()
+    date = _horodate_caisse_agence(d, u.get("agenceId"))
     total_du = credit["montant"] * (1 + credit["tauxInteret"] / 100)
     deja = sum(r["montant"] for r in d["remboursements"] if r["creditId"] == credit_id)
     solde_apres = total_du - deja - montant
@@ -2158,7 +2223,7 @@ def alimenter_compte_caisse(d, u, p):
     d, compte = _compte_caisse_operateur(copy.deepcopy(d), cible["id"], cible["agenceId"])
     if not compte:
         return {"erreur": "Compte caisse introuvable."}
-    date = M.maintenant()
+    date = _horodate_caisse_agence(d, cible["agenceId"])
     solde_apres = compte["solde"] + montant
     mouvement = {
         "id": uid(),
@@ -2178,6 +2243,49 @@ def alimenter_compte_caisse(d, u, p):
     ]
     d["mouvementsCompteCaisse"] = [mouvement, *d["mouvementsCompteCaisse"]]
     return (None, d, {})
+
+
+def geler_compte_caisse(d, u, p):
+    """Admin : remet le solde de la caisse à zéro (retrait des espèces du compte)."""
+    if not _est_admin(u):
+        return {"erreur": "Seul l'administrateur peut geler une caisse."}
+    employe_id = p.get("employeId") or p.get("cibleEmployeId")
+    motif = (p.get("motif") or p.get("note") or "").strip()
+    if not employe_id:
+        return {"erreur": "Caissier non precise."}
+    if not motif:
+        return {"erreur": "Indiquez le motif du gel."}
+    cible = next((e for e in d["employes"] if e["id"] == employe_id and e.get("actif")), None)
+    if not cible:
+        return {"erreur": "Employe introuvable."}
+    if cible.get("role") == "chef_agence":
+        return {"erreur": "Le chef d'agence n'a pas de caisse."}
+    d, compte = _compte_caisse_operateur(copy.deepcopy(d), cible["id"], cible["agenceId"])
+    if not compte:
+        return {"erreur": "Compte caisse introuvable."}
+    solde = float(compte.get("solde") or 0)
+    if abs(solde) < 0.005:
+        return {"erreur": "Le solde de cette caisse est déjà à zéro."}
+    if _journee_caisse_en_cours(d, cible["agenceId"]):
+        return {"erreur": "Clôturez ou annulez d'abord la journée ouverte avant de geler la caisse."}
+    montant = abs(solde)
+    date = M.maintenant()
+    mouvement = {
+        "id": uid(),
+        "compteCaisseId": compte["id"],
+        "employeId": cible["id"],
+        "type": "gel",
+        "montant": montant,
+        "sens": "debit" if solde > 0 else "credit",
+        "soldeApres": 0.0,
+        "date": date,
+        "description": f"Gel de caisse — solde remis à zéro ({motif})",
+        "operateurId": u["id"],
+        "operateurNom": u["nomComplet"],
+    }
+    d["mouvementsCompteCaisse"] = [mouvement, *d["mouvementsCompteCaisse"]]
+    d["comptesCaisse"] = [{**c, "solde": 0.0} if c["id"] == compte["id"] else c for c in d["comptesCaisse"]]
+    return (None, d, {"soldeAvant": solde})
 
 
 def ouvrir_journee_caisse(d, u, p):
@@ -2242,7 +2350,8 @@ def ouvrir_journee_caisse(d, u, p):
             "montant": abs(delta),
             "sens": "credit" if delta >= 0 else "debit",
             "soldeApres": solde_ouverture,
-            "date": date,
+            "date": M.horodater_sur_jour(jour),
+            "journee": jour,
             "description": f"Ouverture de caisse — solde saisi {solde_ouverture} FCFA",
             "operateurId": u["id"],
             "operateurNom": u["nomComplet"],
@@ -2255,14 +2364,28 @@ def ouvrir_journee_caisse(d, u, p):
 
 
 def _txs_caisse_du_jour(d: dict, agence_id: str, jour: str) -> list[dict]:
+    """Opérations de la journée, plus celles datées aujourd'hui si c'est la seule caisse ouverte."""
     op_ids = M.operateurs_caisse_agence(d.get("employes") or [], agence_id)
-    return [
-        t
-        for t in d.get("transactions") or []
-        if M.est_operation_caisse(t.get("type") or "")
-        and M.jour_iso_depuis_date(t.get("date") or "") == jour
-        and (t.get("agenceId") == agence_id or t.get("operateurId") in op_ids)
-    ]
+    auj = M.aujourd_hui_iso()
+    autres_ouvertes = {
+        o["journee"]
+        for o in (d.get("ouverturesCaisse") or [])
+        if o.get("agenceId") == agence_id
+        and o.get("journee")
+        and o.get("journee") != jour
+        and not M.arret_caisse_agence(d.get("arretsCaisse") or [], agence_id, o["journee"])
+    }
+    inclure_aujourdhui = auj not in autres_ouvertes and jour != auj
+    out = []
+    for t in d.get("transactions") or []:
+        if not M.est_operation_caisse(t.get("type") or ""):
+            continue
+        if not (t.get("agenceId") == agence_id or t.get("operateurId") in op_ids):
+            continue
+        tj = M.jour_iso_depuis_date(t.get("date") or "")
+        if tj == jour or (inclure_aujourdhui and tj == auj):
+            out.append(t)
+    return out
 
 
 def annuler_ouverture_journee_caisse(d, u, p):
@@ -2287,6 +2410,8 @@ def annuler_ouverture_journee_caisse(d, u, p):
 
     d = copy.deepcopy(d)
     txs = _txs_caisse_du_jour(d, agence_id, jour)
+    jours = {jour} | {M.jour_iso_depuis_date(t.get("date") or "") for t in txs}
+    jours.discard("")
     types_tontine = {
         "mise_tontine",
         "commission_tontine",
@@ -2305,7 +2430,7 @@ def annuler_ouverture_journee_caisse(d, u, p):
                     x
                     for x in d.get("carnets") or []
                     if x.get("clientId") == tx.get("clientId")
-                    and M.jour_iso_depuis_date(x.get("dateOuverture") or "") == jour
+                    and M.jour_iso_depuis_date(x.get("dateOuverture") or "") in jours
                 ),
                 None,
             )
@@ -2340,7 +2465,7 @@ def annuler_ouverture_journee_caisse(d, u, p):
                 mi
                 for mi in d.get("mises") or []
                 if mi.get("carnetId") in carnets_agence
-                and M.jour_iso_depuis_date(mi.get("date") or "") == jour
+                and M.jour_iso_depuis_date(mi.get("date") or "") in jours
                 and int(mi.get("nombreMises") or 0) == 0
                 and abs(float(mi.get("montant") or 0) - montant_tx) < 0.005
             ),
@@ -2358,14 +2483,14 @@ def annuler_ouverture_journee_caisse(d, u, p):
         for mi in d.get("mises") or []
         if not (
             mi.get("carnetId") in carnets_agence
-            and M.jour_iso_depuis_date(mi.get("date") or "") == jour
+            and M.jour_iso_depuis_date(mi.get("date") or "") in jours
         )
     ]
     carnets_touches = {
         mi.get("carnetId")
         for mi in d.get("mises") or []
         if mi.get("carnetId") in carnets_agence
-        and M.jour_iso_depuis_date(mi.get("date") or "") == jour
+        and M.jour_iso_depuis_date(mi.get("date") or "") in jours
     }
     d["mises"] = mises_gardees
     for cid in carnets_touches:
@@ -2376,7 +2501,7 @@ def annuler_ouverture_journee_caisse(d, u, p):
     for ca in d.get("carnets") or []:
         if (
             ca.get("agenceId") == agence_id
-            and M.jour_iso_depuis_date(ca.get("dateOuverture") or "") == jour
+            and M.jour_iso_depuis_date(ca.get("dateOuverture") or "") in jours
             and not any(mi.get("carnetId") == ca["id"] for mi in d.get("mises") or [])
         ):
             continue
@@ -2388,7 +2513,7 @@ def annuler_ouverture_journee_caisse(d, u, p):
     remb_gardes = []
     credits_a_rouvrir: set[str] = set()
     for r in d.get("remboursements") or []:
-        if M.jour_iso_depuis_date(r.get("date") or "") != jour:
+        if M.jour_iso_depuis_date(r.get("date") or "") not in jours:
             remb_gardes.append(r)
             continue
         cred = credits_par_id.get(r.get("creditId") or "")
@@ -2412,7 +2537,7 @@ def annuler_ouverture_journee_caisse(d, u, p):
     # Octrois du jour : crédit revient en attente
     d["credits"] = [
         {**c, "statut": "en_attente", "dateOctroi": None}
-        if M.jour_iso_depuis_date(c.get("dateOctroi") or "") == jour
+        if M.jour_iso_depuis_date(c.get("dateOctroi") or "") in jours
         and any(
             t.get("type") == "octroi_credit" and t.get("clientId") == c.get("clientId") for t in txs
         )
@@ -2429,13 +2554,13 @@ def annuler_ouverture_journee_caisse(d, u, p):
         for mv in d.get("mouvements") or []
         if not (
             mv.get("compteId") in ids_comptes
-            and M.jour_iso_depuis_date(mv.get("date") or "") == jour
+            and M.jour_iso_depuis_date(mv.get("date") or "") in jours
         )
     ]
     comptes_ouverts_jour = [
         c["id"]
         for c in comptes_agence
-        if M.jour_iso_depuis_date(c.get("dateOuverture") or "") == jour
+        if M.jour_iso_depuis_date(c.get("dateOuverture") or "") in jours
     ]
     comptes_restants = []
     comptes_supprimes: set[str] = set()
@@ -2474,30 +2599,31 @@ def annuler_ouverture_journee_caisse(d, u, p):
     # Transactions du jour
     d["transactions"] = [t for t in d.get("transactions") or [] if t.get("id") not in tx_ids]
 
-    # Mouvements de caisse du jour + recalcul du solde
+    # Mouvements de caisse du jour + recalcul du solde (somme des mouvements restants, depuis 0)
     titulaire_id = ouverture.get("employeId") or cible["id"]
     compte_caisse = M.compte_caisse_agence(d.get("comptesCaisse") or [], agence_id) or M.compte_caisse_de(
         d.get("comptesCaisse") or [], titulaire_id
     )
-    solde_initial = _solde_caisse_avant_premier_mouvement(d, titulaire_id)
     if compte_caisse:
-        cid = compte_caisse["id"]
+        for j in jours:
+            d = _purger_mouvements_caisse_du_jour(
+                d,
+                compte_id=compte_caisse["id"],
+                jour=j,
+                tx_ids=tx_ids,
+                date_ouverture=ouverture.get("dateOuverture") if j == jour else None,
+            )
+        restants_tx = {t["id"] for t in d.get("transactions") or []}
         d["mouvementsCompteCaisse"] = [
             m
-            for m in d.get("mouvementsCompteCaisse") or []
+            for m in (d.get("mouvementsCompteCaisse") or [])
             if not (
-                m.get("compteCaisseId") == cid
-                and M.jour_iso_depuis_date(m.get("date") or "") == jour
+                m.get("compteCaisseId") == compte_caisse["id"]
+                and m.get("transactionId")
+                and m.get("transactionId") not in restants_tx
             )
         ]
-        restants = [m for m in d["mouvementsCompteCaisse"] if m.get("compteCaisseId") == cid]
-        if restants:
-            d = _recalculer_solde_compte_caisse(d, titulaire_id, solde_initial)
-        else:
-            solde = float(solde_initial) if solde_initial is not None else 0.0
-            d["comptesCaisse"] = [
-                {**c, "solde": solde} if c["id"] == cid else c for c in d["comptesCaisse"]
-            ]
+        d = _recalculer_solde_compte_caisse(d, titulaire_id, 0.0)
 
     d["ouverturesCaisse"] = [
         o
@@ -2666,7 +2792,7 @@ def annuler_cloture_caisse(d, u, p):
             {**c, "cumulManquant": cm, "cumulSurplus": cs} if c["id"] == compte["id"] else c
             for c in d["comptesCaisse"]
         ]
-        d = _recalculer_solde_compte_caisse(d, cible["id"])
+        d = _recalculer_solde_compte_caisse(d, cible["id"], 0.0)
 
     for z in d.get("zones") or []:
         if z.get("agenceId") == cible["agenceId"]:
@@ -2761,7 +2887,7 @@ def _recalculer_solde_compte_client(d: dict, compte_id: str) -> dict:
 
 
 def _recalculer_solde_compte_caisse(d: dict, employe_id: str, solde_initial: float | None = None) -> dict:
-    """Recalcule solde + soldeApres de la caisse à partir de la chaîne des mouvements."""
+    """Recalcule solde + soldeApres : somme des mouvements restants (départ 0, pas d'écart fantôme)."""
     compte = M.compte_caisse_pour_employe(d.get("comptesCaisse") or [], employe_id, d.get("employes") or [])
     if not compte:
         return d
@@ -2769,8 +2895,6 @@ def _recalculer_solde_compte_caisse(d: dict, employe_id: str, solde_initial: flo
         [m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("compteCaisseId") == compte["id"]],
         key=lambda x: (x.get("date") or "", x.get("id") or ""),
     )
-    if not mvts:
-        return d
 
     def _delta(m: dict) -> float:
         mt = float(m.get("montant") or 0)
@@ -2781,11 +2905,12 @@ def _recalculer_solde_compte_caisse(d: dict, employe_id: str, solde_initial: flo
             return -mt
         return mt if "entree" in (m.get("type") or "") else -mt
 
-    if solde_initial is not None:
-        solde = float(solde_initial)
-    else:
-        # Déduit le solde avant le 1er mouvement
-        solde = float(mvts[0].get("soldeApres") or 0) - _delta(mvts[0])
+    solde = 0.0 if solde_initial is None else float(solde_initial)
+    if not mvts:
+        d["comptesCaisse"] = [
+            {**c, "solde": solde} if c["id"] == compte["id"] else c for c in d["comptesCaisse"]
+        ]
+        return d
 
     nouveaux = []
     for m in mvts:
@@ -2802,29 +2927,6 @@ def _recalculer_solde_compte_caisse(d: dict, employe_id: str, solde_initial: flo
         {**c, "solde": solde} if c["id"] == compte["id"] else c for c in d["comptesCaisse"]
     ]
     return d
-
-
-def _solde_caisse_avant_premier_mouvement(d: dict, employe_id: str) -> float | None:
-    compte = M.compte_caisse_pour_employe(d.get("comptesCaisse") or [], employe_id, d.get("employes") or [])
-    if not compte:
-        return None
-    mvts = sorted(
-        [m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("compteCaisseId") == compte["id"]],
-        key=lambda x: (x.get("date") or "", x.get("id") or ""),
-    )
-    if not mvts:
-        return float(compte.get("solde") or 0)
-
-    def _delta(m: dict) -> float:
-        mt = float(m.get("montant") or 0)
-        sens = m.get("sens")
-        if sens == "credit":
-            return mt
-        if sens == "debit":
-            return -mt
-        return mt if "entree" in (m.get("type") or "") else -mt
-
-    return float(mvts[0].get("soldeApres") or 0) - _delta(mvts[0])
 
 
 def _trouver_mouvement_compte(
@@ -3173,7 +3275,6 @@ def corriger_montant_transaction(d, u, p):
     if M.est_operation_caisse(typ) and tx.get("operateurId"):
         d, compte_caisse = _compte_caisse_operateur(d, tx["operateurId"], tx.get("agenceId"))
         titulaire = (compte_caisse or {}).get("employeId") or tx["operateurId"]
-        solde_initial = _solde_caisse_avant_premier_mouvement(d, titulaire)
         delta_nouveau = M.delta_solde_operation_caisse(typ, nouveau)
         mvt_caisse = next(
             (m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("transactionId") == tx_id),
@@ -3212,7 +3313,7 @@ def corriger_montant_transaction(d, u, p):
                     },
                     *d["mouvementsCompteCaisse"],
                 ]
-        d = _recalculer_solde_compte_caisse(d, titulaire, solde_initial)
+        d = _recalculer_solde_compte_caisse(d, titulaire, 0.0)
         compte_caisse = M.compte_caisse_pour_employe(
             d["comptesCaisse"], tx["operateurId"], d.get("employes") or []
         )
@@ -3280,6 +3381,7 @@ ACTIONS = {
     "supprimerEmploye": supprimer_employe,
     "basculerActifEmploye": basculer_actif_employe,
     "alimenterCompteCaisse": alimenter_compte_caisse,
+    "gelerCompteCaisse": geler_compte_caisse,
     "ouvrirJourneeCaisse": ouvrir_journee_caisse,
     "annulerOuvertureJourneeCaisse": annuler_ouverture_journee_caisse,
     "arreterCaisse": arreter_caisse,

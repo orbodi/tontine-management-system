@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Banknote, DoorOpen, Scale, Undo2 } from 'lucide-react'
+import { ArrowLeft, Banknote, DoorOpen, Scale, Snowflake, Undo2 } from 'lucide-react'
 import { useStore } from '../store'
 import {
   aujourdHuiIso,
@@ -49,6 +49,7 @@ export default function DetailCaisse() {
     arreterCaisse,
     annulerClotureCaisse,
     alimenterCompteCaisse,
+    gelerCompteCaisse,
     regulariserCumulCompteCaisse,
   } = useStore()
   const { alerter, confirmer } = useConfirmation()
@@ -66,6 +67,10 @@ export default function DetailCaisse() {
   const [montantRegulariser, setMontantRegulariser] = useState('')
   const [motifRegulariser, setMotifRegulariser] = useState('')
   const [erreurRegulariser, setErreurRegulariser] = useState('')
+  const [modaleGel, setModaleGel] = useState(false)
+  const [motifGel, setMotifGel] = useState('')
+  const [confirmationGel, setConfirmationGel] = useState('')
+  const [erreurGel, setErreurGel] = useState('')
   const [jourCibleCloture, setJourCibleCloture] = useState(aujourdHuiIso)
 
   const employe = data.employes.find((e) => e.id === employeId)
@@ -332,6 +337,32 @@ export default function DetailCaisse() {
     )
   }
 
+  const gelConfirme = confirmationGel.trim().toLowerCase() === 'je confirme'
+
+  const validerGel = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!employe || !gelConfirme) return
+    setErreurGel('')
+    const motif = motifGel.trim()
+    if (!motif) {
+      setErreurGel('Indiquez le motif du gel.')
+      return
+    }
+    const solde = compteCaisse?.solde ?? 0
+    const err = await gelerCompteCaisse(employe.id, motif)
+    if (err) {
+      setErreurGel(err)
+      return
+    }
+    setModaleGel(false)
+    setMotifGel('')
+    setConfirmationGel('')
+    await alerter(
+      'Caisse gelée',
+      `Le solde du compte caisse a été remis à zéro (${formatMontant(solde)}).`,
+    )
+  }
+
   const validerRegularisation = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!employe) return
@@ -410,6 +441,21 @@ export default function DetailCaisse() {
                 <Banknote className="h-4 w-4" />
                 Alimenter
               </button>
+              {estAdmin && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setMotifGel('')
+                    setConfirmationGel('')
+                    setErreurGel('')
+                    setModaleGel(true)
+                  }}
+                >
+                  <Snowflake className="h-4 w-4" />
+                  Geler
+                </button>
+              )}
               {peutOuvrir && (
                 <button
                   type="button"
@@ -767,6 +813,69 @@ export default function DetailCaisse() {
               </button>
               <button type="submit" className="btn-primary">
                 Valider la clôture
+              </button>
+            </div>
+          </form>
+        </Modale>
+      )}
+
+      {estAdmin && (
+        <Modale
+          titre={`Geler la caisse — ${employe.nomComplet}`}
+          ouverte={modaleGel}
+          onFermer={() => setModaleGel(false)}
+        >
+          <form onSubmit={validerGel} className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Remet le solde du compte caisse à zéro (retrait des espèces). Réservé à
+              l’administrateur. Une journée ouverte doit d’abord être clôturée ou annulée.
+            </p>
+            <div className="rounded-xl bg-rose-50 p-3 text-sm ring-1 ring-rose-100">
+              <div className="flex justify-between">
+                <span className="text-rose-700">Solde actuel</span>
+                <span className="font-bold text-rose-900">
+                  {formatMontant(compteCaisse?.solde ?? 0)}
+                </span>
+              </div>
+              <div className="mt-1 flex justify-between text-xs text-rose-700/80">
+                <span>Après le gel</span>
+                <span>0 FCFA</span>
+              </div>
+            </div>
+            <div>
+              <label className="label">Motif *</label>
+              <input
+                className="input"
+                required
+                autoFocus
+                value={motifGel}
+                onChange={(e) => setMotifGel(e.target.value)}
+                placeholder="Ex. Remise en banque, inventaire, fin de période"
+              />
+            </div>
+            <div>
+              <label className="label">
+                Pour confirmer, saisissez <span className="font-semibold">je confirme</span>
+              </label>
+              <input
+                className="input"
+                autoComplete="off"
+                value={confirmationGel}
+                onChange={(e) => setConfirmationGel(e.target.value)}
+                placeholder="je confirme"
+              />
+            </div>
+            {erreurGel && <p className="text-sm text-rose-600">{erreurGel}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-secondary" onClick={() => setModaleGel(false)}>
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="btn-primary disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                disabled={!gelConfirme}
+              >
+                Valider
               </button>
             </div>
           </form>

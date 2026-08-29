@@ -311,6 +311,7 @@ export type TypeMouvementCaisse =
   | 'sortie_operation'
   | 'ajustement_arret'
   | 'ouverture_journee'
+  | 'gel'
 
 export interface MouvementCompteCaisse {
   id: string
