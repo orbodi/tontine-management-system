@@ -30,81 +30,15 @@ export const formulaireClientVide: FormulaireClient = {
   origineTontine: 'nouveau',
 }
 
-export function ChoixOrigineClient({
-  valeur,
-  onChange,
-  name = 'origineTontine',
-}: {
-  valeur: OrigineTontine
-  onChange: (v: OrigineTontine) => void
-  name?: string
-}) {
-  return (
-    <div>
-      <label className="label">Type de client *</label>
-      <div className="grid grid-cols-2 gap-2">
-        <label
-          className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
-            valeur === 'nouveau'
-              ? 'border-brand-400 bg-brand-50 text-brand-900'
-              : 'border-slate-200 bg-white text-slate-700'
-          }`}
-        >
-          <input
-            type="radio"
-            className="mt-0.5"
-            name={name}
-            checked={valeur === 'nouveau'}
-            onChange={() => onChange('nouveau')}
-          />
-          <span>
-            <span className="font-medium">Nouveau</span>
-            <span className="mt-0.5 block text-xs text-slate-500">
-              Carnet, P.C., part sociale et adhésion
-            </span>
-          </span>
-        </label>
-        <label
-          className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
-            valeur === 'ancien'
-              ? 'border-amber-400 bg-amber-50 text-amber-950'
-              : 'border-slate-200 bg-white text-slate-700'
-          }`}
-        >
-          <input
-            type="radio"
-            className="mt-0.5"
-            name={name}
-            checked={valeur === 'ancien'}
-            onChange={() => onChange('ancien')}
-          />
-          <span>
-            <span className="font-medium">Ancien (papier)</span>
-            <span className="mt-0.5 block text-xs text-slate-500">
-              Pas de 300 F, P.C. 1er cycle, part sociale ni adhésion
-            </span>
-          </span>
-        </label>
-      </div>
-      {valeur === 'ancien' && (
-        <p className="mt-1.5 text-xs text-amber-800">
-          Déjà client sur le papier : pas de vente de carnet, pas de P.C. au premier cycle dans
-          l’app, pas de part sociale ni de droit d’adhésion.
-        </p>
-      )}
-    </div>
-  )
-}
-
 export function RecapFraisOuvertureCompte({
   frais,
 }: {
-  frais: { partSociale: number; droitAdhesion: number; total: number; offerts: boolean }
+  frais: { partSociale: number; droitAdhesion: number; total: number }
 }) {
-  if (frais.offerts) {
+  if (frais.total <= 0) {
     return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-        Client ancien : pas de part sociale ni de droit d’adhésion.
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+        Aucun frais coché : le compte s’ouvrira sans encaissement.
       </div>
     )
   }
@@ -112,12 +46,82 @@ export function RecapFraisOuvertureCompte({
     <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
       <p className="font-medium text-slate-900">À encaisser en caisse</p>
       <ul className="mt-2 space-y-1 text-xs">
-        <li>
-          Part sociale (microfinance) : {formatMontant(frais.partSociale)}
-        </li>
-        <li>Droit d’adhésion (crédité sur le compte) : {formatMontant(frais.droitAdhesion)}</li>
+        {frais.partSociale > 0 && (
+          <li>Part sociale (microfinance) : {formatMontant(frais.partSociale)}</li>
+        )}
+        {frais.droitAdhesion > 0 && (
+          <li>Droit d’adhésion (crédité sur le compte) : {formatMontant(frais.droitAdhesion)}</li>
+        )}
         <li className="font-semibold text-slate-900">Total : {formatMontant(frais.total)}</li>
       </ul>
+    </div>
+  )
+}
+
+export function CasesFraisOuvertureCompte({
+  tarifs,
+  payerPartSociale,
+  onPayerPartSociale,
+  payerAdhesion,
+  onPayerAdhesion,
+  promo,
+  onPromo,
+}: {
+  tarifs: { partSociale: number; droitAdhesion: number; droitAdhesionPromo: number }
+  payerPartSociale: boolean
+  onPayerPartSociale: (v: boolean) => void
+  payerAdhesion: boolean
+  onPayerAdhesion: (v: boolean) => void
+  promo: boolean
+  onPromo: (v: boolean) => void
+}) {
+  const montantAdhesion = promo ? tarifs.droitAdhesionPromo : tarifs.droitAdhesion
+  return (
+    <div className="space-y-2">
+      <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={payerPartSociale}
+          onChange={(e) => onPayerPartSociale(e.target.checked)}
+        />
+        <span>
+          <span className="font-medium text-slate-900">Part sociale</span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            {formatMontant(tarifs.partSociale)} — versée à la microfinance
+          </span>
+        </span>
+      </label>
+      <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={payerAdhesion}
+          onChange={(e) => onPayerAdhesion(e.target.checked)}
+        />
+        <span>
+          <span className="font-medium text-slate-900">Droit d’adhésion</span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            {formatMontant(montantAdhesion)} — crédité sur le compte
+          </span>
+        </span>
+      </label>
+      {payerAdhesion && (
+        <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={promo}
+            onChange={(e) => onPromo(e.target.checked)}
+          />
+          <span>
+            <span className="font-medium text-slate-900">Promotion — droit d’adhésion réduit</span>
+            <span className="mt-0.5 block text-xs text-slate-500">
+              {formatMontant(tarifs.droitAdhesionPromo)} au lieu de {formatMontant(tarifs.droitAdhesion)}
+            </span>
+          </span>
+        </label>
+      )}
     </div>
   )
 }
@@ -265,12 +269,6 @@ export function ModaleClient({
             </p>
           )}
         </div>
-      )}
-      {modeBanque && (
-        <ChoixOrigineClient
-          valeur={form.origineTontine}
-          onChange={(origineTontine) => setForm((f) => ({ ...f, origineTontine }))}
-        />
       )}
       <div className="grid grid-cols-2 gap-3">
         <div>

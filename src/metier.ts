@@ -333,19 +333,18 @@ export function estAncienClient(client: Pick<Client, 'origineTontine'> | undefin
 export const estAncienClientTontine = estAncienClient
 
 export function fraisOuvertureComptePour(
-  client: Pick<Client, 'origineTontine'> | undefined,
   tarifs: { partSociale: number; droitAdhesion: number; droitAdhesionPromo: number },
   promo: boolean,
-): { partSociale: number; droitAdhesion: number; total: number; offerts: boolean } {
-  if (estAncienClient(client)) {
-    return { partSociale: 0, droitAdhesion: 0, total: 0, offerts: true }
-  }
-  const droit = promo ? tarifs.droitAdhesionPromo : tarifs.droitAdhesion
+  options?: { payerPartSociale?: boolean; payerAdhesion?: boolean },
+): { partSociale: number; droitAdhesion: number; total: number } {
+  const payerPartSociale = options?.payerPartSociale !== false
+  const payerAdhesion = options?.payerAdhesion !== false
+  const partSociale = payerPartSociale ? tarifs.partSociale : 0
+  const droitAdhesion = payerAdhesion ? (promo ? tarifs.droitAdhesionPromo : tarifs.droitAdhesion) : 0
   return {
-    partSociale: tarifs.partSociale,
-    droitAdhesion: droit,
-    total: tarifs.partSociale + droit,
-    offerts: false,
+    partSociale,
+    droitAdhesion,
+    total: partSociale + droitAdhesion,
   }
 }
 

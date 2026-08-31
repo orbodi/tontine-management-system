@@ -206,7 +206,7 @@ function VueGlobaleCaisses() {
             Ouvertures assignées à votre caisse ({mesDemandesAValider.length})
           </h3>
           <p className="mb-4 text-xs text-slate-600">
-            Validez après encaissement de la part sociale et du droit d’adhésion (sauf client ancien).
+            Validez après encaissement des frais indiqués (part sociale et/ou droit d’adhésion).
           </p>
           <div className="space-y-3">
             {mesDemandesAValider.map((d) => {
@@ -225,7 +225,7 @@ function VueGlobaleCaisses() {
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
                       {d.demandeurNom} — {formatDateHeure(d.dateDemande)} —{' '}
-                      {total <= 0 ? 'aucun frais (ancien)' : `total ${formatMontant(total)}`}
+                      {total <= 0 ? 'aucun frais' : `total ${formatMontant(total)}`}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -517,7 +517,7 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
             Ouvertures de compte à valider ({demandesAValider.length})
           </h3>
           <p className="mb-4 text-xs text-slate-600">
-            Encaisser part sociale + droit d’adhésion (sauf client ancien), puis valider. Le compte n’existe qu’après
+            Encaisser les frais indiqués (part sociale et/ou droit d’adhésion), puis valider. Le compte n’existe qu’après
             validation.
           </p>
           <div className="space-y-3">
@@ -541,11 +541,11 @@ function VueCaisseCaissier({ employe }: { employe: Employe }) {
                       </p>
                       <ul className="mt-2 space-y-0.5 text-xs text-slate-700">
                         {total <= 0 ? (
-                          <li className="font-semibold text-amber-800">Aucun frais (client ancien)</li>
+                          <li className="font-semibold text-amber-800">Aucun frais à encaisser</li>
                         ) : (
                           <>
-                            <li>Part sociale : {formatMontant(d.partSociale)}</li>
-                            <li>Droit d’adhésion : {formatMontant(d.droitAdhesion)}</li>
+                            {d.partSociale > 0 && <li>Part sociale : {formatMontant(d.partSociale)}</li>}
+                            {d.droitAdhesion > 0 && <li>Droit d’adhésion : {formatMontant(d.droitAdhesion)}</li>}
                             <li className="font-semibold">Total à encaisser : {formatMontant(total)}</li>
                           </>
                         )}

@@ -15,8 +15,8 @@ import { useStore } from '../store'
 import { type Compte, type TypeCompte } from '../types'
 import { formatDate, formatDateHeure, formatMontant, afficherNumeroClient, texteAlerteCompteOuvert, texteAlerteDemandeOuverture, texteConfirmationOuvertureCompte } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
-import { RecapFraisOuvertureCompte } from '../components/ModaleClient'
-import { estAncienClient, fraisOuvertureComptePour } from '../metier'
+import { RecapFraisOuvertureCompte, CasesFraisOuvertureCompte } from '../components/ModaleClient'
+import { fraisOuvertureComptePour } from '../metier'
 import {
   FicheOperationCompteDouble,
   type DonneesFicheOperationCompte,
@@ -57,6 +57,8 @@ export default function Comptes() {
   const [caissierPourCompte, setCaissierPourCompte] = useState('')
   const [typeNouveauCompte, setTypeNouveauCompte] = useState<TypeCompte>('courant')
   const [promoCompte, setPromoCompte] = useState(false)
+  const [payerPartSociale, setPayerPartSociale] = useState(true)
+  const [payerAdhesion, setPayerAdhesion] = useState(true)
   const [fraisCompte, setFraisCompte] = useState({
     partSociale: 5000,
     droitAdhesion: 2500,
@@ -107,7 +109,7 @@ export default function Comptes() {
       .sort((a, b) => b.solde - a.solde)
   }, [data.comptes, data.clients, recherche, typeFiltre])
 
-  const clientsActifs = () => data.clients.filter((c) => c.actif)
+  const clientsActifs = () => data.clients.filter((c) => c.actif && !!c.codeClientBanque)
 
   const caissiersDisponibles = useMemo(() => {
     const client = data.clients.find((c) => c.id === clientPourCompte)
@@ -117,8 +119,10 @@ export default function Comptes() {
       .sort((a, b) => a.nomComplet.localeCompare(b.nomComplet))
   }, [data.employes, data.clients, clientPourCompte])
 
-  const clientOuverture = data.clients.find((c) => c.id === clientPourCompte)
-  const fraisOuverture = fraisOuvertureComptePour(clientOuverture, fraisCompte, promoCompte)
+  const fraisOuverture = fraisOuvertureComptePour(fraisCompte, promoCompte, {
+    payerPartSociale,
+    payerAdhesion,
+  })
 
   const demandesEnAttente = useMemo(
     () =>
@@ -211,6 +215,8 @@ export default function Comptes() {
                   setClientPourCompte('')
                   setCaissierPourCompte('')
                   setPromoCompte(false)
+                  setPayerPartSociale(true)
+                  setPayerAdhesion(true)
                   setTypeNouveauCompte('courant')
                   setModaleOuverture(true)
                 }}
@@ -273,7 +279,7 @@ export default function Comptes() {
                       <p className="text-xs text-slate-500">
                         Caisse : {caissier?.nomComplet ?? '—'} —{' '}
                         {d.partSociale + d.droitAdhesion <= 0
-                          ? 'aucun frais (ancien)'
+                          ? 'aucun frais'
                           : `total ${formatMontant(d.partSociale + d.droitAdhesion)}`}{' '}
                         — {formatDateHeure(d.dateDemande)}
                       </p>
@@ -498,14 +504,17 @@ export default function Comptes() {
                 typeNouveauCompte,
                 promoCompte,
                 caissierPourCompte,
+                { payerPartSociale, payerAdhesion },
               )
               if ('erreur' in resultat) {
                 setErreur(resultat.erreur)
                 await alerter('Demande impossible', resultat.erreur)
                 return
               }
-              const clientSel = data.clients.find((c) => c.id === clientPourCompte)
-              const frais = fraisOuvertureComptePour(clientSel, fraisCompte, promoCompte)
+              const frais = fraisOuvertureComptePour(fraisCompte, promoCompte, {
+                payerPartSociale,
+                payerAdhesion,
+              })
               const caissier = data.employes.find((x) => x.id === caissierPourCompte)
               setModaleOuverture(false)
               setClientPourCompte('')
@@ -550,12 +559,11 @@ export default function Comptes() {
                     {c.codeClientBanque ? `${c.codeClientBanque} · ` : ''}
                     {c.zoneId ? `${afficherNumeroClient(c.codeClient)} — ` : ''}
                     {c.prenom} {c.nom}
-                    {estAncienClient(c) ? ' (ancien)' : ''}
                   </option>
                 ))}
               </select>
               <p className="mt-1 text-xs text-slate-400">
-                Frais dus à chaque ouverture (part sociale + droit d’adhésion), sauf client ancien.
+                Uniquement les clients banque (n° 0001…). Inscrivez d’abord le client si besoin.
               </p>
             </div>
             <div>
@@ -578,23 +586,15 @@ export default function Comptes() {
                 Le compte n’est créé qu’après validation par ce caissier.
               </p>
             </div>
-            {!fraisOuverture.offerts && (
-            <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
-              <input
-                type="checkbox"
-                className="mt-0.5"
-                checked={promoCompte}
-                onChange={(e) => setPromoCompte(e.target.checked)}
-              />
-              <span>
-                <span className="font-medium text-slate-900">Promotion — droit d’adhésion réduit</span>
-                <span className="mt-0.5 block text-xs text-slate-500">
-                  {formatMontant(fraisCompte.droitAdhesionPromo)} au lieu de{' '}
-                  {formatMontant(fraisCompte.droitAdhesion)}
-                </span>
-              </span>
-            </label>
-            )}
+            <CasesFraisOuvertureCompte
+              tarifs={fraisCompte}
+              payerPartSociale={payerPartSociale}
+              onPayerPartSociale={setPayerPartSociale}
+              payerAdhesion={payerAdhesion}
+              onPayerAdhesion={setPayerAdhesion}
+              promo={promoCompte}
+              onPromo={setPromoCompte}
+            />
             <RecapFraisOuvertureCompte frais={fraisOuverture} />
             {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
             <div className="flex justify-end gap-2">

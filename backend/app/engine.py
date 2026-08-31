@@ -1168,6 +1168,8 @@ def ajouter_client(d, u, p):
         )
         d["compteursOrdreZone"] = {**d.get("compteursOrdreZone", {}), zone_id: ordre_zone}
     else:
+        n = _prochain_ordre_banque(d)
+        code_banque = numero_client_banque(n)
         d["clients"].append(
             {
                 "id": cid,
@@ -1175,6 +1177,8 @@ def ajouter_client(d, u, p):
                 "agenceId": agence_id,
                 "zoneId": None,
                 "ordreZone": None,
+                "ordreBanque": n,
+                "codeClientBanque": code_banque,
                 "nom": p.get("nom", ""),
                 "prenom": p.get("prenom", ""),
                 "sexe": p.get("sexe", "M"),
@@ -1188,7 +1192,31 @@ def ajouter_client(d, u, p):
                 "origineTontine": origine,
             }
         )
+        _sync_compteur_client_banque(d)
+        return (None, d, {"id": cid, "codeClientBanque": code_banque})
     return (None, d, {"id": cid})
+
+
+def inscrire_client_banque(d, u, p):
+    """Attribue un n° banque à un client déjà inscrit (ex. tontine), sans ouvrir de compte."""
+    if _est_caissier(u):
+        return {"erreur": "Un caissier ne peut pas inscrire un client banque."}
+    if not _est_admin(u) and not _a_droit(u, "gerer_clients"):
+        return {"erreur": "Droit insuffisant."}
+    id_ = p.get("id")
+    client = next((c for c in d["clients"] if c["id"] == id_), None)
+    if not client:
+        return {"erreur": "Client introuvable."}
+    if not client.get("actif"):
+        return {"erreur": "Client inactif."}
+    if client.get("codeClientBanque"):
+        return {"erreur": "Ce client est déjà client banque."}
+    if _est_chef(u) and client.get("agenceId") != u.get("agenceId"):
+        return {"erreur": "Client hors de votre agence."}
+    d = copy.deepcopy(d)
+    _assurer_numero_client_banque(d, id_)
+    client = next(c for c in d["clients"] if c["id"] == id_)
+    return (None, d, {"id": id_, "codeClientBanque": client.get("codeClientBanque")})
 
 
 def modifier_client(d, u, p):
@@ -1830,14 +1858,14 @@ def ouvrir_compte(d, u, p):
     client = next((c for c in d["clients"] if c["id"] == client_id), None)
     if not client:
         return {"erreur": "Client introuvable."}
-    if _origine_tontine(client.get("origineTontine")) == "ancien":
-        part_sociale = 0.0
-        droit = 0.0
-    else:
-        part_sociale = float(settings.part_sociale_montant)
-        droit = float(
-            settings.droit_adhesion_promo_montant if promotion else settings.droit_adhesion_montant
-        )
+    payer_ps = True if p.get("payerPartSociale") is None else bool(p.get("payerPartSociale"))
+    payer_ad = True if p.get("payerAdhesion") is None else bool(p.get("payerAdhesion"))
+    part_sociale = float(settings.part_sociale_montant) if payer_ps else 0.0
+    droit = (
+        float(settings.droit_adhesion_promo_montant if promotion else settings.droit_adhesion_montant)
+        if payer_ad
+        else 0.0
+    )
     caissier = next((e for e in d["employes"] if e["id"] == caissier_id and e.get("actif")), None)
     if not caissier or caissier.get("role") != "caissier":
         return {"erreur": "Indiquez un caissier de l'agence (le chef d'agence n'a pas de caisse)."}
@@ -1845,6 +1873,8 @@ def ouvrir_compte(d, u, p):
         return {"erreur": "Le caissier doit appartenir à votre agence."}
     if _est_chef(u) and client["agenceId"] != u["agenceId"]:
         return {"erreur": "Client hors de votre agence."}
+    if not client.get("codeClientBanque"):
+        return {"erreur": "Inscrivez d'abord ce client comme client banque."}
 
     # Une seule demande en attente par client+type
     if any(
@@ -2687,14 +2717,6 @@ def annuler_ouverture_journee_caisse(d, u, p):
         else x
         for x in (d.get("demandesOuvertureCompte") or [])
     ]
-    ids_avec_compte = {c.get("clientId") for c in d["comptes"]}
-    d["clients"] = [
-        {**c, "codeClientBanque": None, "ordreBanque": None}
-        if c.get("agenceId") == agence_id and c["id"] not in ids_avec_compte and c.get("codeClientBanque")
-        else c
-        for c in d["clients"]
-    ]
-
     # Transactions du jour
     d["transactions"] = [t for t in d.get("transactions") or [] if t.get("id") not in tx_ids]
 
@@ -3457,6 +3479,7 @@ ACTIONS = {
     "annulerClotureJourneeZone": annuler_cloture_journee_zone,
     "ajusterCumulCompteZone": ajuster_cumul_compte_zone,
     "ajouterClient": ajouter_client,
+    "inscrireClientBanque": inscrire_client_banque,
     "modifierClient": modifier_client,
     "basculerActifClient": basculer_actif_client,
     "supprimerClient": supprimer_client,

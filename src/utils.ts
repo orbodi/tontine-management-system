@@ -8,32 +8,32 @@ export function formatMontant(n: number): string {
 
 export function texteAlerteCompteOuvert(total: number): string {
   if (total <= 0) {
-    return 'Compte créé. Aucun frais (client ancien).'
+    return 'Compte créé. Aucun frais à encaisser.'
   }
   return `Compte créé. Total encaissé : ${formatMontant(total)}.`
 }
 
 export function texteConfirmationOuvertureCompte(total: number): string {
   if (total <= 0) {
-    return 'Aucun frais à encaisser (client ancien). Le compte sera créé.'
+    return 'Aucun frais à encaisser. Le compte sera créé.'
   }
   return `Confirmez l’encaissement de ${formatMontant(total)}. Le compte sera créé.`
 }
 
 export function texteAlerteDemandeOuverture(
   caissierNom: string,
-  frais: { partSociale: number; droitAdhesion: number; total: number; offerts: boolean },
+  frais: { partSociale: number; droitAdhesion: number; total: number },
 ): string {
   const intro =
     `Demande d’ouverture enregistrée.\n` +
     `Le compte sera créé après validation par ${caissierNom}.\n`
-  if (frais.offerts) {
-    return intro + 'Client ancien : pas de part sociale ni de droit d’adhésion.'
+  if (frais.total <= 0) {
+    return intro + 'Aucun frais coché : pas d’encaissement à la validation.'
   }
   return (
     intro +
-    `Part sociale : ${formatMontant(frais.partSociale)}\n` +
-    `Droit d'adhésion : ${formatMontant(frais.droitAdhesion)}\n` +
+    (frais.partSociale > 0 ? `Part sociale : ${formatMontant(frais.partSociale)}\n` : '') +
+    (frais.droitAdhesion > 0 ? `Droit d'adhésion : ${formatMontant(frais.droitAdhesion)}\n` : '') +
     `Total à encaisser : ${formatMontant(frais.total)}`
   )
 }

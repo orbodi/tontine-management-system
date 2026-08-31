@@ -5,17 +5,12 @@ import { useStore } from '../store'
 import type { Client, TypeCompte } from '../types'
 import { afficherNumeroClient, formatDateHeure, formatMontant, texteAlerteCompteOuvert, texteAlerteDemandeOuverture, texteConfirmationOuvertureCompte } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
-import { formulaireClientVide, ChoixOrigineClient, RecapFraisOuvertureCompte, ModaleClient, type FormulaireClient } from '../components/ModaleClient'
+import { formulaireClientVide, RecapFraisOuvertureCompte, CasesFraisOuvertureCompte, ModaleClient, type FormulaireClient } from '../components/ModaleClient'
 import { useConfirmation } from '../components/Confirmation'
-import { estAncienClient, fraisOuvertureComptePour } from '../metier'
+import { fraisOuvertureComptePour } from '../metier'
 
-function clientsBanqueDe(
-  clients: Client[],
-  comptes: { clientId: string }[],
-  agenceId: string,
-): Client[] {
-  const ids = new Set(comptes.map((co) => co.clientId))
-  return clients.filter((c) => c.agenceId === agenceId && ids.has(c.id))
+function clientsBanqueDe(clients: Client[], agenceId: string): Client[] {
+  return clients.filter((c) => c.agenceId === agenceId && !!c.codeClientBanque)
 }
 
 export default function ClientsBanque() {
@@ -49,7 +44,7 @@ export default function ClientsBanque() {
 
       <EnTetePage
         titre="Clients banque"
-        sousTitre="Clients ayant un compte courant ou épargne — parcourez par agence"
+        sousTitre="Clients banque (n° 0001…) — parcourez par agence"
       />
 
       <div className="relative mb-6 max-w-md">
@@ -67,7 +62,7 @@ export default function ClientsBanque() {
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {agencesTriees.map((a) => {
-            const clientsAg = clientsBanqueDe(data.clients, data.comptes, a.id)
+            const clientsAg = clientsBanqueDe(data.clients, a.id)
             const nbActifs = clientsAg.filter((c) => c.actif).length
             return (
               <Link
@@ -93,7 +88,7 @@ export default function ClientsBanque() {
                         </span>
                       )}
                     </p>
-                    <p className="mt-1 text-xs text-slate-400">Comptes courant / épargne</p>
+                    <p className="mt-1 text-xs text-slate-400">Fiches banque — comptes à ouvrir ensuite</p>
                   </div>
                   <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-300 transition group-hover:text-sky-600" />
                 </div>
@@ -114,6 +109,7 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
     aDroit,
     employeConnecte,
     ajouterClient,
+    inscrireClientBanque,
     modifierClient,
     ouvrirCompte,
     validerOuvertureCompte,
@@ -122,13 +118,17 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
   const { alerter, confirmer } = useConfirmation()
   const [recherche, setRecherche] = useState('')
   const [modaleOuverte, setModaleOuverte] = useState(false)
+  const [modaleOuvertureCompte, setModaleOuvertureCompte] = useState(false)
   const [clientEnEdition, setClientEnEdition] = useState<Client | null>(null)
+  const [clientPourCompte, setClientPourCompte] = useState<Client | null>(null)
   const [modeAjout, setModeAjout] = useState<'nouveau' | 'existant'>('nouveau')
   const [form, setForm] = useState<FormulaireClient>(formulaireClientVide)
   const [clientExistantId, setClientExistantId] = useState('')
   const [typeCompte, setTypeCompte] = useState<TypeCompte>('courant')
   const [caissierId, setCaissierId] = useState('')
   const [promo, setPromo] = useState(false)
+  const [payerPartSociale, setPayerPartSociale] = useState(true)
+  const [payerAdhesion, setPayerAdhesion] = useState(true)
   const [erreur, setErreur] = useState('')
   const [fraisCompte, setFraisCompte] = useState({
     partSociale: 5000,
@@ -160,7 +160,7 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
   const clientsFiltres = useMemo(() => {
     if (!accesOk) return []
     const q = recherche.trim().toLowerCase()
-    return clientsBanqueDe(data.clients, data.comptes, agenceId)
+    return clientsBanqueDe(data.clients, agenceId)
       .filter(
         (c) =>
           !q ||
@@ -175,12 +175,12 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
           (a.ordreBanque ?? 0) - (b.ordreBanque ?? 0) ||
           `${a.prenom} ${a.nom}`.localeCompare(`${b.prenom} ${b.nom}`),
       )
-  }, [data.clients, data.comptes, agenceId, recherche, accesOk])
+  }, [data.clients, agenceId, recherche, accesOk])
 
-  const clientsAgence = useMemo(
+  const clientsAInscrire = useMemo(
     () =>
       data.clients
-        .filter((c) => c.actif && c.agenceId === agenceId)
+        .filter((c) => c.actif && c.agenceId === agenceId && !c.codeClientBanque)
         .sort((a, b) => `${a.prenom} ${a.nom}`.localeCompare(`${b.prenom} ${b.nom}`)),
     [data.clients, agenceId],
   )
@@ -263,31 +263,33 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
       zoneId: '',
     })
     setClientExistantId('')
+    setErreur('')
+    setModaleOuverte(true)
+  }
+
+  const ouvrirOuvertureCompte = (c: Client) => {
+    setClientPourCompte(c)
     setTypeCompte('courant')
     setCaissierId('')
     setPromo(false)
+    setPayerPartSociale(true)
+    setPayerAdhesion(true)
     setErreur('')
-    setModaleOuverte(true)
+    setModaleOuvertureCompte(true)
   }
 
   const champ =
     (cle: keyof FormulaireClient) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm((f) => ({ ...f, [cle]: e.target.value }))
 
-  const enregistrer = async (e: React.FormEvent) => {
+  const enregistrerClient = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!caissierId) {
-      setErreur('Indiquez le caissier qui validera l’ouverture.')
-      return
-    }
-
-    let clientId = clientExistantId
     if (modeAjout === 'nouveau') {
       if (!peutGererClients) {
         setErreur('Droit insuffisant pour créer un client.')
         return
       }
-      const id = await ajouterClient({
+      const cree = await ajouterClient({
         nom: form.nom.trim(),
         prenom: form.prenom.trim(),
         telephone: form.telephone.trim(),
@@ -299,47 +301,64 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
         origineTontine: form.origineTontine,
         agenceId,
       })
-      if (!id) {
+      if (!cree) {
         setErreur('Impossible d’ajouter le client (agence inactive ou introuvable).')
         return
       }
-      clientId = id
-    } else if (!clientId) {
+      setModaleOuverte(false)
+      setErreur('')
+      await alerter(
+        'Client banque créé',
+        `${form.prenom.trim()} ${form.nom.trim()} a été inscrit${cree.codeClientBanque ? ` (n° ${cree.codeClientBanque})` : ''}.\nOuvrez ensuite un compte depuis sa ligne.`,
+      )
+      return
+    }
+    if (!clientExistantId) {
       setErreur('Choisissez un client.')
       return
     }
-
-    const resultat = await ouvrirCompte(clientId, typeCompte, promo, caissierId)
-    if ('erreur' in resultat) {
-      setErreur(resultat.erreur)
-      if (modeAjout === 'nouveau') {
-        await alerter(
-          'Client créé, ouverture impossible',
-          `La fiche a été créée, mais la demande d’ouverture a échoué : ${resultat.erreur}`,
-        )
-      }
+    const res = await inscrireClientBanque(clientExistantId)
+    if (res.erreur) {
+      setErreur(res.erreur)
       return
     }
-
-    const clientCible =
-      modeAjout === 'nouveau'
-        ? { origineTontine: form.origineTontine }
-        : data.clients.find((c) => c.id === clientExistantId)
-    const frais = fraisOuvertureComptePour(clientCible, fraisCompte, promo)
-    const caissier = data.employes.find((x) => x.id === caissierId)
+    const choisi = data.clients.find((c) => c.id === clientExistantId)
     setModaleOuverte(false)
+    setErreur('')
+    await alerter(
+      'Client banque inscrit',
+      `${choisi ? `${choisi.prenom} ${choisi.nom}` : 'Le client'} a été inscrit${res.codeClientBanque ? ` (n° ${res.codeClientBanque})` : ''}.\nOuvrez ensuite un compte depuis sa ligne.`,
+    )
+  }
+
+  const enregistrerOuverture = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!clientPourCompte) return
+    if (!caissierId) {
+      setErreur('Indiquez le caissier qui validera l’ouverture.')
+      return
+    }
+    const resultat = await ouvrirCompte(clientPourCompte.id, typeCompte, promo, caissierId, {
+      payerPartSociale,
+      payerAdhesion,
+    })
+    if ('erreur' in resultat) {
+      setErreur(resultat.erreur)
+      return
+    }
+    const frais = fraisOuvertureComptePour(fraisCompte, promo, {
+      payerPartSociale,
+      payerAdhesion,
+    })
+    const caissier = data.employes.find((x) => x.id === caissierId)
+    setModaleOuvertureCompte(false)
+    setClientPourCompte(null)
     setErreur('')
     await alerter(
       'Demande envoyée',
       texteAlerteDemandeOuverture(caissier?.nomComplet ?? 'le caissier', frais),
     )
   }
-
-  const clientCibleForm =
-    modeAjout === 'nouveau'
-      ? { origineTontine: form.origineTontine }
-      : data.clients.find((c) => c.id === clientExistantId)
-  const fraisAffiches = fraisOuvertureComptePour(clientCibleForm, fraisCompte, promo)
 
   return (
     <div>
@@ -353,9 +372,9 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
 
       <EnTetePage
         titre={`Clients banque — ${agence.nom}`}
-        sousTitre={`${clientsFiltres.length} client${clientsFiltres.length > 1 ? 's' : ''} avec compte courant ou épargne`}
+        sousTitre={`${clientsFiltres.length} client${clientsFiltres.length > 1 ? 's' : ''} banque`}
         action={
-          peutOuvrirCompte ? (
+          peutGererClients && !estCaissier ? (
             <button className="btn-primary" onClick={ouvrirCreation} disabled={!agence.actif}>
               <Plus className="h-4 w-4" />
               Nouveau client banque
@@ -404,7 +423,7 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
                     <p className="text-xs text-slate-500">
                       Caisse : {caissier?.nomComplet ?? '—'} —{' '}
                       {d.partSociale + d.droitAdhesion <= 0
-                        ? 'aucun frais (ancien)'
+                        ? 'aucun frais'
                         : `total ${formatMontant(d.partSociale + d.droitAdhesion)}`}{' '}
                       — {formatDateHeure(d.dateDemande)}
                     </p>
@@ -464,9 +483,9 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
         <EtatVide
           titre="Aucun client banque"
           description={
-            peutOuvrirCompte && agence.actif
-              ? 'Ajoutez le premier client banque, ou ouvrez un compte pour un client déjà inscrit.'
-              : 'Ouvrez un compte courant ou épargne depuis la fiche client ou le menu Comptes.'
+            peutGererClients && agence.actif
+              ? 'Ajoutez le premier client banque. L’ouverture de compte se fait ensuite depuis sa ligne.'
+              : 'Aucun client banque pour cette agence.'
           }
         />
       ) : (
@@ -503,9 +522,6 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
                           <span className="font-medium text-slate-900">
                             {c.prenom} {c.nom}
                           </span>
-                          {estAncienClient(c) && (
-                            <span className="ml-2 badge bg-amber-100 text-amber-800">Ancien</span>
-                          )}
                           {aTontine && (
                             <span className="mt-0.5 block text-xs text-slate-400">Aussi client tontine</span>
                           )}
@@ -514,13 +530,17 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
                     </td>
                     <td className="px-5 py-3 text-slate-600">{c.telephone}</td>
                     <td className="px-5 py-3 text-slate-600">
-                      {comptes.map((co) => (
-                        <div key={co.id} className="flex items-center gap-1.5 text-xs">
-                          <Wallet className="h-3 w-3 text-sky-500" />
-                          <span className="font-mono">{co.numero}</span>
-                          <span className="text-slate-400">{co.type === 'courant' ? 'courant' : 'épargne'}</span>
-                        </div>
-                      ))}
+                      {comptes.length === 0 ? (
+                        <span className="text-xs text-slate-400">Aucun compte</span>
+                      ) : (
+                        comptes.map((co) => (
+                          <div key={co.id} className="flex items-center gap-1.5 text-xs">
+                            <Wallet className="h-3 w-3 text-sky-500" />
+                            <span className="font-mono">{co.numero}</span>
+                            <span className="text-slate-400">{co.type === 'courant' ? 'courant' : 'épargne'}</span>
+                          </div>
+                        ))
+                      )}
                     </td>
                     <td className="px-5 py-3 font-medium tabular-nums text-slate-800">{formatMontant(total)}</td>
                     <td className="px-5 py-3">
@@ -539,6 +559,15 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
                             onClick={() => ouvrirEdition(c)}
                           >
                             Modifier
+                          </button>
+                        )}
+                        {peutOuvrirCompte && c.actif && (
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-sky-700 hover:text-sky-900"
+                            onClick={() => ouvrirOuvertureCompte(c)}
+                          >
+                            Ouvrir un compte
                           </button>
                         )}
                         <Link
@@ -584,7 +613,7 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
         onFermer={() => setModaleOuverte(false)}
         large
       >
-        <form onSubmit={enregistrer} className="space-y-4">
+        <form onSubmit={enregistrerClient} className="space-y-4">
           {peutGererClients && (
             <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
               <button
@@ -622,14 +651,10 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
                   {agence.code} — {agence.nom}
                 </span>
                 <span className="mt-0.5 block text-slate-400">
-                  Le client banque est rattaché à l’agence, pas à une zone tontine. Le n° (0001, 0002…)
-                  est attribué à la validation du compte.
+                  Fiche rattachée à l’agence (pas à une zone). Le n° banque (0001, 0002…) est attribué
+                  tout de suite. L’ouverture de compte se fait ensuite.
                 </span>
               </div>
-              <ChoixOrigineClient
-                valeur={form.origineTontine}
-                onChange={(origineTontine) => setForm((f) => ({ ...f, origineTontine }))}
-              />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Prénom *</label>
@@ -686,83 +711,120 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
                 value={clientExistantId}
                 onChange={(e) => setClientExistantId(e.target.value)}
               >
-                <option value="">— Choisir un client de l’agence —</option>
-                {clientsAgence.map((c) => {
-                  const aDejaCompte = data.comptes.some((co) => co.clientId === c.id)
-                  return (
-                    <option key={c.id} value={c.id}>
-                      {c.codeClientBanque ? `${c.codeClientBanque} · ` : ''}
-                      {c.zoneId ? `${afficherNumeroClient(c.codeClient)} — ` : ''}
-                      {c.prenom} {c.nom}
-                      {estAncienClient(c) ? ' (ancien)' : ''}
-                      {aDejaCompte ? ' (déjà client banque)' : ''}
-                    </option>
-                  )
-                })}
+                <option value="">— Choisir un client de l’agence (sans n° banque) —</option>
+                {clientsAInscrire.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.zoneId ? `${afficherNumeroClient(c.codeClient)} — ` : ''}
+                    {c.prenom} {c.nom}
+                  </option>
+                ))}
               </select>
+              {clientsAInscrire.length === 0 && (
+                <p className="mt-1 text-xs text-slate-400">
+                  Tous les clients de cette agence ont déjà un n° banque.
+                </p>
+              )}
             </div>
           )}
 
-          <div>
-            <label className="label">Type de compte *</label>
-            <select
-              className="input"
-              value={typeCompte}
-              onChange={(e) => setTypeCompte(e.target.value as TypeCompte)}
-            >
-              <option value="courant">Compte courant — dépôts et retraits (n° Bxxxx)</option>
-              <option value="epargne">Compte épargne — dépôts et retraits (n° Bxxxx)</option>
-            </select>
-          </div>
-          <div>
-            <label className="label">Caisse (encaissement) *</label>
-            <select
-              className="input"
-              required
-              value={caissierId}
-              onChange={(e) => setCaissierId(e.target.value)}
-            >
-              <option value="">— Choisir le caissier —</option>
-              {caissiersAgence.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.nomComplet}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-slate-400">
-              Le n° client banque et le compte sont créés après validation en caisse.
-            </p>
-          </div>
-          {!fraisAffiches.offerts && (
-          <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={promo}
-              onChange={(e) => setPromo(e.target.checked)}
-            />
-            <span>
-              <span className="font-medium text-slate-900">Promotion — droit d’adhésion réduit</span>
-              <span className="mt-0.5 block text-xs text-slate-500">
-                {formatMontant(fraisCompte.droitAdhesionPromo)} au lieu de{' '}
-                {formatMontant(fraisCompte.droitAdhesion)}
-              </span>
-            </span>
-          </label>
-          )}
-          <RecapFraisOuvertureCompte frais={fraisAffiches} />
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className="btn-secondary" onClick={() => setModaleOuverte(false)}>
               Annuler
             </button>
             <button type="submit" className="btn-primary">
-              <Wallet className="h-4 w-4" />
-              Envoyer la demande
+              Enregistrer le client
             </button>
           </div>
         </form>
       </Modale>
+
+      <Modale
+        titre={
+          clientPourCompte
+            ? `Ouvrir un compte — ${clientPourCompte.prenom} ${clientPourCompte.nom}`
+            : 'Ouvrir un compte'
+        }
+        ouverte={modaleOuvertureCompte}
+        onFermer={() => {
+          setModaleOuvertureCompte(false)
+          setClientPourCompte(null)
+        }}
+      >
+        {clientPourCompte && (
+          <form onSubmit={enregistrerOuverture} className="space-y-4">
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Client banque n°{' '}
+              <span className="font-mono font-semibold text-sky-700">
+                {clientPourCompte.codeClientBanque}
+              </span>
+            </p>
+            <div>
+              <label className="label">Type de compte *</label>
+              <select
+                className="input"
+                value={typeCompte}
+                onChange={(e) => setTypeCompte(e.target.value as TypeCompte)}
+              >
+                <option value="courant">Compte courant — dépôts et retraits (n° Bxxxx)</option>
+                <option value="epargne">Compte épargne — dépôts et retraits (n° Bxxxx)</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Caisse (encaissement) *</label>
+              <select
+                className="input"
+                required
+                value={caissierId}
+                onChange={(e) => setCaissierId(e.target.value)}
+              >
+                <option value="">— Choisir le caissier —</option>
+                {caissiersAgence.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nomComplet}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-400">
+                Le compte est créé après validation en caisse.
+              </p>
+            </div>
+            <CasesFraisOuvertureCompte
+              tarifs={fraisCompte}
+              payerPartSociale={payerPartSociale}
+              onPayerPartSociale={setPayerPartSociale}
+              payerAdhesion={payerAdhesion}
+              onPayerAdhesion={setPayerAdhesion}
+              promo={promo}
+              onPromo={setPromo}
+            />
+            <RecapFraisOuvertureCompte
+              frais={fraisOuvertureComptePour(fraisCompte, promo, {
+                payerPartSociale,
+                payerAdhesion,
+              })}
+            />
+            {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setModaleOuvertureCompte(false)
+                  setClientPourCompte(null)
+                }}
+              >
+                Annuler
+              </button>
+              <button type="submit" className="btn-primary">
+                <Wallet className="h-4 w-4" />
+                Envoyer la demande
+              </button>
+            </div>
+          </form>
+        )}
+      </Modale>
     </div>
   )
 }
+

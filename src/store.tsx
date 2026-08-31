@@ -103,7 +103,8 @@ interface StoreApi {
       Client,
       'id' | 'codeClient' | 'ordreZone' | 'agenceId' | 'dateInscription' | 'actif' | 'codeClientBanque' | 'ordreBanque'
     > & { agenceId?: string; zoneId?: string | null },
-  ) => Promise<string | null>
+  ) => Promise<{ id: string; codeClientBanque?: string } | null>
+  inscrireClientBanque: (id: string) => Promise<{ erreur: string | null; codeClientBanque?: string }>
   modifierClient: (
     id: string,
     patch: Partial<Client>,
@@ -138,6 +139,7 @@ interface StoreApi {
     type: TypeCompte,
     promotion?: boolean,
     caissierId?: string,
+    frais?: { payerPartSociale?: boolean; payerAdhesion?: boolean },
   ) => Promise<{ id?: string; numero?: string; demandeId?: string; enAttente?: boolean } | { erreur: string }>
   validerOuvertureCompte: (demandeId: string) => Promise<string | null>
   refuserOuvertureCompte: (demandeId: string, motif?: string) => Promise<string | null>
@@ -260,6 +262,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id?: string
         numero?: string
         codeClient?: string
+        codeClientBanque?: string
         operationsAnnulees?: number
         comptesAnnules?: number
       }>(`/api/mutations/${action}`, { method: 'POST', json: { payload } })
@@ -362,8 +365,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       async ajouterClient(c) {
         const res = await muter('ajouterClient', c as unknown as Record<string, unknown>)
-        if (res.erreur) return null
-        return typeof res.id === 'string' ? res.id : null
+        if (res.erreur || typeof res.id !== 'string') return null
+        return {
+          id: res.id,
+          codeClientBanque: typeof res.codeClientBanque === 'string' ? res.codeClientBanque : undefined,
+        }
+      },
+      async inscrireClientBanque(id) {
+        const res = await muter('inscrireClientBanque', { id })
+        return {
+          erreur: res.erreur ?? null,
+          codeClientBanque: typeof res.codeClientBanque === 'string' ? res.codeClientBanque : undefined,
+        }
       },
       async modifierClient(id, patch) {
         const res = await muter('modifierClient', { id, patch })
@@ -431,8 +444,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const res = await muter('supprimerCarnet', { id })
         return res.erreur ?? null
       },
-      async ouvrirCompte(clientId, type, promotion = false, caissierId) {
-        const res = await muter('ouvrirCompte', { clientId, type, promotion, caissierId })
+      async ouvrirCompte(clientId, type, promotion = false, caissierId, frais) {
+        const res = await muter('ouvrirCompte', {
+          clientId,
+          type,
+          promotion,
+          caissierId,
+          ...(frais?.payerPartSociale === false ? { payerPartSociale: false } : {}),
+          ...(frais?.payerAdhesion === false ? { payerAdhesion: false } : {}),
+        })
         if (res.erreur) return { erreur: res.erreur }
         return res as {
           id?: string

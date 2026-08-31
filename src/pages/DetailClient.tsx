@@ -20,7 +20,6 @@ import {
   LIBELLES_CARNET,
   TYPES_SORTIE,
   besoinRenouvellementCarnet,
-  estAncienClient,
   fraisOuvertureComptePour,
   libelleCycleCarnet,
   moisDuCycle,
@@ -40,6 +39,7 @@ import {
   formulaireClientVide,
   ModaleClient,
   RecapFraisOuvertureCompte,
+  CasesFraisOuvertureCompte,
   type FormulaireClient,
 } from '../components/ModaleClient'
 import { useConfirmation } from '../components/Confirmation'
@@ -65,6 +65,7 @@ export default function DetailClient() {
     modifierClient,
     ouvrirCarnet,
     ouvrirCompte,
+    inscrireClientBanque,
   } = useStore()
   const { alerter, confirmer } = useConfirmation()
   const [modaleMessage, setModaleMessage] = useState(false)
@@ -76,6 +77,8 @@ export default function DetailClient() {
   const [frequence, setFrequence] = useState<FrequenceMise>('journaliere')
   const [typeCompte, setTypeCompte] = useState<TypeCompte>('courant')
   const [promoCompte, setPromoCompte] = useState(false)
+  const [payerPartSociale, setPayerPartSociale] = useState(true)
+  const [payerAdhesion, setPayerAdhesion] = useState(true)
   const [caissierPourCompte, setCaissierPourCompte] = useState('')
   const [fraisCompte, setFraisCompte] = useState({
     partSociale: 5000,
@@ -153,8 +156,10 @@ export default function DetailClient() {
 
   const typesCarnetDejaOuverts = new Set(activite.carnets.map((c) => c.typeCarnet))
   const peutOuvrirCarnet = peutOperer && client.actif && !!client.zoneId && typesCarnetDejaOuverts.size < 4
-  const peutOuvrirCompte = peutOperer && !estCaissier && client.actif
+  const estClientBanque = !!client.codeClientBanque
   const peutModifier = !estCaissier && (estAdmin || aDroit('gerer_clients'))
+  const peutOuvrirCompte = peutOperer && !estCaissier && client.actif && estClientBanque
+  const peutInscrireBanque = peutModifier && client.actif && !estClientBanque
 
   const creditEnRetard = MODULE_CREDITS_ACTIF
     ? activite.credits.find((c) => c.statut === 'en_retard')
@@ -237,17 +242,25 @@ export default function DetailClient() {
       setErreur('Indiquez le caissier qui validera l’ouverture.')
       return
     }
-    const resultat = await ouvrirCompte(client.id, typeCompte, promoCompte, caissierPourCompte)
+    const resultat = await ouvrirCompte(client.id, typeCompte, promoCompte, caissierPourCompte, {
+      payerPartSociale,
+      payerAdhesion,
+    })
     if ('erreur' in resultat) {
       setErreur(resultat.erreur)
       await alerter('Demande impossible', resultat.erreur)
       return
     }
     const caissier = data.employes.find((x) => x.id === caissierPourCompte)
-    const frais = fraisOuvertureComptePour(client, fraisCompte, promoCompte)
+    const frais = fraisOuvertureComptePour(fraisCompte, promoCompte, {
+      payerPartSociale,
+      payerAdhesion,
+    })
     setModaleCompte(false)
     setErreur('')
     setPromoCompte(false)
+    setPayerPartSociale(true)
+    setPayerAdhesion(true)
     setCaissierPourCompte('')
     await alerter(
       'Demande envoyée',
@@ -273,7 +286,6 @@ export default function DetailClient() {
           [
             client.codeClientBanque ? `n° banque ${client.codeClientBanque}` : null,
             client.zoneId ? `n° tontine ${afficherNumeroClient(client.codeClient)}` : null,
-            estAncienClient(client) ? 'ancien (papier)' : null,
             client.profession ?? 'Profession non renseignée',
           ]
             .filter(Boolean)
@@ -296,6 +308,29 @@ export default function DetailClient() {
                 Ouvrir carnet tontine
               </button>
             )}
+            {peutInscrireBanque && (
+              <button
+                className="btn-secondary"
+                onClick={async () => {
+                  const ok = await confirmer({
+                    titre: 'Inscrire comme client banque',
+                    message: `Attribuer un n° banque à ${client.prenom} ${client.nom} ? Vous pourrez ensuite ouvrir un compte.`,
+                    labelValider: 'Inscrire',
+                  })
+                  if (!ok) return
+                  const res = await inscrireClientBanque(client.id)
+                  if (res.erreur) await alerter('Inscription impossible', res.erreur)
+                  else
+                    await alerter(
+                      'Client banque inscrit',
+                      `${client.prenom} ${client.nom} a le n° ${res.codeClientBanque ?? '—'}. Vous pouvez maintenant ouvrir un compte.`,
+                    )
+                }}
+              >
+                <Wallet className="h-4 w-4" />
+                Inscrire client banque
+              </button>
+            )}
             {peutOuvrirCompte && (
               <button
                 className="btn-secondary"
@@ -303,6 +338,8 @@ export default function DetailClient() {
                   setErreur('')
                   setTypeCompte('courant')
                   setPromoCompte(false)
+                  setPayerPartSociale(true)
+                  setPayerAdhesion(true)
                   setCaissierPourCompte('')
                   setModaleCompte(true)
                 }}
@@ -427,16 +464,6 @@ export default function DetailClient() {
               <dd className="font-medium text-slate-900">{formatDate(client.dateInscription)}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">Type de client</dt>
-              <dd>
-                {estAncienClient(client) ? (
-                  <span className="badge bg-amber-100 text-amber-800">Ancien (papier)</span>
-                ) : (
-                  <span className="badge bg-slate-100 text-slate-700">Nouveau</span>
-                )}
-              </dd>
-            </div>
-            <div>
               <dt className="text-xs text-slate-500">Statut</dt>
               <dd>
                 <span className={`badge ${client.actif ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
@@ -542,6 +569,10 @@ export default function DetailClient() {
                   onClick={() => {
                     setErreur('')
                     setTypeCompte('courant')
+                    setPromoCompte(false)
+                    setPayerPartSociale(true)
+                    setPayerAdhesion(true)
+                    setCaissierPourCompte('')
                     setModaleCompte(true)
                   }}
                 >
@@ -766,22 +797,15 @@ export default function DetailClient() {
               <option value="epargne">Compte épargne (n° Bxxxx)</option>
             </select>
           </div>
-          {!estAncienClient(client) && (
-          <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={promoCompte}
-              onChange={(e) => setPromoCompte(e.target.checked)}
+            <CasesFraisOuvertureCompte
+              tarifs={fraisCompte}
+              payerPartSociale={payerPartSociale}
+              onPayerPartSociale={setPayerPartSociale}
+              payerAdhesion={payerAdhesion}
+              onPayerAdhesion={setPayerAdhesion}
+              promo={promoCompte}
+              onPromo={setPromoCompte}
             />
-            <span>
-              <span className="font-medium text-slate-900">Promotion — droit d’adhésion réduit</span>
-              <span className="mt-0.5 block text-xs text-slate-500">
-                {formatMontant(fraisCompte.droitAdhesionPromo)} au lieu de {formatMontant(fraisCompte.droitAdhesion)}
-              </span>
-            </span>
-          </label>
-          )}
           <div>
             <label className="label">Caisse (validation) *</label>
             <select
@@ -802,7 +826,10 @@ export default function DetailClient() {
             </p>
           </div>
           <RecapFraisOuvertureCompte
-            frais={fraisOuvertureComptePour(client, fraisCompte, promoCompte)}
+            frais={fraisOuvertureComptePour(fraisCompte, promoCompte, {
+              payerPartSociale,
+              payerAdhesion,
+            })}
           />
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
           <div className="flex justify-end gap-2">
