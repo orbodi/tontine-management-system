@@ -6,10 +6,12 @@ import {
   dateClotureArret,
   estOperationCaisse,
   LIBELLES_TYPE,
+  TYPES_COMPTE_BANQUE,
+  TYPES_COMPTE_TONTINE,
   TYPES_SORTIE,
   situationCredit,
 } from '../metier'
-import type { TypeCompte } from '../types'
+import type { TypeCompte, TypeTransaction } from '../types'
 import { exporterCsv, formatDate, formatDateHeure, formatMontant, afficherNumeroClient } from '../utils'
 import { EnTetePage } from '../components/ui'
 
@@ -18,11 +20,12 @@ const LIBELLES_COMPTE: Record<TypeCompte, string> = {
   epargne: 'Compte épargne',
 }
 
-type OngletRapport = 'caisses' | 'compte' | 'clients' | 'employes'
+type OngletRapport = 'caisses' | 'tontine' | 'banque' | 'clients' | 'employes'
+type ModePeriode = 'mois' | 'intervalle' | 'tout'
 
 const ONGLETS_RAPPORT: { id: OngletRapport; label: string }[] = [
-  { id: 'caisses', label: 'Caisse' },
-  { id: 'compte', label: 'Compte' },
+  { id: 'tontine', label: 'Comptes tontine' },
+  { id: 'banque', label: 'Comptes banque' },
   { id: 'clients', label: 'Client' },
   { id: 'employes', label: 'Employés' },
 ]
@@ -57,6 +60,117 @@ function libelleMois(mois: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
+function FiltresPeriode({
+  mode,
+  onMode,
+  mois,
+  onMois,
+  debut,
+  onDebut,
+  fin,
+  onFin,
+}: {
+  mode: ModePeriode
+  onMode: (m: ModePeriode) => void
+  mois: string
+  onMois: (v: string) => void
+  debut: string
+  onDebut: (v: string) => void
+  fin: string
+  onFin: (v: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-end gap-3 print:hidden">
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            ['mois', 'Par mois'],
+            ['intervalle', 'Par intervalle'],
+            ['tout', 'Tout l’historique'],
+          ] as const
+        ).map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => {
+              onMode(v)
+              if (v === 'mois') onMois(moisEnCoursLocal())
+              if (v === 'intervalle') {
+                const b = bornesMois(mois || moisEnCoursLocal())
+                onDebut(b.debut)
+                onFin(b.fin)
+              }
+            }}
+            className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
+              mode === v
+                ? 'bg-brand-600 text-white'
+                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {mode === 'mois' && (
+        <div>
+          <label className="label !mb-1">Mois</label>
+          <input
+            className="input !w-auto"
+            type="month"
+            value={mois || moisEnCoursLocal()}
+            max={moisEnCoursLocal()}
+            onChange={(e) => onMois(e.target.value)}
+          />
+        </div>
+      )}
+      {mode === 'intervalle' && (
+        <>
+          <div>
+            <label className="label !mb-1">Du</label>
+            <input
+              className="input !w-auto"
+              type="date"
+              value={debut}
+              max={fin || aujourdhuiLocalIso()}
+              onChange={(e) => onDebut(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label !mb-1">Au</label>
+            <input
+              className="input !w-auto"
+              type="date"
+              value={fin}
+              min={debut || undefined}
+              max={aujourdhuiLocalIso()}
+              onChange={(e) => onFin(e.target.value)}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function totauxOperations(ops: { type: TypeTransaction; montant: number }[]) {
+  const parType = new Map<string, { entrees: number; sorties: number; nombre: number }>()
+  let entrees = 0
+  let sorties = 0
+  ops.forEach((t) => {
+    const ligne = parType.get(t.type) ?? { entrees: 0, sorties: 0, nombre: 0 }
+    ligne.nombre++
+    if (TYPES_SORTIE.includes(t.type)) {
+      ligne.sorties += t.montant
+      sorties += t.montant
+    } else {
+      ligne.entrees += t.montant
+      entrees += t.montant
+    }
+    parType.set(t.type, ligne)
+  })
+  return { parType, entrees, sorties }
+}
+
 export default function Rapports() {
   const { data, estAdmin, estChefAgence, agenceFiltreOperations, employeConnecte } = useStore()
 
@@ -66,14 +180,18 @@ export default function Rapports() {
   const [debut, setDebut] = useState(bornesInit.debut)
   const [fin, setFin] = useState(bornesInit.fin)
   const [caissierId, setCaissierId] = useState<'tous' | string>('tous')
-  const [onglet, setOnglet] = useState<OngletRapport>('caisses')
+  const [onglet, setOnglet] = useState<OngletRapport>('tontine')
 
-  const [rechercheCompte, setRechercheCompte] = useState('')
-  const [compteId, setCompteId] = useState('')
-  const [modePeriodeCompte, setModePeriodeCompte] = useState<'mois' | 'intervalle' | 'tout'>('mois')
+  const [modePeriodeCompte, setModePeriodeCompte] = useState<ModePeriode>('mois')
   const [moisCompte, setMoisCompte] = useState(moisEnCoursLocal)
   const [debutCompte, setDebutCompte] = useState(bornesInit.debut)
   const [finCompte, setFinCompte] = useState(bornesInit.fin)
+  const [zoneIdTontine, setZoneIdTontine] = useState<'toutes' | string>('toutes')
+  const [clientIdTontine, setClientIdTontine] = useState('')
+  const [rechercheTontine, setRechercheTontine] = useState('')
+  const [agenceIdBanque, setAgenceIdBanque] = useState<'toutes' | string>('toutes')
+  const [compteIdBanque, setCompteIdBanque] = useState('')
+  const [rechercheBanque, setRechercheBanque] = useState('')
   const [rechercheClient, setRechercheClient] = useState('')
   const [rechercheEmploye, setRechercheEmploye] = useState('')
 
@@ -255,34 +373,22 @@ export default function Rapports() {
     return { lignes, enRetard }
   }, [data])
 
-  const comptesDisponibles = useMemo(() => {
-    const q = rechercheCompte.trim().toLowerCase()
-    return data.comptes
-      .filter((c) => {
-        const client = data.clients.find((x) => x.id === c.clientId)
-        if (!client) return false
-        if (estAdmin) {
-          // tout
-        } else if (estChefAgence && agenceFiltreOperations) {
-          if (client.agenceId !== agenceFiltreOperations) return false
-        }
-        if (!q) return true
-        return (
-          c.numero.toLowerCase().includes(q) ||
-          client.codeClient?.toLowerCase().includes(q) ||
-          afficherNumeroClient(client.codeClient).includes(q) ||
-          `${client.prenom} ${client.nom}`.toLowerCase().includes(q)
-        )
+  const agencesRapport = useMemo(() => {
+    return data.agences
+      .filter((a) => {
+        if (estAdmin) return true
+        if (agenceFiltreOperations) return a.id === agenceFiltreOperations
+        return employeConnecte ? a.id === employeConnecte.agenceId : false
       })
-      .sort((a, b) => a.numero.localeCompare(b.numero))
-  }, [
-    data.comptes,
-    data.clients,
-    rechercheCompte,
-    estAdmin,
-    estChefAgence,
-    agenceFiltreOperations,
-  ])
+      .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
+  }, [data.agences, estAdmin, agenceFiltreOperations, employeConnecte])
+
+  const zonesRapport = useMemo(() => {
+    const agenceIds = new Set(agencesRapport.map((a) => a.id))
+    return data.zones
+      .filter((z) => agenceIds.has(z.agenceId))
+      .sort((a, b) => a.code.localeCompare(b.code, 'fr'))
+  }, [data.zones, agencesRapport])
 
   const periodeCompte = useMemo(() => {
     if (modePeriodeCompte === 'tout') return null
@@ -300,36 +406,306 @@ export default function Rapports() {
         ? libelleMois(moisCompte || moisEnCoursLocal())
         : `du ${formatDate((periodeCompte?.debut ?? '') + 'T12:00:00')} au ${formatDate((periodeCompte?.fin ?? '') + 'T12:00:00')}`
 
-  const rapportCompte = useMemo(() => {
-    const compte = data.comptes.find((c) => c.id === compteId)
-    if (!compte) return null
-    const client = data.clients.find((c) => c.id === compte.clientId)
-    const agence = client ? data.agences.find((a) => a.id === client.agenceId) : undefined
-    let mouvements = data.mouvements
-      .filter((m) => m.compteId === compte.id)
-      .sort((a, b) => a.date.localeCompare(b.date))
-    if (periodeCompte) {
-      mouvements = mouvements.filter((m) => {
-        const jour = m.date.slice(0, 10)
-        return jour >= periodeCompte.debut && jour <= periodeCompte.fin
+  const dansPeriodeComptes = (jourIso: string) => {
+    if (!periodeCompte) return true
+    return jourIso >= periodeCompte.debut && jourIso <= periodeCompte.fin
+  }
+
+  const clientsTontineChoix = useMemo(() => {
+    const zonesOk = new Set(
+      (zoneIdTontine === 'toutes'
+        ? zonesRapport
+        : zonesRapport.filter((z) => z.id === zoneIdTontine)
+      ).map((z) => z.id),
+    )
+    const q = rechercheTontine.trim().toLowerCase()
+    return data.clients
+      .filter((c) => c.zoneId && zonesOk.has(c.zoneId))
+      .filter((c) => {
+        if (!q) return true
+        return (
+          (c.codeClient ?? '').toLowerCase().includes(q) ||
+          afficherNumeroClient(c.codeClient).includes(q) ||
+          `${c.prenom} ${c.nom}`.toLowerCase().includes(q) ||
+          c.telephone.replace(/\s/g, '').includes(q.replace(/\s/g, ''))
+        )
       })
-    }
-    let totalDepots = 0
-    let totalRetraits = 0
-    mouvements.forEach((m) => {
-      if (m.type === 'depot') totalDepots += m.montant
-      else totalRetraits += m.montant
+      .sort((a, b) => (a.codeClient ?? '').localeCompare(b.codeClient ?? ''))
+  }, [data.clients, zonesRapport, zoneIdTontine, rechercheTontine])
+
+  const comptesBanqueChoix = useMemo(() => {
+    const agencesOk = new Set(
+      (agenceIdBanque === 'toutes'
+        ? agencesRapport
+        : agencesRapport.filter((a) => a.id === agenceIdBanque)
+      ).map((a) => a.id),
+    )
+    const q = rechercheBanque.trim().toLowerCase()
+    return data.comptes
+      .filter((c) => {
+        const client = data.clients.find((x) => x.id === c.clientId)
+        return !!client && agencesOk.has(client.agenceId)
+      })
+      .filter((c) => {
+        if (!q) return true
+        const client = data.clients.find((x) => x.id === c.clientId)
+        return (
+          c.numero.toLowerCase().includes(q) ||
+          (client?.codeClientBanque ?? '').toLowerCase().includes(q) ||
+          `${client?.prenom ?? ''} ${client?.nom ?? ''}`.toLowerCase().includes(q)
+        )
+      })
+      .sort((a, b) => a.numero.localeCompare(b.numero))
+  }, [data.comptes, data.clients, agencesRapport, agenceIdBanque, rechercheBanque])
+
+  const rapportTontine = useMemo(() => {
+    const zonesOk = new Set(
+      (zoneIdTontine === 'toutes'
+        ? zonesRapport
+        : zonesRapport.filter((z) => z.id === zoneIdTontine)
+      ).map((z) => z.id),
+    )
+    const ops = data.transactions.filter((t) => {
+      if (!TYPES_COMPTE_TONTINE.includes(t.type)) return false
+      if (!dansPeriodeComptes(t.date.slice(0, 10))) return false
+      const client = data.clients.find((c) => c.id === t.clientId)
+      if (!client?.zoneId || !zonesOk.has(client.zoneId)) return false
+      if (clientIdTontine && t.clientId !== clientIdTontine) return false
+      return true
     })
+    const { parType, entrees, sorties } = totauxOperations(ops)
+
+    const parClient = new Map<
+      string,
+      { nom: string; numero: string; zoneId: string; entrees: number; sorties: number; nombre: number }
+    >()
+    const parZone = new Map<
+      string,
+      { entrees: number; sorties: number; nombre: number; clients: Set<string> }
+    >()
+    ops.forEach((t) => {
+      const client = data.clients.find((c) => c.id === t.clientId)
+      const zoneId = client?.zoneId ?? ''
+      const sortie = TYPES_SORTIE.includes(t.type)
+      const ligneC = parClient.get(t.clientId) ?? {
+        nom: client ? `${client.prenom} ${client.nom}` : 'Client',
+        numero: afficherNumeroClient(client?.codeClient),
+        zoneId,
+        entrees: 0,
+        sorties: 0,
+        nombre: 0,
+      }
+      ligneC.nombre++
+      if (sortie) ligneC.sorties += t.montant
+      else ligneC.entrees += t.montant
+      parClient.set(t.clientId, ligneC)
+
+      const ligneZ = parZone.get(zoneId) ?? {
+        entrees: 0,
+        sorties: 0,
+        nombre: 0,
+        clients: new Set<string>(),
+      }
+      ligneZ.nombre++
+      if (sortie) ligneZ.sorties += t.montant
+      else ligneZ.entrees += t.montant
+      ligneZ.clients.add(t.clientId)
+      parZone.set(zoneId, ligneZ)
+    })
+
+    const lignesClients = [...parClient.entries()]
+      .map(([id, l]) => ({
+        id,
+        ...l,
+        net: l.entrees - l.sorties,
+        zoneNom: (() => {
+          const z = data.zones.find((x) => x.id === l.zoneId)
+          return z ? `${z.code}${z.nom ? ` — ${z.nom}` : ''}` : '—'
+        })(),
+      }))
+      .sort((a, b) => a.numero.localeCompare(b.numero, 'fr'))
+
+    const lignesZones = [...parZone.entries()]
+      .map(([id, l]) => {
+        const z = data.zones.find((x) => x.id === id)
+        const agence = z ? data.agences.find((a) => a.id === z.agenceId) : undefined
+        return {
+          id,
+          zoneNom: z ? `${z.code}${z.nom ? ` — ${z.nom}` : ''}` : '—',
+          agenceNom: agence?.nom ?? '—',
+          nbClients: l.clients.size,
+          nombre: l.nombre,
+          entrees: l.entrees,
+          sorties: l.sorties,
+          net: l.entrees - l.sorties,
+        }
+      })
+      .sort((a, b) => a.zoneNom.localeCompare(b.zoneNom, 'fr'))
+
     return {
-      compte,
-      client,
-      agence,
-      mouvements: [...mouvements].sort((a, b) => b.date.localeCompare(a.date)),
-      totalDepots,
-      totalRetraits,
-      net: totalDepots - totalRetraits,
+      ops,
+      parType,
+      entrees,
+      sorties,
+      lignesClients,
+      lignesZones,
+      detail: [...ops].sort((a, b) => b.date.localeCompare(a.date)),
+      cible: clientIdTontine
+        ? data.clients.find((c) => c.id === clientIdTontine) ?? null
+        : null,
     }
-  }, [data.comptes, data.clients, data.agences, data.mouvements, compteId, periodeCompte])
+  }, [
+    data.transactions,
+    data.clients,
+    data.zones,
+    data.agences,
+    zonesRapport,
+    zoneIdTontine,
+    clientIdTontine,
+    periodeCompte,
+  ])
+
+  const rapportBanque = useMemo(() => {
+    const agencesOk = new Set(
+      (agenceIdBanque === 'toutes'
+        ? agencesRapport
+        : agencesRapport.filter((a) => a.id === agenceIdBanque)
+      ).map((a) => a.id),
+    )
+    const comptesFiltres = data.comptes.filter((c) => {
+      const client = data.clients.find((x) => x.id === c.clientId)
+      if (!client || !agencesOk.has(client.agenceId)) return false
+      if (compteIdBanque && c.id !== compteIdBanque) return false
+      return true
+    })
+    const compteIds = new Set(comptesFiltres.map((c) => c.id))
+    const mouvements = data.mouvements.filter(
+      (m) => compteIds.has(m.compteId) && dansPeriodeComptes(m.date.slice(0, 10)),
+    )
+
+    const compteCible = compteIdBanque
+      ? data.comptes.find((c) => c.id === compteIdBanque)
+      : undefined
+    const ops = data.transactions.filter((t) => {
+      if (!TYPES_COMPTE_BANQUE.includes(t.type)) return false
+      if (!dansPeriodeComptes(t.date.slice(0, 10))) return false
+      const client = data.clients.find((c) => c.id === t.clientId)
+      if (!client || !agencesOk.has(client.agenceId)) return false
+      if (compteCible) {
+        if (t.clientId !== compteCible.clientId) return false
+        if (t.type === 'part_sociale' || t.type === 'droit_adhesion') return true
+        return t.description.includes(compteCible.numero)
+      }
+      return true
+    })
+    const { parType, entrees, sorties } = totauxOperations(ops)
+
+    const parCompte = new Map<
+      string,
+      { depots: number; retraits: number; nombre: number }
+    >()
+    mouvements.forEach((m) => {
+      const ligne = parCompte.get(m.compteId) ?? { depots: 0, retraits: 0, nombre: 0 }
+      ligne.nombre++
+      if (m.type === 'depot') ligne.depots += m.montant
+      else ligne.retraits += m.montant
+      parCompte.set(m.compteId, ligne)
+    })
+
+    const lignesComptes = comptesFiltres
+      .map((c) => {
+        const client = data.clients.find((x) => x.id === c.clientId)
+        const agence = client ? data.agences.find((a) => a.id === client.agenceId) : undefined
+        const act = parCompte.get(c.id) ?? { depots: 0, retraits: 0, nombre: 0 }
+        return {
+          id: c.id,
+          numero: c.numero,
+          type: c.type,
+          solde: c.solde,
+          clientNom: client ? `${client.prenom} ${client.nom}` : '—',
+          nBanque: client?.codeClientBanque ?? '—',
+          agenceNom: agence?.nom ?? '—',
+          depots: act.depots,
+          retraits: act.retraits,
+          net: act.depots - act.retraits,
+          nombre: act.nombre,
+        }
+      })
+      .filter((l) => compteIdBanque || l.nombre > 0)
+      .sort((a, b) => a.numero.localeCompare(b.numero, 'fr'))
+
+    const parAgence = new Map<
+      string,
+      { depots: number; retraits: number; nombre: number; comptes: Set<string> }
+    >()
+    lignesComptes.forEach((l) => {
+      const compte = data.comptes.find((c) => c.id === l.id)
+      const client = compte ? data.clients.find((x) => x.id === compte.clientId) : undefined
+      const agenceId = client?.agenceId ?? ''
+      const ligne = parAgence.get(agenceId) ?? {
+        depots: 0,
+        retraits: 0,
+        nombre: 0,
+        comptes: new Set<string>(),
+      }
+      ligne.depots += l.depots
+      ligne.retraits += l.retraits
+      ligne.nombre += l.nombre
+      ligne.comptes.add(l.id)
+      parAgence.set(agenceId, ligne)
+    })
+
+    const lignesAgences = [...parAgence.entries()]
+      .map(([id, l]) => {
+        const agence = data.agences.find((a) => a.id === id)
+        return {
+          id,
+          agenceNom: agence ? `${agence.code} — ${agence.nom}` : '—',
+          nbComptes: l.comptes.size,
+          nombre: l.nombre,
+          depots: l.depots,
+          retraits: l.retraits,
+          net: l.depots - l.retraits,
+        }
+      })
+      .sort((a, b) => a.agenceNom.localeCompare(b.agenceNom, 'fr'))
+
+    const totalDepotsMvt = mouvements.filter((m) => m.type === 'depot').reduce((s, m) => s + m.montant, 0)
+    const totalRetraitsMvt = mouvements.filter((m) => m.type === 'retrait').reduce((s, m) => s + m.montant, 0)
+
+    const compteSel = compteIdBanque ? data.comptes.find((c) => c.id === compteIdBanque) : undefined
+    const clientSel = compteSel ? data.clients.find((c) => c.id === compteSel.clientId) : undefined
+
+    return {
+      ops,
+      parType,
+      entrees,
+      sorties,
+      lignesComptes,
+      lignesAgences,
+      totalDepotsMvt,
+      totalRetraitsMvt,
+      detail: [...ops].sort((a, b) => b.date.localeCompare(a.date)),
+      mouvements: [...mouvements].sort((a, b) => b.date.localeCompare(a.date)),
+      cible: compteSel
+        ? {
+            compte: compteSel,
+            client: clientSel,
+            agence: clientSel ? data.agences.find((a) => a.id === clientSel.agenceId) : undefined,
+          }
+        : null,
+    }
+  }, [
+    data.transactions,
+    data.clients,
+    data.agences,
+    data.comptes,
+    data.mouvements,
+    agencesRapport,
+    agenceIdBanque,
+    compteIdBanque,
+    periodeCompte,
+  ])
 
   const clientsRapport = useMemo(() => {
     const q = rechercheClient.trim().toLowerCase()
@@ -498,6 +874,98 @@ export default function Rapports() {
     ])
   }
 
+  const exporterRapportTontine = () => {
+    const suffixe =
+      modePeriodeCompte === 'tout'
+        ? 'historique'
+        : modePeriodeCompte === 'mois'
+          ? moisCompte || moisEnCoursLocal()
+          : `${periodeCompte?.debut}_${periodeCompte?.fin}`
+    const zone =
+      zoneIdTontine === 'toutes'
+        ? 'toutes_zones'
+        : (data.zones.find((z) => z.id === zoneIdTontine)?.code ?? 'zone')
+    exporterCsv(`rapport_tontine_${zone}_${suffixe}.csv`, [
+      ['Zone', 'Agence', 'Clients', 'Nb opérations', 'Dépôts', 'Retraits', 'Net'],
+      ...rapportTontine.lignesZones.map((l) => [
+        l.zoneNom,
+        l.agenceNom,
+        l.nbClients,
+        l.nombre,
+        l.entrees,
+        l.sorties,
+        l.net,
+      ]),
+      [],
+      ['N° client', 'Client', 'Zone', 'Nb opérations', 'Dépôts', 'Retraits', 'Net'],
+      ...rapportTontine.lignesClients.map((l) => [
+        l.numero,
+        l.nom,
+        l.zoneNom,
+        l.nombre,
+        l.entrees,
+        l.sorties,
+        l.net,
+      ]),
+      [],
+      ['Type', 'Nombre', 'Entrées', 'Sorties'],
+      ...[...rapportTontine.parType.entries()].map(([type, l]) => [
+        LIBELLES_TYPE[type as keyof typeof LIBELLES_TYPE],
+        l.nombre,
+        l.entrees,
+        l.sorties,
+      ]),
+      ['TOTAL', rapportTontine.ops.length, rapportTontine.entrees, rapportTontine.sorties],
+    ])
+  }
+
+  const exporterRapportBanque = () => {
+    const suffixe =
+      modePeriodeCompte === 'tout'
+        ? 'historique'
+        : modePeriodeCompte === 'mois'
+          ? moisCompte || moisEnCoursLocal()
+          : `${periodeCompte?.debut}_${periodeCompte?.fin}`
+    const agence =
+      agenceIdBanque === 'toutes'
+        ? 'toutes_agences'
+        : (data.agences.find((a) => a.id === agenceIdBanque)?.code ?? 'agence')
+    exporterCsv(`rapport_banque_${agence}_${suffixe}.csv`, [
+      ['Agence', 'Comptes', 'Nb mouvements', 'Dépôts', 'Retraits', 'Net'],
+      ...rapportBanque.lignesAgences.map((l) => [
+        l.agenceNom,
+        l.nbComptes,
+        l.nombre,
+        l.depots,
+        l.retraits,
+        l.net,
+      ]),
+      [],
+      ['N° compte', 'Type', 'N° banque', 'Client', 'Agence', 'Nb mvts', 'Dépôts', 'Retraits', 'Net', 'Solde actuel'],
+      ...rapportBanque.lignesComptes.map((l) => [
+        l.numero,
+        LIBELLES_COMPTE[l.type],
+        l.nBanque,
+        l.clientNom,
+        l.agenceNom,
+        l.nombre,
+        l.depots,
+        l.retraits,
+        l.net,
+        l.solde,
+      ]),
+      [],
+      ['Type', 'Nombre', 'Entrées', 'Sorties'],
+      ...[...rapportBanque.parType.entries()].map(([type, l]) => [
+        LIBELLES_TYPE[type as keyof typeof LIBELLES_TYPE],
+        l.nombre,
+        l.entrees,
+        l.sorties,
+      ]),
+      ['TOTAL', rapportBanque.ops.length, rapportBanque.entrees, rapportBanque.sorties],
+    ])
+  }
+
   const ongletsVisibles = useMemo(() => {
     return ONGLETS_RAPPORT.filter((o) => {
       if (o.id === 'employes') return estAdmin || estChefAgence
@@ -514,7 +982,6 @@ export default function Rapports() {
           <button
             className="btn-secondary"
             onClick={() => imprimer()}
-            disabled={onglet === 'compte' && !rapportCompte}
           >
             <Printer className="h-4 w-4" />
             Imprimer
@@ -842,45 +1309,418 @@ export default function Rapports() {
       </div>
       )}
 
-      {onglet === 'compte' && (
+      {onglet === 'tontine' && (
       <div className="card mb-6 !p-0 overflow-hidden print:overflow-visible">
         <div className="space-y-3 border-b border-slate-200 px-5 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="font-semibold text-slate-900">Rapport de compte</h3>
+              <h3 className="font-semibold text-slate-900">Rapport comptes tontine</h3>
               <p className="text-sm text-slate-500">
-                Choisissez un compte courant ou épargne, puis imprimez le relevé.
+                Dépôts et retraits des carnets — {libellePeriodeCompte}
               </p>
             </div>
-            <button
-              className="btn-secondary !py-2 text-xs print:hidden"
-              onClick={() => imprimer('compte')}
-              disabled={!rapportCompte}
-            >
-              <Printer className="h-3.5 w-3.5" />
-              Imprimer
-            </button>
+            <div className="flex flex-wrap gap-2 print:hidden">
+              <button
+                className="btn-secondary !py-2 text-xs"
+                onClick={exporterRapportTontine}
+                disabled={rapportTontine.ops.length === 0}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Excel
+              </button>
+              <button className="btn-secondary !py-2 text-xs" onClick={() => imprimer('tontine')}>
+                <Printer className="h-3.5 w-3.5" />
+                Imprimer
+              </button>
+            </div>
           </div>
-
-          <div className="flex flex-wrap items-end gap-3 print:hidden">
+          <div className="flex flex-wrap items-end gap-3">
+            <FiltresPeriode
+              mode={modePeriodeCompte}
+              onMode={setModePeriodeCompte}
+              mois={moisCompte}
+              onMois={setMoisCompte}
+              debut={debutCompte}
+              onDebut={setDebutCompte}
+              fin={finCompte}
+              onFin={setFinCompte}
+            />
+            <div>
+              <label className="label !mb-1">Zone</label>
+              <select
+                className="input !w-auto min-w-[14rem]"
+                value={zoneIdTontine}
+                onChange={(e) => {
+                  setZoneIdTontine(e.target.value)
+                  setClientIdTontine('')
+                }}
+              >
+                <option value="toutes">Toutes les zones</option>
+                {zonesRapport.map((z) => {
+                  const agence = data.agences.find((a) => a.id === z.agenceId)
+                  return (
+                    <option key={z.id} value={z.id}>
+                      {z.code}
+                      {z.nom ? ` — ${z.nom}` : ''}
+                      {agence ? ` (${agence.nom})` : ''}
+                    </option>
+                  )
+                })}
+              </select>
+            </div>
             <div className="min-w-[12rem] flex-1">
-              <label className="label !mb-1">Rechercher</label>
+              <label className="label !mb-1">Rechercher un client</label>
               <input
                 className="input"
-                placeholder="N° compte, client…"
-                value={rechercheCompte}
-                onChange={(e) => setRechercheCompte(e.target.value)}
+                placeholder="N°, nom…"
+                value={rechercheTontine}
+                onChange={(e) => setRechercheTontine(e.target.value)}
+              />
+            </div>
+            <div className="min-w-[16rem] flex-[2]">
+              <label className="label !mb-1">Client</label>
+              <select
+                className="input"
+                value={clientIdTontine}
+                onChange={(e) => setClientIdTontine(e.target.value)}
+              >
+                <option value="">Tous les clients</option>
+                {clientsTontineChoix.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {afficherNumeroClient(c.codeClient)} — {c.prenom} {c.nom}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden border-b border-slate-200 px-5 py-4 print:block">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {NOM_APPLICATION} — Comptes tontine
+          </div>
+          <p className="text-sm text-slate-600">Période : {libellePeriodeCompte}</p>
+          {rapportTontine.cible && (
+            <p className="mt-1 font-semibold text-slate-900">
+              {rapportTontine.cible.prenom} {rapportTontine.cible.nom} — n°{' '}
+              {afficherNumeroClient(rapportTontine.cible.codeClient)}
+            </p>
+          )}
+        </div>
+
+        {rapportTontine.cible && (
+          <div className="flex flex-wrap items-start justify-between gap-3 border-t border-slate-100 px-5 pt-5">
+            <div className="rounded-xl bg-slate-50 px-3 py-2">
+              <div className="text-xs text-slate-500">Client</div>
+              <div className="font-semibold text-slate-900">
+                {rapportTontine.cible.prenom} {rapportTontine.cible.nom}
+              </div>
+              <div className="text-xs text-slate-500">
+                n° {afficherNumeroClient(rapportTontine.cible.codeClient)}
+                {(() => {
+                  const z = data.zones.find((x) => x.id === rapportTontine.cible?.zoneId)
+                  return z ? ` · ${z.code}${z.nom ? ` — ${z.nom}` : ''}` : ''
+                })()}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn-secondary !py-2 text-xs print:hidden"
+              onClick={() => setClientIdTontine('')}
+            >
+              Tous les clients
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3 p-5 lg:grid-cols-4">
+          <div className="rounded-xl bg-emerald-50 px-3 py-2">
+            <div className="text-xs text-emerald-700">Dépôts</div>
+            <div className="font-bold text-emerald-800">{formatMontant(rapportTontine.entrees)}</div>
+          </div>
+          <div className="rounded-xl bg-rose-50 px-3 py-2">
+            <div className="text-xs text-rose-700">Retraits</div>
+            <div className="font-bold text-rose-800">{formatMontant(rapportTontine.sorties)}</div>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2">
+            <div className="text-xs text-slate-500">Net</div>
+            <div
+              className={`font-bold ${
+                rapportTontine.entrees - rapportTontine.sorties >= 0
+                  ? 'text-emerald-700'
+                  : 'text-rose-700'
+              }`}
+            >
+              {formatMontant(rapportTontine.entrees - rapportTontine.sorties)}
+            </div>
+          </div>
+          <div className="rounded-xl bg-brand-50 px-3 py-2">
+            <div className="text-xs text-brand-700">Opérations</div>
+            <div className="font-bold text-brand-800">{rapportTontine.ops.length}</div>
+          </div>
+        </div>
+
+        {zoneIdTontine === 'toutes' && !clientIdTontine && (
+          <div className="border-t border-slate-100 px-5 pb-5">
+            <h4 className="mb-3 text-sm font-semibold text-slate-800">
+              Synthèse par zone ({rapportTontine.lignesZones.length})
+            </h4>
+            {rapportTontine.lignesZones.length === 0 ? (
+              <p className="text-sm text-slate-500">Aucune opération tontine sur cette période.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <th className="py-2.5 pr-4">Zone</th>
+                      <th className="py-2.5 pr-4">Agence</th>
+                      <th className="py-2.5 pr-4 text-right">Clients</th>
+                      <th className="py-2.5 pr-4 text-right">Ops</th>
+                      <th className="py-2.5 pr-4 text-right">Dépôts</th>
+                      <th className="py-2.5 pr-4 text-right">Retraits</th>
+                      <th className="py-2.5 text-right">Net</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rapportTontine.lignesZones.map((l) => (
+                      <tr
+                        key={l.id}
+                        className="cursor-pointer hover:bg-slate-50"
+                        onClick={() => {
+                          setZoneIdTontine(l.id)
+                          setClientIdTontine('')
+                        }}
+                      >
+                        <td className="py-2.5 pr-4 font-medium text-slate-800">{l.zoneNom}</td>
+                        <td className="py-2.5 pr-4 text-slate-600">{l.agenceNom}</td>
+                        <td className="py-2.5 pr-4 text-right text-slate-600">{l.nbClients}</td>
+                        <td className="py-2.5 pr-4 text-right text-slate-600">{l.nombre}</td>
+                        <td className="py-2.5 pr-4 text-right font-semibold text-emerald-600">
+                          {formatMontant(l.entrees)}
+                        </td>
+                        <td className="py-2.5 pr-4 text-right font-semibold text-rose-600">
+                          {formatMontant(l.sorties)}
+                        </td>
+                        <td className="py-2.5 text-right font-semibold text-slate-800">
+                          {formatMontant(l.net)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!clientIdTontine && (
+        <div className="border-t border-slate-100 px-5 pb-5">
+          <h4 className="mb-3 text-sm font-semibold text-slate-800">
+            Par client ({rapportTontine.lignesClients.length})
+          </h4>
+          {rapportTontine.lignesClients.length === 0 ? (
+            <p className="text-sm text-slate-500">Aucun client tontine avec opération sur cette période.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="py-2.5 pr-4">N° client</th>
+                    <th className="py-2.5 pr-4">Client</th>
+                    {zoneIdTontine === 'toutes' && <th className="py-2.5 pr-4">Zone</th>}
+                    <th className="py-2.5 pr-4 text-right">Ops</th>
+                    <th className="py-2.5 pr-4 text-right">Dépôts</th>
+                    <th className="py-2.5 pr-4 text-right">Retraits</th>
+                    <th className="py-2.5 text-right">Net</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rapportTontine.lignesClients.map((l) => (
+                    <tr
+                      key={l.id}
+                      className="cursor-pointer hover:bg-slate-50"
+                      onClick={() => setClientIdTontine(l.id)}
+                    >
+                      <td className="py-2.5 pr-4 font-mono text-xs font-semibold text-brand-700">
+                        {l.numero}
+                      </td>
+                      <td className="py-2.5 pr-4 font-medium text-slate-800">{l.nom}</td>
+                      {zoneIdTontine === 'toutes' && (
+                        <td className="py-2.5 pr-4 text-slate-600">{l.zoneNom}</td>
+                      )}
+                      <td className="py-2.5 pr-4 text-right text-slate-600">{l.nombre}</td>
+                      <td className="py-2.5 pr-4 text-right font-semibold text-emerald-600">
+                        {formatMontant(l.entrees)}
+                      </td>
+                      <td className="py-2.5 pr-4 text-right font-semibold text-rose-600">
+                        {formatMontant(l.sorties)}
+                      </td>
+                      <td className="py-2.5 text-right font-semibold text-slate-800">
+                        {formatMontant(l.net)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        )}
+
+        <div className="border-t border-slate-100 px-5 pb-5">
+          <h4 className="mb-3 text-sm font-semibold text-slate-800">Par type d’opération</h4>
+          {rapportTontine.parType.size === 0 ? (
+            <p className="text-sm text-slate-500">Aucun mouvement sur la période.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="py-2.5 pr-4">Type</th>
+                  <th className="py-2.5 pr-4 text-right">Nombre</th>
+                  <th className="py-2.5 pr-4 text-right">Dépôts</th>
+                  <th className="py-2.5 text-right">Retraits</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[...rapportTontine.parType.entries()].map(([type, l]) => (
+                  <tr key={type}>
+                    <td className="py-2.5 pr-4 text-slate-800">
+                      {LIBELLES_TYPE[type as keyof typeof LIBELLES_TYPE]}
+                    </td>
+                    <td className="py-2.5 pr-4 text-right text-slate-600">{l.nombre}</td>
+                    <td className="py-2.5 pr-4 text-right font-semibold text-emerald-600">
+                      {l.entrees ? formatMontant(l.entrees) : '—'}
+                    </td>
+                    <td className="py-2.5 text-right font-semibold text-rose-600">
+                      {l.sorties ? formatMontant(l.sorties) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="border-t border-slate-100 px-5 pb-5">
+          <h4 className="mb-3 text-sm font-semibold text-slate-800">
+            Détail des opérations ({rapportTontine.detail.length})
+          </h4>
+          {rapportTontine.detail.length === 0 ? (
+            <p className="text-sm text-slate-500">Aucune opération à lister.</p>
+          ) : (
+            <div className="max-h-[28rem] overflow-auto print:max-h-none print:overflow-visible">
+              <table className="w-full min-w-[640px] text-sm print:min-w-0">
+                <thead className="sticky top-0 bg-white print:static">
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="py-2.5 pr-4">Date</th>
+                    <th className="py-2.5 pr-4">Type</th>
+                    <th className="py-2.5 pr-4">Description</th>
+                    <th className="py-2.5 text-right">Montant</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rapportTontine.detail.map((t) => {
+                    const sortie = TYPES_SORTIE.includes(t.type)
+                    return (
+                      <tr key={t.id}>
+                        <td className="py-2 pr-4 whitespace-nowrap text-slate-600">
+                          {formatDateHeure(t.date)}
+                        </td>
+                        <td className="py-2 pr-4 text-slate-700">{LIBELLES_TYPE[t.type]}</td>
+                        <td className="py-2 pr-4 text-slate-800">{t.description}</td>
+                        <td
+                          className={`py-2 text-right font-semibold ${
+                            sortie ? 'text-rose-600' : 'text-emerald-600'
+                          }`}
+                        >
+                          {sortie ? '−' : '+'}
+                          {formatMontant(t.montant)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+      )}
+
+      {onglet === 'banque' && (
+      <div className="card mb-6 !p-0 overflow-hidden print:overflow-visible">
+        <div className="space-y-3 border-b border-slate-200 px-5 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-slate-900">Rapport comptes banque</h3>
+              <p className="text-sm text-slate-500">
+                Comptes courant et épargne — {libellePeriodeCompte}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 print:hidden">
+              <button
+                className="btn-secondary !py-2 text-xs"
+                onClick={exporterRapportBanque}
+                disabled={rapportBanque.ops.length === 0 && rapportBanque.lignesComptes.length === 0}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Excel
+              </button>
+              <button className="btn-secondary !py-2 text-xs" onClick={() => imprimer('banque')}>
+                <Printer className="h-3.5 w-3.5" />
+                Imprimer
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <FiltresPeriode
+              mode={modePeriodeCompte}
+              onMode={setModePeriodeCompte}
+              mois={moisCompte}
+              onMois={setMoisCompte}
+              debut={debutCompte}
+              onDebut={setDebutCompte}
+              fin={finCompte}
+              onFin={setFinCompte}
+            />
+            {agencesRapport.length > 1 && (
+              <div>
+                <label className="label !mb-1">Agence</label>
+                <select
+                  className="input !w-auto min-w-[14rem]"
+                  value={agenceIdBanque}
+                  onChange={(e) => {
+                    setAgenceIdBanque(e.target.value)
+                    setCompteIdBanque('')
+                  }}
+                >
+                  <option value="toutes">Toutes les agences</option>
+                  {agencesRapport.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.code} — {a.nom}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="min-w-[12rem] flex-1">
+              <label className="label !mb-1">Rechercher un compte</label>
+              <input
+                className="input"
+                placeholder="N°, client…"
+                value={rechercheBanque}
+                onChange={(e) => setRechercheBanque(e.target.value)}
               />
             </div>
             <div className="min-w-[16rem] flex-[2]">
               <label className="label !mb-1">Compte</label>
               <select
                 className="input"
-                value={compteId}
-                onChange={(e) => setCompteId(e.target.value)}
+                value={compteIdBanque}
+                onChange={(e) => setCompteIdBanque(e.target.value)}
               >
-                <option value="">— Sélectionner un compte —</option>
-                {comptesDisponibles.map((c) => {
+                <option value="">Tous les comptes</option>
+                {comptesBanqueChoix.map((c) => {
                   const client = data.clients.find((x) => x.id === c.clientId)
                   return (
                     <option key={c.id} value={c.id}>
@@ -892,198 +1732,322 @@ export default function Rapports() {
               </select>
             </div>
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-end gap-3 print:hidden">
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  ['mois', 'Par mois'],
-                  ['intervalle', 'Par intervalle'],
-                  ['tout', 'Tout l’historique'],
-                ] as const
-              ).map(([v, label]) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => {
-                    setModePeriodeCompte(v)
-                    if (v === 'mois') setMoisCompte(moisEnCoursLocal())
-                    if (v === 'intervalle') {
-                      const b = bornesMois(moisCompte || moisEnCoursLocal())
-                      setDebutCompte(b.debut)
-                      setFinCompte(b.fin)
-                    }
-                  }}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
-                    modePeriodeCompte === v
-                      ? 'bg-brand-600 text-white'
-                      : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {modePeriodeCompte === 'mois' && (
-              <div>
-                <label className="label !mb-1">Mois</label>
-                <input
-                  className="input !w-auto"
-                  type="month"
-                  value={moisCompte || moisEnCoursLocal()}
-                  max={moisEnCoursLocal()}
-                  onChange={(e) => setMoisCompte(e.target.value)}
-                />
+        <div className="hidden border-b border-slate-200 px-5 py-4 print:block">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {NOM_APPLICATION} — Comptes banque
+          </div>
+          <p className="text-sm text-slate-600">Période : {libellePeriodeCompte}</p>
+          {rapportBanque.cible && (
+            <p className="mt-1 font-semibold text-slate-900">
+              {rapportBanque.cible.compte.numero} — {LIBELLES_COMPTE[rapportBanque.cible.compte.type]}
+              {rapportBanque.cible.client
+                ? ` — ${rapportBanque.cible.client.prenom} ${rapportBanque.cible.client.nom}`
+                : ''}
+            </p>
+          )}
+        </div>
+
+        {rapportBanque.cible && (
+          <div className="flex flex-wrap items-start justify-between gap-3 border-t border-slate-100 px-5 pt-5">
+            <div className="rounded-xl bg-slate-50 px-3 py-2">
+              <div className="text-xs text-slate-500">Compte</div>
+              <div className="font-semibold text-slate-900">
+                {rapportBanque.cible.compte.numero} — {LIBELLES_COMPTE[rapportBanque.cible.compte.type]}
               </div>
-            )}
-            {modePeriodeCompte === 'intervalle' && (
-              <>
-                <div>
-                  <label className="label !mb-1">Du</label>
-                  <input
-                    className="input !w-auto"
-                    type="date"
-                    value={debutCompte}
-                    max={finCompte || aujourdhuiLocalIso()}
-                    onChange={(e) => setDebutCompte(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label !mb-1">Au</label>
-                  <input
-                    className="input !w-auto"
-                    type="date"
-                    value={finCompte}
-                    min={debutCompte || undefined}
-                    max={aujourdhuiLocalIso()}
-                    onChange={(e) => setFinCompte(e.target.value)}
-                  />
-                </div>
-              </>
-            )}
+              <div className="text-xs text-slate-500">
+                {rapportBanque.cible.client
+                  ? `${rapportBanque.cible.client.prenom} ${rapportBanque.cible.client.nom}`
+                  : '—'}
+                {rapportBanque.cible.client?.codeClientBanque
+                  ? ` · n° ${rapportBanque.cible.client.codeClientBanque}`
+                  : ''}
+                {rapportBanque.cible.agence ? ` · ${rapportBanque.cible.agence.nom}` : ''}
+              </div>
+              <div className="mt-1 text-sm font-bold text-brand-800">
+                Solde actuel : {formatMontant(rapportBanque.cible.compte.solde)}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn-secondary !py-2 text-xs print:hidden"
+              onClick={() => setCompteIdBanque('')}
+            >
+              Tous les comptes
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3 p-5 lg:grid-cols-4">
+          <div className="rounded-xl bg-emerald-50 px-3 py-2">
+            <div className="text-xs text-emerald-700">Dépôts (comptes)</div>
+            <div className="font-bold text-emerald-800">
+              {formatMontant(rapportBanque.totalDepotsMvt)}
+            </div>
+          </div>
+          <div className="rounded-xl bg-rose-50 px-3 py-2">
+            <div className="text-xs text-rose-700">Retraits (comptes)</div>
+            <div className="font-bold text-rose-800">
+              {formatMontant(rapportBanque.totalRetraitsMvt)}
+            </div>
+          </div>
+          <div className="rounded-xl bg-slate-50 px-3 py-2">
+            <div className="text-xs text-slate-500">Net</div>
+            <div
+              className={`font-bold ${
+                rapportBanque.totalDepotsMvt - rapportBanque.totalRetraitsMvt >= 0
+                  ? 'text-emerald-700'
+                  : 'text-rose-700'
+              }`}
+            >
+              {formatMontant(rapportBanque.totalDepotsMvt - rapportBanque.totalRetraitsMvt)}
+            </div>
+          </div>
+          <div className="rounded-xl bg-brand-50 px-3 py-2">
+            <div className="text-xs text-brand-700">Comptes actifs (période)</div>
+            <div className="font-bold text-brand-800">{rapportBanque.lignesComptes.length}</div>
           </div>
         </div>
 
-        {!rapportCompte ? (
-          <div className="p-5">
-            <p className="text-sm text-slate-500">
-              Sélectionnez un compte pour afficher et imprimer son relevé.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="hidden border-b border-slate-200 px-5 py-4 print:block">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {NOM_APPLICATION} — Relevé de compte
-              </div>
-              <div className="mt-1 text-lg font-bold text-slate-900">
-                {rapportCompte.compte.numero} — {LIBELLES_COMPTE[rapportCompte.compte.type]}
-              </div>
-              <p className="text-sm text-slate-600">Période : {libellePeriodeCompte}</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 p-5 sm:grid-cols-4">
-              <div className="rounded-xl bg-slate-50 px-3 py-2 sm:col-span-2">
-                <div className="text-xs text-slate-500">Titulaire</div>
-                <div className="font-semibold text-slate-900">
-                  {rapportCompte.client
-                    ? `${rapportCompte.client.prenom} ${rapportCompte.client.nom}`
-                    : '—'}
-                </div>
-                <div className="text-xs text-slate-500">
-                  {afficherNumeroClient(rapportCompte.client.codeClient)}
-                  {rapportCompte.agence ? ` · ${rapportCompte.agence.nom}` : ''}
-                </div>
-              </div>
-              <div className="rounded-xl bg-brand-50 px-3 py-2">
-                <div className="text-xs text-brand-700">Solde actuel</div>
-                <div className="font-bold text-brand-800">
-                  {formatMontant(rapportCompte.compte.solde)}
-                </div>
-              </div>
-              <div className="rounded-xl bg-slate-50 px-3 py-2">
-                <div className="text-xs text-slate-500">Ouvert le</div>
-                <div className="font-semibold text-slate-800">
-                  {formatDate(rapportCompte.compte.dateOuverture)}
-                </div>
-                {rapportCompte.compte.verrouille && (
-                  <span className="badge mt-1 bg-rose-100 text-rose-700">Verrouillé</span>
-                )}
-              </div>
-              <div className="rounded-xl bg-emerald-50 px-3 py-2">
-                <div className="text-xs text-emerald-700">Dépôts (période)</div>
-                <div className="font-bold text-emerald-800">
-                  {formatMontant(rapportCompte.totalDepots)}
-                </div>
-              </div>
-              <div className="rounded-xl bg-rose-50 px-3 py-2">
-                <div className="text-xs text-rose-700">Retraits (période)</div>
-                <div className="font-bold text-rose-800">
-                  {formatMontant(rapportCompte.totalRetraits)}
-                </div>
-              </div>
-              <div className="rounded-xl bg-slate-50 px-3 py-2 sm:col-span-2">
-                <div className="text-xs text-slate-500">Net période — {libellePeriodeCompte}</div>
-                <div
-                  className={`font-bold ${
-                    rapportCompte.net >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                  }`}
-                >
-                  {formatMontant(rapportCompte.net)}
-                </div>
-                <div className="text-xs text-slate-500">
-                  {rapportCompte.mouvements.length} mouvement
-                  {rapportCompte.mouvements.length > 1 ? 's' : ''}
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-slate-100 px-5 pb-5">
-              <h4 className="mb-3 text-sm font-semibold text-slate-800">
-                Mouvements ({rapportCompte.mouvements.length})
-              </h4>
-              {rapportCompte.mouvements.length === 0 ? (
-                <p className="text-sm text-slate-500">Aucun mouvement sur cette période.</p>
-              ) : (
-                <div className="max-h-[28rem] overflow-auto print:max-h-none print:overflow-visible">
-                  <table className="w-full min-w-[520px] text-sm print:min-w-0">
-                    <thead className="sticky top-0 bg-white print:static">
-                      <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                        <th className="py-2.5 pr-4">Date</th>
-                        <th className="py-2.5 pr-4">Type</th>
-                        <th className="py-2.5 pr-4">Note</th>
-                        <th className="py-2.5 text-right">Montant</th>
+        {agenceIdBanque === 'toutes' && agencesRapport.length > 1 && !compteIdBanque && (
+          <div className="border-t border-slate-100 px-5 pb-5">
+            <h4 className="mb-3 text-sm font-semibold text-slate-800">
+              Synthèse par agence ({rapportBanque.lignesAgences.length})
+            </h4>
+            {rapportBanque.lignesAgences.length === 0 ? (
+              <p className="text-sm text-slate-500">Aucune opération banque sur cette période.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <th className="py-2.5 pr-4">Agence</th>
+                      <th className="py-2.5 pr-4 text-right">Comptes</th>
+                      <th className="py-2.5 pr-4 text-right">Mvts</th>
+                      <th className="py-2.5 pr-4 text-right">Dépôts</th>
+                      <th className="py-2.5 pr-4 text-right">Retraits</th>
+                      <th className="py-2.5 text-right">Net</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rapportBanque.lignesAgences.map((l) => (
+                      <tr
+                        key={l.id}
+                        className="cursor-pointer hover:bg-slate-50"
+                        onClick={() => {
+                          setAgenceIdBanque(l.id)
+                          setCompteIdBanque('')
+                        }}
+                      >
+                        <td className="py-2.5 pr-4 font-medium text-slate-800">{l.agenceNom}</td>
+                        <td className="py-2.5 pr-4 text-right text-slate-600">{l.nbComptes}</td>
+                        <td className="py-2.5 pr-4 text-right text-slate-600">{l.nombre}</td>
+                        <td className="py-2.5 pr-4 text-right font-semibold text-emerald-600">
+                          {formatMontant(l.depots)}
+                        </td>
+                        <td className="py-2.5 pr-4 text-right font-semibold text-rose-600">
+                          {formatMontant(l.retraits)}
+                        </td>
+                        <td className="py-2.5 text-right font-semibold text-slate-800">
+                          {formatMontant(l.net)}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {rapportCompte.mouvements.map((m) => (
-                        <tr key={m.id}>
-                          <td className="py-2 pr-4 whitespace-nowrap text-slate-600">
-                            {formatDateHeure(m.date)}
-                          </td>
-                          <td className="py-2 pr-4 text-slate-800">
-                            {m.type === 'depot' ? 'Dépôt' : 'Retrait'}
-                          </td>
-                          <td className="py-2 pr-4 text-slate-500">{m.note || '—'}</td>
-                          <td
-                            className={`py-2 text-right font-semibold ${
-                              m.type === 'depot' ? 'text-emerald-600' : 'text-rose-600'
-                            }`}
-                          >
-                            {m.type === 'depot' ? '+' : '−'}
-                            {formatMontant(m.montant)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
+
+        {!compteIdBanque && (
+        <div className="border-t border-slate-100 px-5 pb-5">
+          <h4 className="mb-3 text-sm font-semibold text-slate-800">
+            Par compte ({rapportBanque.lignesComptes.length})
+          </h4>
+          {rapportBanque.lignesComptes.length === 0 ? (
+            <p className="text-sm text-slate-500">Aucun mouvement de compte sur cette période.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="py-2.5 pr-4">N° compte</th>
+                    <th className="py-2.5 pr-4">Type</th>
+                    <th className="py-2.5 pr-4">Client</th>
+                    {agenceIdBanque === 'toutes' && <th className="py-2.5 pr-4">Agence</th>}
+                    <th className="py-2.5 pr-4 text-right">Dépôts</th>
+                    <th className="py-2.5 pr-4 text-right">Retraits</th>
+                    <th className="py-2.5 pr-4 text-right">Net</th>
+                    <th className="py-2.5 text-right">Solde actuel</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rapportBanque.lignesComptes.map((l) => (
+                    <tr
+                      key={l.id}
+                      className="cursor-pointer hover:bg-slate-50"
+                      onClick={() => setCompteIdBanque(l.id)}
+                    >
+                      <td className="py-2.5 pr-4 font-mono text-xs font-semibold text-sky-700">
+                        {l.numero}
+                      </td>
+                      <td className="py-2.5 pr-4 text-slate-600">{LIBELLES_COMPTE[l.type]}</td>
+                      <td className="py-2.5 pr-4 text-slate-800">
+                        <span className="font-medium">{l.clientNom}</span>
+                        <span className="mt-0.5 block font-mono text-xs text-slate-400">{l.nBanque}</span>
+                      </td>
+                      {agenceIdBanque === 'toutes' && (
+                        <td className="py-2.5 pr-4 text-slate-600">{l.agenceNom}</td>
+                      )}
+                      <td className="py-2.5 pr-4 text-right font-semibold text-emerald-600">
+                        {formatMontant(l.depots)}
+                      </td>
+                      <td className="py-2.5 pr-4 text-right font-semibold text-rose-600">
+                        {formatMontant(l.retraits)}
+                      </td>
+                      <td className="py-2.5 pr-4 text-right font-semibold text-slate-800">
+                        {formatMontant(l.net)}
+                      </td>
+                      <td className="py-2.5 text-right font-semibold text-slate-800">
+                        {formatMontant(l.solde)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        )}
+
+        {compteIdBanque && (
+          <div className="border-t border-slate-100 px-5 pb-5">
+            <h4 className="mb-3 text-sm font-semibold text-slate-800">
+              Mouvements du compte ({rapportBanque.mouvements.length})
+            </h4>
+            {rapportBanque.mouvements.length === 0 ? (
+              <p className="text-sm text-slate-500">Aucun mouvement sur cette période.</p>
+            ) : (
+              <div className="max-h-[28rem] overflow-auto print:max-h-none print:overflow-visible">
+                <table className="w-full min-w-[520px] text-sm print:min-w-0">
+                  <thead className="sticky top-0 bg-white print:static">
+                    <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <th className="py-2.5 pr-4">Date</th>
+                      <th className="py-2.5 pr-4">Type</th>
+                      <th className="py-2.5 pr-4">Note</th>
+                      <th className="py-2.5 text-right">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rapportBanque.mouvements.map((m) => (
+                      <tr key={m.id}>
+                        <td className="py-2 pr-4 whitespace-nowrap text-slate-600">
+                          {formatDateHeure(m.date)}
+                        </td>
+                        <td className="py-2 pr-4 text-slate-800">
+                          {m.type === 'depot' ? 'Dépôt' : 'Retrait'}
+                        </td>
+                        <td className="py-2 pr-4 text-slate-500">{m.note || '—'}</td>
+                        <td
+                          className={`py-2 text-right font-semibold ${
+                            m.type === 'depot' ? 'text-emerald-600' : 'text-rose-600'
+                          }`}
+                        >
+                          {m.type === 'depot' ? '+' : '−'}
+                          {formatMontant(m.montant)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="border-t border-slate-100 px-5 pb-5">
+          <h4 className="mb-3 text-sm font-semibold text-slate-800">Par type d’opération</h4>
+          {rapportBanque.parType.size === 0 ? (
+            <p className="text-sm text-slate-500">Aucun mouvement sur la période.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="py-2.5 pr-4">Type</th>
+                  <th className="py-2.5 pr-4 text-right">Nombre</th>
+                  <th className="py-2.5 pr-4 text-right">Dépôts</th>
+                  <th className="py-2.5 text-right">Retraits</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[...rapportBanque.parType.entries()].map(([type, l]) => (
+                  <tr key={type}>
+                    <td className="py-2.5 pr-4 text-slate-800">
+                      {LIBELLES_TYPE[type as keyof typeof LIBELLES_TYPE]}
+                    </td>
+                    <td className="py-2.5 pr-4 text-right text-slate-600">{l.nombre}</td>
+                    <td className="py-2.5 pr-4 text-right font-semibold text-emerald-600">
+                      {l.entrees ? formatMontant(l.entrees) : '—'}
+                    </td>
+                    <td className="py-2.5 text-right font-semibold text-rose-600">
+                      {l.sorties ? formatMontant(l.sorties) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="border-t border-slate-100 px-5 pb-5">
+          <h4 className="mb-3 text-sm font-semibold text-slate-800">
+            Détail des opérations ({rapportBanque.detail.length})
+          </h4>
+          {rapportBanque.detail.length === 0 ? (
+            <p className="text-sm text-slate-500">Aucune opération à lister.</p>
+          ) : (
+            <div className="max-h-[28rem] overflow-auto print:max-h-none print:overflow-visible">
+              <table className="w-full min-w-[640px] text-sm print:min-w-0">
+                <thead className="sticky top-0 bg-white print:static">
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="py-2.5 pr-4">Date</th>
+                    <th className="py-2.5 pr-4">Type</th>
+                    <th className="py-2.5 pr-4">Description</th>
+                    <th className="py-2.5 text-right">Montant</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rapportBanque.detail.map((t) => {
+                    const sortie = TYPES_SORTIE.includes(t.type)
+                    return (
+                      <tr key={t.id}>
+                        <td className="py-2 pr-4 whitespace-nowrap text-slate-600">
+                          {formatDateHeure(t.date)}
+                        </td>
+                        <td className="py-2 pr-4 text-slate-700">{LIBELLES_TYPE[t.type]}</td>
+                        <td className="py-2 pr-4 text-slate-800">{t.description}</td>
+                        <td
+                          className={`py-2 text-right font-semibold ${
+                            sortie ? 'text-rose-600' : 'text-emerald-600'
+                          }`}
+                        >
+                          {sortie ? '−' : '+'}
+                          {formatMontant(t.montant)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
       )}
+
+
 
       {onglet === 'clients' && (
         <div className="card mb-6 !p-0 overflow-hidden print:overflow-visible">

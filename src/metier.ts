@@ -38,6 +38,23 @@ export const LIBELLES_TYPE: Record<TypeTransaction, string> = {
 
 export const TYPES_SORTIE: TypeTransaction[] = ['retrait_tontine', 'retrait_compte', 'octroi_credit']
 
+/** Opérations des carnets tontine (rapport par zone). */
+export const TYPES_COMPTE_TONTINE: TypeTransaction[] = [
+  'vente_carnet',
+  'mise_tontine',
+  'retrait_tontine',
+  'commission_tontine',
+  'complement_mise',
+]
+
+/** Opérations des comptes courant / épargne (rapport par agence). */
+export const TYPES_COMPTE_BANQUE: TypeTransaction[] = [
+  'depot_compte',
+  'retrait_compte',
+  'part_sociale',
+  'droit_adhesion',
+]
+
 /** Types d'opérations qui alimentent le compte de caisse d'un caissier. */
 export const TYPES_OPERATION_CAISSE: TypeTransaction[] = [
   'vente_carnet',
