@@ -197,6 +197,27 @@ def migrate_clients_zone_nullable(conn) -> None:
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_clients_zone_id ON clients (zone_id)"))
 
 
+def migrate_transactions_annulation(conn) -> None:
+    """Colonnes d'annulation (contrepassation) sur le journal des transactions."""
+    try:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(transactions)")).fetchall()}
+    except Exception:  # noqa: BLE001
+        return
+    alters = []
+    if "annulee" not in cols:
+        alters.append("ALTER TABLE transactions ADD COLUMN annulee BOOLEAN DEFAULT 0")
+    if "motif_annulation" not in cols:
+        alters.append("ALTER TABLE transactions ADD COLUMN motif_annulation TEXT")
+    if "date_annulation" not in cols:
+        alters.append("ALTER TABLE transactions ADD COLUMN date_annulation VARCHAR")
+    if "annule_par_id" not in cols:
+        alters.append("ALTER TABLE transactions ADD COLUMN annule_par_id VARCHAR")
+    if "annule_par_nom" not in cols:
+        alters.append("ALTER TABLE transactions ADD COLUMN annule_par_nom VARCHAR")
+    for sql in alters:
+        conn.execute(text(sql))
+
+
 def migrate_clients_origine_tontine(conn) -> None:
     """Client ancien (papier) : origine_tontine + reprise_papier sur les carnets."""
     try:

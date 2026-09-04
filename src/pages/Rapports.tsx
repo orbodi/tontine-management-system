@@ -237,6 +237,7 @@ export default function Rapports() {
   const rapportCaisse = useMemo(() => {
     const ops = data.transactions.filter((t) => {
       if (!estOperationCaisse(t.type)) return false
+      if (t.annulee) return false
       if (!dansPerimetre(t.agenceId, t.operateurId)) return false
       if (!dansPeriode(t.date.slice(0, 10))) return false
       if (caissierId !== 'tous' && t.operateurId !== caissierId) return false
@@ -467,6 +468,7 @@ export default function Rapports() {
     )
     const ops = data.transactions.filter((t) => {
       if (!TYPES_COMPTE_TONTINE.includes(t.type)) return false
+      if (t.annulee) return false
       if (!dansPeriodeComptes(t.date.slice(0, 10))) return false
       const client = data.clients.find((c) => c.id === t.clientId)
       if (!client?.zoneId || !zonesOk.has(client.zoneId)) return false
@@ -588,6 +590,7 @@ export default function Rapports() {
       : undefined
     const ops = data.transactions.filter((t) => {
       if (!TYPES_COMPTE_BANQUE.includes(t.type)) return false
+      if (t.annulee) return false
       if (!dansPeriodeComptes(t.date.slice(0, 10))) return false
       const client = data.clients.find((c) => c.id === t.clientId)
       if (!client || !agencesOk.has(client.agenceId)) return false

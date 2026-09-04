@@ -152,6 +152,7 @@ interface StoreApi {
     nouveauMontant: number,
     motif?: string,
   ) => Promise<string | null>
+  annulerTransaction: (transactionId: string, motif: string) => Promise<string | null>
   demanderCredit: (c: {
     clientId: string
     montant: number
@@ -485,12 +486,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return res.erreur ?? null
       },
       async corrigerMontantTransaction(transactionId, nouveauMontant, motif) {
-        const res = await muter('corrigerMontantTransaction', {
-          transactionId,
-          nouveauMontant,
-          motif,
-        })
-        return res.erreur ?? null
+        try {
+          const res = await muter('corrigerMontantTransaction', {
+            transactionId,
+            nouveauMontant,
+            motif,
+          })
+          return res.erreur ?? null
+        } catch (e) {
+          if (e instanceof ApiError) return e.message
+          return "Impossible d'enregistrer la correction."
+        }
+      },
+      async annulerTransaction(transactionId, motif) {
+        try {
+          const res = await muter('annulerTransaction', { transactionId, motif })
+          return res.erreur ?? null
+        } catch (e) {
+          if (e instanceof ApiError) return e.message
+          return "Impossible d'annuler la transaction."
+        }
       },
       async demanderCredit(c) {
         await muter('demanderCredit', c)

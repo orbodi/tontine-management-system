@@ -23,7 +23,16 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from .config import DATA_DIR, settings
-from .db import SessionLocal, engine, migrate_carnets_unicite_numero_type, migrate_comptes_frais_ouverture, migrate_clients_numero_banque, migrate_clients_zone_nullable, migrate_clients_origine_tontine
+from .db import (
+    SessionLocal,
+    engine,
+    migrate_carnets_unicite_numero_type,
+    migrate_comptes_frais_ouverture,
+    migrate_clients_numero_banque,
+    migrate_clients_zone_nullable,
+    migrate_clients_origine_tontine,
+    migrate_transactions_annulation,
+)
 from .models.entities import SchemaMigration
 
 logger = logging.getLogger("app.migrations")
@@ -148,6 +157,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         kind="schema",
         description="Client ancien (papier) : pas de 300 F ni de P.C. au 1er cycle",
         apply=migrate_clients_origine_tontine,
+    ),
+    Migration(
+        id="010_transactions_annulation",
+        kind="schema",
+        description="Colonnes d'annulation (contrepassation) sur les transactions",
+        apply=migrate_transactions_annulation,
     ),
 )
 

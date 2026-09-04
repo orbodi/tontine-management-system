@@ -214,6 +214,11 @@ class Transaction(Base):
     operateur: Mapped[str] = mapped_column(String)
     operateur_id: Mapped[str] = mapped_column(String, index=True)
     agence_id: Mapped[str] = mapped_column(String, index=True)
+    annulee: Mapped[bool] = mapped_column(Boolean, default=False)
+    motif_annulation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    date_annulation: Mapped[str | None] = mapped_column(String, nullable=True)
+    annule_par_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    annule_par_nom: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class CompteCaisse(Base):

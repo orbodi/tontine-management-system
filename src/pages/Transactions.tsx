@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, Download, Pencil, Search } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Ban, Download, Pencil, Search } from 'lucide-react'
 import { MODULE_CREDITS_ACTIF } from '../config'
+import { ApiError } from '../api/client'
 import { useStore } from '../store'
 import type { Transaction, TypeTransaction } from '../types'
-import { estOperationCaisse, LIBELLES_TYPE, TYPES_SORTIE } from '../metier'
+import { estOperationCaisse, estTransactionActive, LIBELLES_TYPE, TYPES_SORTIE } from '../metier'
 import { exporterCsv, formatDateHeure, formatMontant } from '../utils'
 import { EnTetePage, EtatVide, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
@@ -20,6 +21,8 @@ const TYPES_MODIFIABLES = new Set<TypeTransaction>([
   'droit_adhesion',
 ])
 
+const TYPES_ANNULABLES = new Set<TypeTransaction>([...TYPES_MODIFIABLES, 'vente_carnet'])
+
 export default function Transactions() {
   const {
     data,
@@ -29,6 +32,7 @@ export default function Transactions() {
     estCaissier,
     agenceFiltreOperations,
     corrigerMontantTransaction,
+    annulerTransaction,
   } = useStore()
   const { alerter } = useConfirmation()
   const [recherche, setRecherche] = useState('')
@@ -39,6 +43,11 @@ export default function Transactions() {
   const [nouveauMontant, setNouveauMontant] = useState('')
   const [motif, setMotif] = useState('')
   const [erreur, setErreur] = useState('')
+  const [envoi, setEnvoi] = useState(false)
+  const [txAnnulation, setTxAnnulation] = useState<Transaction | null>(null)
+  const [motifAnnulation, setMotifAnnulation] = useState('')
+  const [erreurAnnulation, setErreurAnnulation] = useState('')
+  const [envoiAnnulation, setEnvoiAnnulation] = useState(false)
 
   const perimetre =
     estAdmin
@@ -48,9 +57,26 @@ export default function Transactions() {
         : 'vos opérations uniquement'
 
   const peutCorriger = (t: Transaction) => {
+    if (t.annulee) return false
     if (!TYPES_MODIFIABLES.has(t.type)) return false
     if (estAdmin) return true
-    if ((estChefAgence || estCaissier) && employeConnecte && t.operateurId === employeConnecte.id) {
+    if (estChefAgence && employeConnecte) {
+      return t.agenceId === employeConnecte.agenceId
+    }
+    if (estCaissier && employeConnecte && t.operateurId === employeConnecte.id) {
+      return true
+    }
+    return false
+  }
+
+  const peutAnnuler = (t: Transaction) => {
+    if (t.annulee) return false
+    if (!TYPES_ANNULABLES.has(t.type)) return false
+    if (estAdmin) return true
+    if (estChefAgence && employeConnecte) {
+      return t.agenceId === employeConnecte.agenceId
+    }
+    if (estCaissier && employeConnecte && t.operateurId === employeConnecte.id) {
       return true
     }
     return false
@@ -93,6 +119,7 @@ export default function Transactions() {
     let entrees = 0
     let sorties = 0
     transactionsFiltrees.forEach((t) => {
+      if (!estTransactionActive(t)) return
       if (TYPES_SORTIE.includes(t.type)) sorties += t.montant
       else entrees += t.montant
     })
@@ -101,7 +128,7 @@ export default function Transactions() {
 
   const exporter = () => {
     exporterCsv(`transactions_${new Date().toISOString().slice(0, 10)}.csv`, [
-      ['Date', 'Type', 'Description', 'Montant (FCFA)', 'Sens', 'Opérateur'],
+      ['Date', 'Type', 'Description', 'Montant (FCFA)', 'Sens', 'Opérateur', 'Annulée'],
       ...transactionsFiltrees.map((t) => [
         formatDateHeure(t.date),
         LIBELLES_TYPE[t.type],
@@ -109,6 +136,7 @@ export default function Transactions() {
         t.montant,
         TYPES_SORTIE.includes(t.type) ? 'Sortie' : 'Entrée',
         t.operateur,
+        t.annulee ? 'oui' : '',
       ]),
     ])
   }
@@ -128,30 +156,78 @@ export default function Transactions() {
       setErreur('Montant invalide.')
       return
     }
-    if (montant === txEdition.montant) {
+    if (Math.abs(montant - txEdition.montant) < 0.005) {
       setErreur('Saisissez un montant différent.')
       return
     }
-    const err = await corrigerMontantTransaction(txEdition.id, montant, motif.trim() || undefined)
-    if (err) {
-      setErreur(err)
-      await alerter('Correction impossible', err)
+    setEnvoi(true)
+    setErreur('')
+    try {
+      const err = await corrigerMontantTransaction(txEdition.id, montant, motif.trim() || undefined)
+      if (err) {
+        setErreur(err)
+        await alerter('Correction impossible', err)
+        return
+      }
+      setTxEdition(null)
+      const estTontine = [
+        'mise_tontine',
+        'commission_tontine',
+        'retrait_tontine',
+        'complement_mise',
+      ].includes(txEdition.type)
+      await alerter(
+        'Transaction corrigée',
+        `Montant passé de ${formatMontant(txEdition.montant)} à ${formatMontant(montant)}.\n` +
+          (estTontine
+            ? 'Les mises / carreaux du carnet et le cycle ont été recalculés.'
+            : 'Le compte concerné et la caisse ont été recalculés.'),
+      )
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Impossible d'enregistrer la correction."
+      setErreur(msg)
+      await alerter('Correction impossible', msg)
+    } finally {
+      setEnvoi(false)
+    }
+  }
+
+  const ouvrirAnnulation = (t: Transaction) => {
+    setTxAnnulation(t)
+    setMotifAnnulation('')
+    setErreurAnnulation('')
+  }
+
+  const validerAnnulation = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!txAnnulation) return
+    const motifSaisi = motifAnnulation.trim()
+    if (!motifSaisi) {
+      setErreurAnnulation("Indiquez le motif d'annulation.")
       return
     }
-    setTxEdition(null)
-    const estTontine = [
-      'mise_tontine',
-      'commission_tontine',
-      'retrait_tontine',
-      'complement_mise',
-    ].includes(txEdition.type)
-    await alerter(
-      'Transaction corrigée',
-      `Montant passé de ${formatMontant(txEdition.montant)} à ${formatMontant(montant)}.\n` +
-        (estTontine
-          ? 'Les mises / carreaux du carnet et le cycle ont été recalculés.'
-          : 'Le compte concerné et la caisse ont été recalculés.'),
-    )
+    setEnvoiAnnulation(true)
+    setErreurAnnulation('')
+    try {
+      const err = await annulerTransaction(txAnnulation.id, motifSaisi)
+      if (err) {
+        setErreurAnnulation(err)
+        await alerter('Annulation impossible', err)
+        return
+      }
+      setTxAnnulation(null)
+      await alerter(
+        'Transaction annulée',
+        `L'opération de ${formatMontant(txAnnulation.montant)} a été contrepassée.\n` +
+          'Le compte, le carnet et la caisse ont été reculés. La ligne reste visible au journal.',
+      )
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Impossible d'annuler la transaction."
+      setErreurAnnulation(msg)
+      await alerter('Annulation impossible', msg)
+    } finally {
+      setEnvoiAnnulation(false)
+    }
   }
 
   return (
@@ -212,17 +288,25 @@ export default function Transactions() {
             <tbody className="divide-y divide-slate-100">
               {transactionsFiltrees.map((t) => {
                 const sortie = TYPES_SORTIE.includes(t.type)
+                const annulee = !!t.annulee
                 return (
-                  <tr key={t.id} className="transition hover:bg-slate-50">
+                  <tr key={t.id} className={`transition hover:bg-slate-50 ${annulee ? 'opacity-60' : ''}`}>
                     <td className="whitespace-nowrap px-5 py-3 text-slate-600">{formatDateHeure(t.date)}</td>
                     <td className="px-5 py-3">
                       <span className="badge bg-slate-100 text-slate-600">{LIBELLES_TYPE[t.type]}</span>
+                      {annulee && (
+                        <span className="badge ml-1.5 bg-rose-50 text-rose-700">Annulée</span>
+                      )}
                     </td>
-                    <td className="max-w-md truncate px-5 py-3 text-slate-800">{t.description}</td>
+                    <td className={`max-w-md truncate px-5 py-3 text-slate-800 ${annulee ? 'line-through' : ''}`}>
+                      {t.description}
+                    </td>
                     <td className="px-5 py-3 text-slate-600">{t.operateur}</td>
                     <td className="whitespace-nowrap px-5 py-3 text-right">
                       <span
-                        className={`inline-flex items-center gap-1 font-bold ${sortie ? 'text-rose-600' : 'text-emerald-600'}`}
+                        className={`inline-flex items-center gap-1 font-bold ${
+                          annulee ? 'text-slate-400 line-through' : sortie ? 'text-rose-600' : 'text-emerald-600'
+                        }`}
                       >
                         {sortie ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
                         {sortie ? '-' : '+'}
@@ -230,17 +314,30 @@ export default function Transactions() {
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">
-                      {peutCorriger(t) && (
-                        <button
-                          type="button"
-                          className="btn-secondary !px-2.5 !py-1.5 text-xs"
-                          title="Corriger le montant"
-                          onClick={() => ouvrirCorrection(t)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          Corriger
-                        </button>
-                      )}
+                      <div className="flex flex-wrap justify-end gap-1.5">
+                        {peutCorriger(t) && (
+                          <button
+                            type="button"
+                            className="btn-secondary !px-2.5 !py-1.5 text-xs"
+                            title="Corriger le montant"
+                            onClick={() => ouvrirCorrection(t)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Corriger
+                          </button>
+                        )}
+                        {peutAnnuler(t) && (
+                          <button
+                            type="button"
+                            className="btn-danger !px-2.5 !py-1.5 text-xs"
+                            title="Annuler (contrepasser) cette opération"
+                            onClick={() => ouvrirAnnulation(t)}
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                            Annuler
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
@@ -294,12 +391,60 @@ export default function Transactions() {
             </div>
             {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
             <div className="flex justify-end gap-2">
-              <button type="button" className="btn-secondary" onClick={() => setTxEdition(null)}>
+              <button type="button" className="btn-secondary" onClick={() => setTxEdition(null)} disabled={envoi}>
                 Annuler
               </button>
-              <button type="submit" className="btn-primary">
+              <button type="submit" className="btn-primary" disabled={envoi}>
                 <Pencil className="h-4 w-4" />
-                Enregistrer
+                {envoi ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modale>
+
+      <Modale
+        titre="Annuler la transaction"
+        ouverte={txAnnulation !== null}
+        onFermer={() => setTxAnnulation(null)}
+      >
+        {txAnnulation && (
+          <form onSubmit={validerAnnulation} className="space-y-4">
+            <div className="rounded-xl bg-rose-50 p-3 text-sm text-rose-900">
+              <p>
+                Contrepasser <strong>{LIBELLES_TYPE[txAnnulation.type]}</strong> de{' '}
+                <strong>{formatMontant(txAnnulation.montant)}</strong>.
+              </p>
+              <p className="mt-1 truncate text-rose-800">{txAnnulation.description}</p>
+              <p className="mt-2 text-xs text-rose-700">
+                Le compte, le carnet et la caisse sont reculés. La ligne reste au journal, barrée.
+                Ce n’est pas une correction de montant.
+              </p>
+            </div>
+            <div>
+              <label className="label">Motif *</label>
+              <input
+                className="input"
+                required
+                autoFocus
+                value={motifAnnulation}
+                onChange={(e) => setMotifAnnulation(e.target.value)}
+                placeholder="Saisie en double, client s’est trompé…"
+              />
+            </div>
+            {erreurAnnulation && <p className="text-sm font-medium text-rose-600">{erreurAnnulation}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setTxAnnulation(null)}
+                disabled={envoiAnnulation}
+              >
+                Fermer
+              </button>
+              <button type="submit" className="btn-danger" disabled={envoiAnnulation}>
+                <Ban className="h-4 w-4" />
+                {envoiAnnulation ? 'Annulation…' : 'Confirmer l’annulation'}
               </button>
             </div>
           </form>

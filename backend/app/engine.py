@@ -639,6 +639,8 @@ def _purger_mouvements_caisse_du_jour(
 
 
 def _appliquer_tx_caisse(d: dict, tx: dict) -> dict:
+    if tx.get("annulee"):
+        return d
     if not M.est_operation_caisse(tx["type"]) or not tx.get("operateurId"):
         return d
     next_d, compte = _compte_caisse_operateur(d, tx["operateurId"], tx.get("agenceId"))
@@ -1501,7 +1503,7 @@ def encaisser_cotisation(d, u, p):
                         "date": date,
                         "description": (
                             f"Depot x{nombre_cash} — {_nom_client(d, carnet['clientId'])} "
-                            f"(cycle {cycle_depot}){note_collecte}"
+                            f"(carnet {carnet['numero']}, cycle {cycle_depot}){note_collecte}"
                         ),
                     },
                 )
@@ -2507,6 +2509,8 @@ def _txs_caisse_du_jour(d: dict, agence_id: str, jour: str) -> list[dict]:
     inclure_aujourdhui = auj not in autres_ouvertes and jour != auj
     out = []
     for t in d.get("transactions") or []:
+        if t.get("annulee"):
+            continue
         if not M.est_operation_caisse(t.get("type") or ""):
             continue
         if not (t.get("agenceId") == agence_id or t.get("operateurId") in op_ids):
@@ -2982,12 +2986,21 @@ TYPES_TX_MODIFIABLES = {
     "droit_adhesion",
 }
 
+TYPES_TX_ANNULABLES = TYPES_TX_MODIFIABLES | {"vente_carnet"}
+
 
 def _numero_compte_depuis_description(description: str) -> str | None:
-    """Extrait le n° de compte depuis « Depot B0001 — … » / « Retrait B0001 — … »."""
+    """Extrait le n° de compte (B0001) depuis dépôt, retrait, adhésion ou part sociale."""
     if not description:
         return None
-    m = re.search(r"(?:Depot|Dépôt|Retrait)\s+([A-Za-z0-9\-]+)", description, re.IGNORECASE)
+    m = re.search(
+        r"(?:Depot|Dépôt|Retrait|adhésion|adhesion|Part sociale(?:\s+ouverture)?)\s+(?:promo\s+)?(B[0-9]+)",
+        description,
+        re.IGNORECASE,
+    )
+    if m:
+        return m.group(1)
+    m = re.search(r"\b(B\d{4,})\b", description)
     return m.group(1) if m else None
 
 
@@ -3074,9 +3087,13 @@ def _trouver_mouvement_compte(
 
 
 def _numero_carnet_depuis_description(description: str) -> str | None:
+    """Extrait le n° carnet depuis « (carnet 010001, …) », « Abonnement carnet … » ou « Retrait 010001 x »."""
     if not description:
         return None
-    m = re.search(r"Retrait\s+([A-Za-z0-9]+)\s+x", description, re.IGNORECASE)
+    m = re.search(r"carnet\s+([A-Za-z0-9]{4,})", description, re.IGNORECASE)
+    if m:
+        return m.group(1)
+    m = re.search(r"Retrait\s+([A-Za-z0-9]{4,})\s+x", description, re.IGNORECASE)
     return m.group(1) if m else None
 
 
@@ -3251,6 +3268,42 @@ def _appliquer_correction_mise_tontine(
     return None, d
 
 
+def _journee_operation_cloturee(d: dict, tx: dict) -> bool:
+    """True si la journée de caisse (agence, sinon opérateur) de la transaction est déjà clôturée."""
+    jour = (tx.get("date") or "")[:10]
+    if not jour:
+        return False
+    agence_id = tx.get("agenceId")
+    if agence_id and M.arret_caisse_agence(d.get("arretsCaisse") or [], agence_id, jour):
+        return True
+    op_id = tx.get("operateurId")
+    if op_id and M.arret_caisse_du_jour(d.get("arretsCaisse") or [], op_id, jour):
+        return True
+    return False
+
+
+def _droit_modifier_transaction(d: dict, u: dict, tx: dict) -> str | None:
+    """None si l'utilisateur peut corriger/annuler cette transaction."""
+    if tx.get("annulee"):
+        return "Cette transaction est déjà annulée."
+    if _est_admin(u):
+        return None
+    if _est_chef(u):
+        if tx.get("agenceId") and tx.get("agenceId") != u.get("agenceId"):
+            return "Vous ne pouvez modifier que les transactions de votre agence."
+    elif _est_caissier(u):
+        if tx.get("operateurId") != u["id"]:
+            return "Vous ne pouvez modifier que vos propres transactions."
+    else:
+        return "Droit insuffisant."
+    err = _verif_caisse(d, u)
+    if err:
+        return err
+    if _journee_operation_cloturee(d, tx):
+        return "Impossible : la journée de caisse de cette opération est déjà clôturée."
+    return None
+
+
 def corriger_montant_transaction(d, u, p):
     """Corrige le montant d'une transaction et recalcule les soldes des comptes concernés."""
     tx_id = p.get("transactionId") or p.get("id")
@@ -3266,19 +3319,9 @@ def corriger_montant_transaction(d, u, p):
     if tx["type"] not in TYPES_TX_MODIFIABLES:
         return {"erreur": f"Ce type d'opération ({tx['type']}) ne peut pas être modifié."}
 
-    if _est_admin(u):
-        pass
-    elif _est_chef(u) or _est_caissier(u):
-        if tx.get("operateurId") != u["id"]:
-            return {"erreur": "Vous ne pouvez modifier que vos propres transactions."}
-        err = _verif_caisse(d, u)
-        if err:
-            return {"erreur": err}
-        jour_tx = (tx.get("date") or "")[:10]
-        if jour_tx and M.arret_caisse_du_jour(d["arretsCaisse"], u["id"], jour_tx):
-            return {"erreur": "Impossible : la journée de caisse de cette opération est déjà clôturée."}
-    else:
-        return {"erreur": "Droit insuffisant."}
+    err_droit = _droit_modifier_transaction(d, u, tx)
+    if err_droit:
+        return {"erreur": err_droit}
 
     ancien = float(tx["montant"])
     if abs(nouveau - ancien) < 0.005:
@@ -3363,6 +3406,24 @@ def corriger_montant_transaction(d, u, p):
         compte_client_id = cible["id"]
         if float(next(c for c in d["comptes"] if c["id"] == cible["id"])["solde"]) < -0.005:
             return {"erreur": "Correction impossible : solde du compte client insuffisant."}
+
+    elif typ == "part_sociale":
+        numero = _numero_compte_depuis_description(tx.get("description") or "")
+        cible = next((c for c in d["comptes"] if numero and c.get("numero") == numero), None)
+        if not cible and client_id:
+            comptes_client = [c for c in d["comptes"] if c.get("clientId") == client_id]
+            cible = next(
+                (c for c in comptes_client if abs(float(c.get("partSociale") or 0) - ancien) < 0.005),
+                None,
+            )
+            if not cible and comptes_client:
+                cible = next((c for c in comptes_client if c.get("type") == "courant"), comptes_client[0])
+        if not cible:
+            return {"erreur": "Compte client lié à la transaction introuvable."}
+        d["comptes"] = [
+            {**c, "partSociale": nouveau} if c["id"] == cible["id"] else c for c in d["comptes"]
+        ]
+        compte_client_id = cible["id"]
 
     # ---- Tontine : mises + recalcul cycle ----
     elif typ in ("mise_tontine", "commission_tontine", "complement_mise", "retrait_tontine"):
@@ -3467,6 +3528,285 @@ def corriger_montant_transaction(d, u, p):
     )
 
 
+def _erreur_zone_cloturee_pour_tx(d: dict, tx: dict) -> str | None:
+    types_tontine = {
+        "mise_tontine",
+        "commission_tontine",
+        "complement_mise",
+        "retrait_tontine",
+        "vente_carnet",
+    }
+    if tx.get("type") not in types_tontine:
+        return None
+    jour = (tx.get("date") or "")[:10]
+    client = next((c for c in d["clients"] if c["id"] == tx.get("clientId")), None)
+    zone_id = (client or {}).get("zoneId")
+    if not zone_id:
+        numero = _numero_carnet_depuis_description(tx.get("description") or "")
+        ca = next(
+            (x for x in d.get("carnets") or [] if numero and x.get("numero") == numero),
+            None,
+        )
+        zone_id = (ca or {}).get("zoneId")
+    jz = M.journee_zone_du_jour(d.get("journeesCompteZone") or [], zone_id, jour) if zone_id else None
+    if jz and jz.get("cloturee"):
+        return "Impossible d'annuler : la journée zone tontine de cette date est déjà clôturée."
+    return None
+
+
+def _appliquer_annulation_mise_tontine(
+    d: dict, typ: str, carnet: dict, mi: dict, montant_tx: float, description: str
+) -> tuple[str | None, dict]:
+    """Retire ou réduit la ligne de mise liée à la transaction annulée."""
+    mise_unit = float(carnet.get("mise") or 0)
+    cycle = int(mi.get("cycle") or carnet.get("cycleActuel") or 1)
+    par_cycle = int(carnet.get("misesParCycle") or M.CARREAUX_PAR_CYCLE)
+    mt_ligne = abs(float(mi.get("montant") or 0))
+    nb = int(mi.get("nombreMises") or 0)
+
+    if typ == "complement_mise":
+        m = re.search(
+            r"Complement mise\s+(\d+)\s*(?:→|->)\s*(\d+)",
+            description or "",
+            re.IGNORECASE,
+        )
+        if m:
+            ancienne = float(m.group(1))
+            d["carnets"] = [
+                {**c, "mise": ancienne} if c["id"] == carnet["id"] else c for c in d["carnets"]
+            ]
+        d["mises"] = [m for m in d["mises"] if m["id"] != mi["id"]]
+        d = _recalculer_cycle_actuel_carnet(d, carnet["id"])
+        return None, d
+
+    if typ == "retrait_tontine":
+        d["mises"] = [m for m in d["mises"] if m["id"] != mi["id"]]
+        d = _recalculer_cycle_actuel_carnet(d, carnet["id"])
+        return None, d
+
+    if mise_unit <= 0:
+        return "Mise du carnet invalide.", d
+
+    if typ == "commission_tontine":
+        if abs(mt_ligne - montant_tx) < 0.005 and nb <= 1:
+            d["mises"] = [m for m in d["mises"] if m["id"] != mi["id"]]
+        else:
+            n_total = max(0, nb - 1)
+            if n_total <= 0:
+                d["mises"] = [m for m in d["mises"] if m["id"] != mi["id"]]
+            else:
+                d["mises"] = [
+                    {**m, "montant": mise_unit * n_total, "nombreMises": n_total}
+                    if m["id"] == mi["id"]
+                    else m
+                    for m in d["mises"]
+                ]
+    elif typ == "mise_tontine":
+        if abs(mt_ligne - montant_tx) < 0.005:
+            d["mises"] = [m for m in d["mises"] if m["id"] != mi["id"]]
+        elif abs(mt_ligne - (montant_tx + mise_unit)) < 0.005:
+            d["mises"] = [
+                {**m, "montant": mise_unit, "nombreMises": 1} if m["id"] == mi["id"] else m
+                for m in d["mises"]
+            ]
+        else:
+            n_oter = int(round(montant_tx / mise_unit))
+            n_total = nb - n_oter
+            if n_total <= 0:
+                d["mises"] = [m for m in d["mises"] if m["id"] != mi["id"]]
+            else:
+                d["mises"] = [
+                    {**m, "montant": mise_unit * n_total, "nombreMises": n_total}
+                    if m["id"] == mi["id"]
+                    else m
+                    for m in d["mises"]
+                ]
+
+    carnet_maj = next(c for c in d["carnets"] if c["id"] == carnet["id"])
+    nets = M.carreaux_nets(carnet_maj, d["mises"], cycle)
+    if nets < 0:
+        return "Annulation impossible : trop de carreaux déjà retirés sur ce cycle.", d
+    if nets > par_cycle:
+        return (
+            f"Annulation impossible : le cycle {cycle} dépasserait {par_cycle} carreaux.",
+            d,
+        )
+    d = _recalculer_cycle_actuel_carnet(d, carnet["id"])
+    return None, d
+
+
+def annuler_transaction(d, u, p):
+    """Contrepasser une transaction : recule soldes / mises / caisse, conserve la ligne au journal."""
+    tx_id = p.get("transactionId") or p.get("id")
+    motif = (p.get("motif") or "").strip()
+    if not motif:
+        return {"erreur": "Le motif d'annulation est obligatoire."}
+
+    d = copy.deepcopy(d)
+    tx = next((t for t in d["transactions"] if t["id"] == tx_id), None)
+    if not tx:
+        return {"erreur": "Transaction introuvable."}
+    if tx["type"] not in TYPES_TX_ANNULABLES:
+        return {"erreur": f"Ce type d'opération ({tx['type']}) ne peut pas être annulé."}
+
+    err_droit = _droit_modifier_transaction(d, u, tx)
+    if err_droit:
+        return {"erreur": err_droit}
+    if not _est_admin(u):
+        err_z = _erreur_zone_cloturee_pour_tx(d, tx)
+        if err_z:
+            return {"erreur": err_z}
+
+    typ = tx["type"]
+    montant = float(tx["montant"] or 0)
+    client_id = tx.get("clientId")
+    date_tx = tx.get("date") or ""
+    note_ann = f"[annulé — {motif}]"
+
+    if typ in ("depot_compte", "retrait_compte") and typ == "depot_compte" and not _est_admin(u):
+        err2 = _verif_solde_sortie(d, u, montant)
+        if err2:
+            return {"erreur": err2}
+
+    # ---- Compte client ----
+    if typ in ("depot_compte", "retrait_compte", "droit_adhesion"):
+        type_mvt = "retrait" if typ == "retrait_compte" else "depot"
+        numero = _numero_compte_depuis_description(tx.get("description") or "")
+        cible = next((c for c in d["comptes"] if numero and c.get("numero") == numero), None)
+        if not cible and client_id:
+            for c in d["comptes"]:
+                if c.get("clientId") != client_id:
+                    continue
+                if _trouver_mouvement_compte(
+                    d, compte_id=c["id"], type_mvt=type_mvt, montant=montant, date_tx=date_tx
+                ):
+                    cible = c
+                    break
+        if not cible and client_id:
+            comptes_client = [c for c in d["comptes"] if c.get("clientId") == client_id]
+            if typ == "droit_adhesion":
+                cible = next(
+                    (c for c in comptes_client if abs(float(c.get("droitAdhesion") or 0) - montant) < 0.005),
+                    None,
+                )
+            if not cible and comptes_client:
+                cible = next((c for c in comptes_client if c.get("type") == "courant"), comptes_client[0])
+        if not cible:
+            return {"erreur": "Compte client lié à la transaction introuvable."}
+
+        mvt = _trouver_mouvement_compte(
+            d, compte_id=cible["id"], type_mvt=type_mvt, montant=montant, date_tx=date_tx
+        )
+        if mvt:
+            d["mouvements"] = [mv for mv in d["mouvements"] if mv["id"] != mvt["id"]]
+        if typ == "droit_adhesion":
+            d["comptes"] = [{**c, "droitAdhesion": 0} if c["id"] == cible["id"] else c for c in d["comptes"]]
+        d = _recalculer_solde_compte_client(d, cible["id"])
+        if float(next(c for c in d["comptes"] if c["id"] == cible["id"])["solde"]) < -0.005:
+            return {"erreur": "Annulation impossible : solde du compte client insuffisant."}
+
+    elif typ == "part_sociale":
+        numero = _numero_compte_depuis_description(tx.get("description") or "")
+        cible = next((c for c in d["comptes"] if numero and c.get("numero") == numero), None)
+        if not cible and client_id:
+            comptes_client = [c for c in d["comptes"] if c.get("clientId") == client_id]
+            cible = next(
+                (c for c in comptes_client if abs(float(c.get("partSociale") or 0) - montant) < 0.005),
+                None,
+            )
+            if not cible and comptes_client:
+                cible = next((c for c in comptes_client if c.get("type") == "courant"), comptes_client[0])
+        if not cible:
+            return {"erreur": "Compte client lié à la transaction introuvable."}
+        d["comptes"] = [{**c, "partSociale": 0} if c["id"] == cible["id"] else c for c in d["comptes"]]
+        if not _est_admin(u):
+            err2 = _verif_solde_sortie(d, u, montant)
+            if err2:
+                return {"erreur": err2}
+
+    elif typ in ("mise_tontine", "commission_tontine", "complement_mise", "retrait_tontine"):
+        trouve = _trouver_mise_tontine(
+            d,
+            client_id=client_id or "",
+            typ=typ,
+            montant=montant,
+            date_tx=date_tx,
+            description=tx.get("description") or "",
+        )
+        if not trouve:
+            return {"erreur": "Mise / carreaux liés à la transaction introuvables."}
+        carnet, mi = trouve
+        err_m, d = _appliquer_annulation_mise_tontine(
+            d, typ, carnet, mi, montant, tx.get("description") or ""
+        )
+        if err_m:
+            return {"erreur": err_m}
+        if typ in ("mise_tontine", "commission_tontine", "complement_mise") and not _est_admin(u):
+            err2 = _verif_solde_sortie(d, u, montant)
+            if err2:
+                return {"erreur": err2}
+
+    elif typ == "vente_carnet":
+        if not _est_admin(u):
+            err2 = _verif_solde_sortie(d, u, montant)
+            if err2:
+                return {"erreur": err2}
+
+    elif typ == "remboursement_credit":
+        remb = next(
+            (
+                r
+                for r in d["remboursements"]
+                if (r.get("date") or "")[:10] == date_tx[:10]
+                and abs(float(r["montant"]) - montant) < 0.005
+            ),
+            None,
+        )
+        if remb:
+            credit_id = remb.get("creditId")
+            d["remboursements"] = [r for r in d["remboursements"] if r["id"] != remb["id"]]
+            if credit_id:
+                d["credits"] = [
+                    {**c, "statut": "en_cours"}
+                    if c["id"] == credit_id and c.get("statut") == "rembourse"
+                    else c
+                    for c in d["credits"]
+                ]
+
+    # ---- Caisse ----
+    if M.est_operation_caisse(typ) and tx.get("operateurId"):
+        d, compte_caisse = _compte_caisse_operateur(d, tx["operateurId"], tx.get("agenceId"))
+        titulaire = (compte_caisse or {}).get("employeId") or tx["operateurId"]
+        d["mouvementsCompteCaisse"] = [
+            m
+            for m in (d.get("mouvementsCompteCaisse") or [])
+            if m.get("transactionId") != tx_id
+        ]
+        d = _recalculer_solde_compte_caisse(d, titulaire, 0.0)
+        compte_caisse = M.compte_caisse_pour_employe(
+            d["comptesCaisse"], tx["operateurId"], d.get("employes") or []
+        )
+        if compte_caisse and float(compte_caisse["solde"]) < -0.005 and not _est_admin(u):
+            return {"erreur": "Annulation impossible : solde de caisse insuffisant."}
+
+    now = M.maintenant()
+    d["transactions"] = [
+        {
+            **t,
+            "annulee": True,
+            "motifAnnulation": motif,
+            "dateAnnulation": now,
+            "annuleParId": u["id"],
+            "annuleParNom": u["nomComplet"],
+            "description": (t.get("description") or "") + " " + note_ann,
+        }
+        if t["id"] == tx_id
+        else t
+        for t in d["transactions"]
+    ]
+    return (None, d, {"transactionId": tx_id})
+
+
 ACTIONS = {
     "ajouterAgence": ajouter_agence,
     "modifierAgence": modifier_agence,
@@ -3499,6 +3839,7 @@ ACTIONS = {
     "basculerVerrouCompte": basculer_verrou_compte,
     "supprimerCompte": supprimer_compte,
     "corrigerMontantTransaction": corriger_montant_transaction,
+    "annulerTransaction": annuler_transaction,
     "demanderCredit": demander_credit,
     "approuverCredit": approuver_credit,
     "rejeterCredit": rejeter_credit,

@@ -419,6 +419,12 @@ export interface Transaction {
   operateurId: string
   /** Agence de l'opérateur au moment de l'opération. */
   agenceId: string
+  /** Contrepassée : conservée au journal, exclue des totaux et soldes. */
+  annulee?: boolean
+  motifAnnulation?: string
+  dateAnnulation?: string
+  annuleParId?: string
+  annuleParNom?: string
 }
 
 // ---------- Comptabilité générale ----------

@@ -74,6 +74,11 @@ export function estOperationCaisse(type: TypeTransaction): boolean {
   return TYPES_OPERATION_CAISSE.includes(type)
 }
 
+/** False si la transaction a été contrepassée (exclue des totaux et soldes). */
+export function estTransactionActive(t: Pick<Transaction, 'annulee'>): boolean {
+  return !t.annulee
+}
+
 export function compteCaisseDe(
   comptes: CompteCaisse[],
   employeId: string,
@@ -232,6 +237,7 @@ export function anneeCarnetOuverte(
 ): number {
   let ouverte = 1
   for (const t of transactions) {
+    if (!estTransactionActive(t)) continue
     if (t.type !== 'vente_carnet') continue
     if (t.clientId !== carnet.clientId) continue
     if (!t.description.includes('Renouvellement')) continue
@@ -262,6 +268,7 @@ export function abonnementAnnee1Paye(
   transactions: Transaction[] = [],
 ): boolean {
   return transactions.some((t) => {
+    if (!estTransactionActive(t)) return false
     if (t.type !== 'vente_carnet') return false
     if (t.clientId !== carnet.clientId) return false
     if (t.description.includes('Renouvellement')) return false
@@ -287,6 +294,7 @@ export function pcPayeeSurCycle(
   cycle: number,
 ): boolean {
   return transactions.some((t) => {
+    if (!estTransactionActive(t)) return false
     if (t.type !== 'commission_tontine') return false
     if (t.clientId !== carnet.clientId) return false
     if (carnet.numero && !t.description.includes(carnet.numero) && /carnet/i.test(t.description)) {
@@ -726,6 +734,7 @@ export function journeesCaisseEnRetard(
     transactions
       .filter(
         (t) =>
+          estTransactionActive(t) &&
           opIds.has(t.operateurId) &&
           estOperationCaisse(t.type) &&
           jourIsoDepuisDate(t.date) < avantJour,
@@ -807,6 +816,7 @@ export function situationCaisse(
   const periode = transactions
     .filter(
       (t) =>
+        estTransactionActive(t) &&
         opIds.has(t.operateurId) &&
         estOperationCaisse(t.type) &&
         jourIsoDepuisDate(t.date) === journee,
@@ -872,6 +882,7 @@ export function etatJournalierCaisse(
   parType: Map<TypeTransaction, { entrees: number; sorties: number; nombre: number }>
 } {
   const duJour = transactions.filter((t) => {
+    if (!estTransactionActive(t)) return false
     if (t.date.slice(0, 10) !== dateIso) return false
     if (!estOperationCaisse(t.type)) return false
     if (filtres?.employeId && t.operateurId !== filtres.employeId) return false
@@ -918,6 +929,7 @@ export function depotsTontineZoneJour(
     .filter(
       (t) =>
         TYPES_DEPOT_TONTINE_ZONE.includes(t.type) &&
+        estTransactionActive(t) &&
         clientIds.has(t.clientId) &&
         t.date.slice(0, 10) === dateIso,
     )

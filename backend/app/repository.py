@@ -283,6 +283,11 @@ def replace_state(db: Session, data: dict[str, Any], *, hash_plain_passwords: bo
                 operateur=t["operateur"],
                 operateur_id=t["operateurId"],
                 agence_id=t["agenceId"],
+                annulee=bool(t.get("annulee")),
+                motif_annulation=t.get("motifAnnulation"),
+                date_annulation=t.get("dateAnnulation"),
+                annule_par_id=t.get("annuleParId"),
+                annule_par_nom=t.get("annuleParNom"),
             )
         )
 
@@ -624,6 +629,11 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "operateur": t.operateur,
                 "operateurId": t.operateur_id,
                 "agenceId": t.agence_id,
+                "annulee": bool(getattr(t, "annulee", False)),
+                "motifAnnulation": getattr(t, "motif_annulation", None),
+                "dateAnnulation": getattr(t, "date_annulation", None),
+                "annuleParId": getattr(t, "annule_par_id", None),
+                "annuleParNom": getattr(t, "annule_par_nom", None),
             }
             for t in db.query(m.Transaction).all()
         ],

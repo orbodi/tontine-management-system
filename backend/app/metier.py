@@ -61,6 +61,8 @@ def annee_carnet_ouverte(carnet: dict, mises: list, transactions: list | None = 
     numero = carnet.get("numero") or ""
     client_id = carnet.get("clientId")
     for t in transactions or []:
+        if not est_tx_active(t):
+            continue
         if t.get("type") != "vente_carnet":
             continue
         if client_id and t.get("clientId") != client_id:
@@ -93,6 +95,8 @@ def abonnement_annee1_paye(carnet: dict, transactions: list | None = None) -> bo
     numero = carnet.get("numero") or ""
     client_id = carnet.get("clientId")
     for t in transactions or []:
+        if not est_tx_active(t):
+            continue
         if t.get("type") != "vente_carnet":
             continue
         if client_id and t.get("clientId") != client_id:
@@ -120,6 +124,8 @@ def pc_payee_sur_cycle(carnet: dict, transactions: list | None, cycle: int) -> b
     numero = carnet.get("numero") or ""
     client_id = carnet.get("clientId")
     for t in transactions or []:
+        if not est_tx_active(t):
+            continue
         if t.get("type") != "commission_tontine":
             continue
         if client_id and t.get("clientId") != client_id:
@@ -219,6 +225,11 @@ def jours_collecte_saisissables(journees: list, zone_id: str, avant: str | None 
 
 def est_operation_caisse(t: str) -> bool:
     return t in TYPES_OPERATION_CAISSE
+
+
+def est_tx_active(t: dict) -> bool:
+    """False si la transaction a été contrepassée."""
+    return not t.get("annulee")
 
 
 def compte_caisse_de(comptes: list, employe_id: str) -> dict | None:
@@ -402,7 +413,8 @@ def depots_tontine_zone_jour(zone_id: str, date_iso: str, clients: list, transac
     return sum(
         t["montant"]
         for t in transactions
-        if t["type"] in TYPES_DEPOT_TONTINE_ZONE
+        if est_tx_active(t)
+        and t["type"] in TYPES_DEPOT_TONTINE_ZONE
         and t["clientId"] in ids
         and t["date"][:10] == date_iso
     )
@@ -475,6 +487,7 @@ def journees_caisse_en_retard(
         jour_iso_depuis_date(t["date"])
         for t in transactions
         if t.get("operateurId") in op_ids
+        and est_tx_active(t)
         and est_operation_caisse(t["type"])
         and jour_iso_depuis_date(t["date"]) < avant
     }
@@ -556,6 +569,7 @@ def situation_caisse(
                 t
                 for t in transactions
                 if t.get("operateurId") in op_ids
+                and est_tx_active(t)
                 and est_operation_caisse(t["type"])
                 and jour_iso_depuis_date(t["date"]) == journee
             ],
@@ -571,6 +585,7 @@ def situation_caisse(
                 t
                 for t in transactions
                 if t.get("operateurId") == employe_id
+                and est_tx_active(t)
                 and est_operation_caisse(t["type"])
                 and jour_iso_depuis_date(t["date"]) == journee
             ],

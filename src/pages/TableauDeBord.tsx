@@ -74,7 +74,7 @@ export default function TableauDeBord() {
   )
 
   const txVisibles = useMemo(() => {
-    let tx = data.transactions
+    let tx = data.transactions.filter((t) => !t.annulee)
     if (estCaissier && employeConnecte) {
       tx = tx.filter((t) => t.operateurId === employeConnecte.id)
     } else if (agenceFiltreOperations) {
