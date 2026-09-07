@@ -13,7 +13,7 @@ import {
   CARNETS_RETRAIT_6_MOIS,
   LIBELLES_CARNET,
   LIBELLES_TYPE,
-  TYPES_SORTIE,
+  TYPES_SORTIE_TONTINE,
   carreauxNets,
   libelleCycleCarnet,
   anneeCarnet,
@@ -31,6 +31,7 @@ const TYPES_TX_CARNET: TypeTransaction[] = [
   'retrait_tontine',
   'commission_tontine',
   'complement_mise',
+  'transfert_tontine_compte',
 ]
 
 const LIBELLES_FREQUENCE: Record<FrequenceMise, string> = {
@@ -178,7 +179,7 @@ export default function Tontines() {
         if (t.clientId !== carnetSelectionne.clientId) return false
         if (!TYPES_TX_CARNET.includes(t.type)) return false
         if (estCaissier && employeConnecte && t.operateurId !== employeConnecte.id) return false
-        if (t.type === 'vente_carnet' || t.type === 'retrait_tontine') {
+        if (t.type === 'vente_carnet' || t.type === 'retrait_tontine' || t.type === 'transfert_tontine_compte') {
           return t.description.includes(numero)
         }
         // Dépôts / P.C : liés au carnet via la date des mises
@@ -431,7 +432,7 @@ export default function Tontines() {
           ) : (
             <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
               {historiqueSelectionne.map((t) => {
-                const sortie = TYPES_SORTIE.includes(t.type)
+                const sortie = TYPES_SORTIE_TONTINE.includes(t.type)
                 return (
                   <div key={t.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
                     <div className="min-w-0">

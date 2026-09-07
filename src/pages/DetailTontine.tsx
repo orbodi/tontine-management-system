@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowDownToLine,
   ArrowLeft,
+  ArrowRightLeft,
   ArrowUpFromLine,
   BookPlus,
   Lock,
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react'
 import { NOM_APPLICATION } from '../config'
 import { useStore } from '../store'
-import { CYCLES_PAR_CARNET, PRIX_CARNET, type JourneeCompteZone } from '../types'
+import { CYCLES_PAR_CARNET, PRIX_CARNET, type Compte, type JourneeCompteZone } from '../types'
 import {
   aujourdHuiIso,
   CARNETS_RETRAIT_6_MOIS,
@@ -98,6 +99,7 @@ export default function DetailTontine() {
     renouvelerCarnet,
     changerMiseCarnet,
     retraitCycle,
+    transfertTontineCompte,
     basculerVerrouCarnet,
     basculerRetraitCarnetAdmin,
     supprimerCarnet,
@@ -111,6 +113,9 @@ export default function DetailTontine() {
   const [nouvelleMise, setNouvelleMise] = useState('')
   const [retraitSur, setRetraitSur] = useState<EtatCycle | null>(null)
   const [nbCarreaux, setNbCarreaux] = useState('1')
+  const [transfertSur, setTransfertSur] = useState<EtatCycle | null>(null)
+  const [nbCarreauxTransfert, setNbCarreauxTransfert] = useState('1')
+  const [compteDestinationId, setCompteDestinationId] = useState('')
   const [erreur, setErreur] = useState('')
   const [dateCollecte, setDateCollecte] = useState(() => aujourdHuiIso())
   const [modaleRenouvellement, setModaleRenouvellement] = useState(false)
@@ -124,6 +129,9 @@ export default function DetailTontine() {
   const carnet = data.carnets.find((c) => c.id === id)
   const client = carnet ? data.clients.find((c) => c.id === carnet.clientId) : undefined
   const zone = carnet ? data.zones.find((z) => z.id === carnet.zoneId) : undefined
+  const comptesBanqueClient = carnet
+    ? data.comptes.filter((c) => c.clientId === carnet.clientId && !c.verrouille)
+    : []
   const peutOperer = aDroit('operer_comptes')
   const peutVerrouiller = aDroit('verrouiller_comptes')
 
@@ -323,6 +331,55 @@ export default function DetailTontine() {
         `Mises retirées : ${retiresApres}\n` +
         `Mises disponibles : ${disponiblesApres}\n` +
         `Montant disponible : ${formatMontant(montantDispoApres)}`,
+    )
+  }
+
+  const ouvrirTransfert = (et: EtatCycle) => {
+    if (!retraitAutorise) return
+    setTransfertSur(et)
+    setNbCarreauxTransfert('1')
+    setCompteDestinationId(comptesBanqueClient[0]?.id ?? '')
+    setErreur('')
+  }
+
+  const libelleCompteBanque = (c: Compte) =>
+    `${c.numero} (${c.type === 'epargne' ? 'épargne' : 'courant'})`
+
+  const validerTransfert = async () => {
+    if (!transfertSur || !carnet) return
+    const n = Number(nbCarreauxTransfert)
+    if (!Number.isInteger(n) || n <= 0) {
+      setErreur('Nombre de mises invalide.')
+      return
+    }
+    if (n > transfertSur.retirables) {
+      setErreur('Pas assez de mises disponibles.')
+      return
+    }
+    if (!compteDestinationId) {
+      setErreur('Choisissez le compte banque destinataire.')
+      return
+    }
+    const compte = comptesBanqueClient.find((c) => c.id === compteDestinationId)
+    if (!compte) {
+      setErreur('Compte banque introuvable ou verrouillé.')
+      return
+    }
+    const resultat = await transfertTontineCompte(carnet.id, transfertSur.cycle, n, compte.id)
+    if (resultat) {
+      setErreur(resultat)
+      await alerter('Transfert échoué', resultat)
+      return
+    }
+    setTransfertSur(null)
+    setNbCarreauxTransfert('1')
+    setErreur('')
+    await alerter(
+      'Transfert effectué',
+      `Transfert de ${formatMontant(carnet.mise * n)} (${n} mise${n > 1 ? 's' : ''}) — ${transfertSur.moisLabel}.\n` +
+        `Vers ${libelleCompteBanque(compte)}.\n\n` +
+        `Mises restantes sur ce cycle : ${Math.max(0, transfertSur.retirables - n)}\n` +
+        `Aucun mouvement de caisse.`,
     )
   }
 
@@ -766,6 +823,24 @@ export default function DetailTontine() {
                             Retrait total
                           </button>
                         )}
+                        <button
+                          type="button"
+                          className="btn-secondary !py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={!retraitAutorise}
+                          title={
+                            !retraitAutorise
+                              ? carnet.verrouille
+                                ? 'Carnet verrouillé'
+                                : 'Retrait non activé par l’administrateur'
+                              : comptesBanqueClient.length === 0
+                                ? 'Ce client n’a pas de compte banque déverrouillé'
+                                : 'Virer des mises vers le compte banque, sans passer par la caisse'
+                          }
+                          onClick={() => ouvrirTransfert(et)}
+                        >
+                          <ArrowRightLeft className="h-3.5 w-3.5" />
+                          Transfert
+                        </button>
                       </div>
                       {!retraitAutorise && carteRestreinte && (
                         <span className="text-[10px] text-slate-500">En attente d’activation admin</span>
@@ -1237,6 +1312,111 @@ export default function DetailTontine() {
               </button>
               <button type="submit" className="btn-primary">
                 Valider le retrait
+              </button>
+            </div>
+          </form>
+        )}
+      </Modale>
+
+      <Modale
+        titre={transfertSur ? `Transfert — ${transfertSur.moisLabel}` : ''}
+        ouverte={transfertSur !== null}
+        onFermer={() => setTransfertSur(null)}
+      >
+        {transfertSur && (
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault()
+              await validerTransfert()
+            }}
+            className="space-y-4"
+          >
+            <p className="rounded-xl bg-sky-50 p-3 text-sm text-sky-900 ring-1 ring-sky-100">
+              Les mises quittent le carnet et créditent le compte banque. La caisse ne bouge pas.
+            </p>
+            {comptesBanqueClient.length === 0 ? (
+              <p className="text-sm text-rose-700">
+                Ce client n’a pas de compte courant ou épargne déverrouillé.{' '}
+                <Link to="/comptes" className="font-medium underline">
+                  Ouvrir un compte
+                </Link>
+              </p>
+            ) : (
+              <>
+                <div>
+                  <label className="label">Compte destinataire *</label>
+                  <select
+                    className="input"
+                    value={compteDestinationId}
+                    onChange={(e) => setCompteDestinationId(e.target.value)}
+                    required
+                  >
+                    {comptesBanqueClient.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.numero} — {c.type === 'epargne' ? 'Épargne' : 'Courant'} — solde{' '}
+                        {formatMontant(c.solde)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Nombre de mises à virer *</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min={1}
+                    max={transfertSur.retirables}
+                    required
+                    value={nbCarreauxTransfert}
+                    onChange={(e) => setNbCarreauxTransfert(e.target.value)}
+                  />
+                  <p className="mt-1 text-xs text-slate-400">
+                    {transfertSur.retirables} mise{transfertSur.retirables > 1 ? 's' : ''} disponible
+                    {transfertSur.retirables > 1 ? 's' : ''}
+                    {pcPayeeSurCycle(carnet, data.transactions, transfertSur.cycle) ? ' (hors P.C.)' : ''}
+                    {' — '}
+                    {formatMontant(transfertSur.montantRetirable)} au maximum
+                  </p>
+                </div>
+                {(() => {
+                  const n = Number(nbCarreauxTransfert) || 0
+                  const dispoApres = Math.max(0, transfertSur.retirables - n)
+                  const compte = comptesBanqueClient.find((c) => c.id === compteDestinationId)
+                  return (
+                    <div className="rounded-xl bg-slate-50 p-3 text-sm space-y-1.5">
+                      <div className="flex justify-between font-semibold text-sky-800">
+                        <span>Montant viré</span>
+                        <span>{formatMontant(carnet.mise * n)}</span>
+                      </div>
+                      {compte && (
+                        <div className="flex justify-between text-slate-600 border-t border-slate-200 pt-1.5">
+                          <span>Solde {compte.numero} après</span>
+                          <span className="font-bold text-emerald-700">
+                            {formatMontant(compte.solde + carnet.mise * n)}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-slate-600">
+                        <span>Mises disponibles après</span>
+                        <span className="font-bold text-slate-900">{dispoApres}</span>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </>
+            )}
+            {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-secondary" onClick={() => setTransfertSur(null)}>
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="btn-primary disabled:cursor-not-allowed disabled:bg-slate-300"
+                disabled={comptesBanqueClient.length === 0}
+              >
+                <ArrowRightLeft className="h-4 w-4" />
+                Valider le transfert
               </button>
             </div>
           </form>

@@ -29,6 +29,8 @@ MAPPINGS_DEFAUT = [
     ("mise_tontine", "CAISSE", "571", "4673", "Cotisation tontine"),
     ("complement_mise", "CAISSE", "571", "4673", "Complément de mise tontine"),
     ("retrait_tontine", "CAISSE", "4673", "571", "Retrait cycle tontine"),
+    ("transfert_tontine_compte", "OD", "4673", "4671", "Transfert tontine vers compte courant"),
+    ("transfert_tontine_compte_epargne", "OD", "4673", "4672", "Transfert tontine vers compte épargne"),
     ("commission_tontine", "CAISSE", "571", "7061", "Commission tontine"),
     ("vente_carnet", "CAISSE", "571", "7071", "Vente de carnet"),
     ("octroi_credit", "CAISSE", "4119", "571", "Octroi de crédit"),
@@ -372,6 +374,8 @@ def poster_transaction_auto(
         typ = "retrait_compte_epargne"
     elif typ == "droit_adhesion" and type_compte == "epargne":
         typ = "droit_adhesion_epargne"
+    elif typ == "transfert_tontine_compte" and type_compte == "epargne":
+        typ = "transfert_tontine_compte_epargne"
 
     mapping = db.query(m.MappingEcriture).filter_by(type_operation=typ, actif=True).first()
     if not mapping:
@@ -778,6 +782,57 @@ def balance_generale(
             }
         )
     return out
+
+
+def _solde_actif(row: dict[str, Any]) -> float:
+    return float(row.get("soldeDebiteur") or 0) - float(row.get("soldeCrediteur") or 0)
+
+
+def snapshot_coffre(db: Session, *, agence_id: str | None = None) -> dict[str, Any]:
+    """Rapprochement caisse comptable (57x) vs caisses opérationnelles des agences."""
+    ouvert = exercice_ouvert(db)
+    caisse_compta: float | None = None
+    banque_compta: float | None = None
+    if ouvert:
+        caisse_compta = 0.0
+        banque_compta = 0.0
+        for r in balance_generale(db, exercice_id=ouvert.id):
+            num = str(r.get("compteNumero") or "")
+            solde = _solde_actif(r)
+            if num.startswith("57") and len(num) >= 3:
+                caisse_compta += solde
+            if num.startswith("521"):
+                banque_compta += solde
+
+    q = db.query(m.CompteCaisse).filter_by(actif=True)
+    if agence_id:
+        q = q.filter_by(agence_id=agence_id)
+    comptes = q.all()
+    agences = {a.id: a for a in db.query(m.Agence).all()}
+    par_agence: list[dict[str, Any]] = []
+    total_op = 0.0
+    for c in comptes:
+        solde = float(c.solde or 0)
+        total_op += solde
+        ag = agences.get(c.agence_id)
+        par_agence.append(
+            {
+                "agenceId": c.agence_id,
+                "agenceNom": f"{ag.code} — {ag.nom}" if ag else (c.agence_id or "—"),
+                "solde": solde,
+            }
+        )
+    par_agence.sort(key=lambda x: x["agenceNom"])
+    ecart = None if caisse_compta is None else total_op - caisse_compta
+    return {
+        "exerciceId": ouvert.id if ouvert else None,
+        "caisseComptable": caisse_compta,
+        "banqueComptable": banque_compta,
+        "caisseOperationnelle": total_op,
+        "ecart": ecart,
+        "parAgence": par_agence,
+        "perimetreAgenceId": agence_id,
+    }
 
 
 def ouvrir_exercice(db: Session, annee: int) -> tuple[str | None, m.ExerciceComptable | None]:

@@ -403,6 +403,7 @@ export type TypeTransaction =
   | 'complement_mise'
   | 'depot_compte'
   | 'retrait_compte'
+  | 'transfert_tontine_compte'
   | 'octroi_credit'
   | 'remboursement_credit'
   | 'part_sociale'

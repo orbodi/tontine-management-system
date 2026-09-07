@@ -24,7 +24,7 @@ import {
 } from 'recharts'
 import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
-import { TYPES_SORTIE, LIBELLES_CARNET, compteCaissePourEmploye, situationCredit, situationsCycles } from '../metier'
+import { TYPES_SORTIE, LIBELLES_CARNET, compteCaissePourEmploye, estOperationCaisse, situationCredit, situationsCycles } from '../metier'
 import type { TypeCarnet } from '../types'
 import { formatDate, formatMontant } from '../utils'
 import { EnTetePage } from '../components/ui'
@@ -166,6 +166,7 @@ export default function TableauDeBord() {
     let depots = 0
     let retraits = 0
     txVisibles.forEach((t) => {
+      if (!estOperationCaisse(t.type)) return
       const dt = new Date(t.date)
       if (dt.getFullYear() !== annee || dt.getMonth() !== mois) return
       if (TYPES_SORTIE.includes(t.type)) retraits += t.montant
@@ -201,6 +202,7 @@ export default function TableauDeBord() {
       })
     }
     txVisibles.forEach((t) => {
+      if (!estOperationCaisse(t.type)) return
       const dt = new Date(t.date)
       const ligne = mois.find((m) => m.cle === `${dt.getFullYear()}-${dt.getMonth()}`)
       if (!ligne) return

@@ -9,11 +9,28 @@ import type {
   LigneBalance,
 } from '../types'
 
+export interface CoffreAgence {
+  agenceId: string
+  agenceNom: string
+  solde: number
+}
+
+export interface CoffreFort {
+  exerciceId: string | null
+  caisseComptable: number | null
+  banqueComptable: number | null
+  caisseOperationnelle: number
+  ecart: number | null
+  parAgence: CoffreAgence[]
+  perimetreAgenceId: string | null
+}
+
 export interface ComptaOverview {
   exercices: ExerciceComptable[]
   exerciceOuvert: ExerciceComptable | null
   nbComptes: number
   nbJournaux: number
+  coffre?: CoffreFort
 }
 
 export interface BilanResponse {

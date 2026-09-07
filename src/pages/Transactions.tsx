@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, Ban, Download, Pencil, Search } from 'lucide-react'
+import { ArrowDownRight, ArrowRightLeft, ArrowUpRight, Ban, Download, Pencil, Search } from 'lucide-react'
 import { MODULE_CREDITS_ACTIF } from '../config'
 import { ApiError } from '../api/client'
 import { useStore } from '../store'
 import type { Transaction, TypeTransaction } from '../types'
-import { estOperationCaisse, estTransactionActive, LIBELLES_TYPE, TYPES_SORTIE } from '../metier'
+import { estOperationCaisse, estTransactionActive, estTransfertInterne, LIBELLES_TYPE, TYPES_SORTIE } from '../metier'
 import { exporterCsv, formatDateHeure, formatMontant } from '../utils'
 import { EnTetePage, EtatVide, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
@@ -19,6 +19,7 @@ const TYPES_MODIFIABLES = new Set<TypeTransaction>([
   'remboursement_credit',
   'part_sociale',
   'droit_adhesion',
+  'transfert_tontine_compte',
 ])
 
 const TYPES_ANNULABLES = new Set<TypeTransaction>([...TYPES_MODIFIABLES, 'vente_carnet'])
@@ -86,7 +87,7 @@ export default function Transactions() {
     const q = recherche.trim().toLowerCase()
     return data.transactions.filter((t) => {
       // Périmètre caisse selon le rôle
-      if (!estOperationCaisse(t.type)) return false
+      if (!estOperationCaisse(t.type) && !estTransfertInterne(t.type)) return false
       if (estCaissier) {
         if (!employeConnecte || t.operateurId !== employeConnecte.id) return false
       } else if (estChefAgence && agenceFiltreOperations) {
@@ -120,6 +121,7 @@ export default function Transactions() {
     let sorties = 0
     transactionsFiltrees.forEach((t) => {
       if (!estTransactionActive(t)) return
+      if (estTransfertInterne(t.type)) return
       if (TYPES_SORTIE.includes(t.type)) sorties += t.montant
       else entrees += t.montant
     })
@@ -134,7 +136,7 @@ export default function Transactions() {
         LIBELLES_TYPE[t.type],
         t.description,
         t.montant,
-        TYPES_SORTIE.includes(t.type) ? 'Sortie' : 'Entrée',
+        estTransfertInterne(t.type) ? 'Transfert' : TYPES_SORTIE.includes(t.type) ? 'Sortie' : 'Entrée',
         t.operateur,
         t.annulee ? 'oui' : '',
       ]),
@@ -175,11 +177,14 @@ export default function Transactions() {
         'commission_tontine',
         'retrait_tontine',
         'complement_mise',
+        'transfert_tontine_compte',
       ].includes(txEdition.type)
       await alerter(
         'Transaction corrigée',
         `Montant passé de ${formatMontant(txEdition.montant)} à ${formatMontant(montant)}.\n` +
-          (estTontine
+          (txEdition.type === 'transfert_tontine_compte'
+            ? 'Les carreaux du carnet et le solde du compte banque ont été recalculés. La caisse n’a pas bougé.'
+            : estTontine
             ? 'Les mises / carreaux du carnet et le cycle ont été recalculés.'
             : 'Le compte concerné et la caisse ont été recalculés.'),
       )
@@ -287,6 +292,7 @@ export default function Transactions() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {transactionsFiltrees.map((t) => {
+                const transfert = estTransfertInterne(t.type)
                 const sortie = TYPES_SORTIE.includes(t.type)
                 const annulee = !!t.annulee
                 return (
@@ -305,11 +311,23 @@ export default function Transactions() {
                     <td className="whitespace-nowrap px-5 py-3 text-right">
                       <span
                         className={`inline-flex items-center gap-1 font-bold ${
-                          annulee ? 'text-slate-400 line-through' : sortie ? 'text-rose-600' : 'text-emerald-600'
+                          annulee
+                            ? 'text-slate-400 line-through'
+                            : transfert
+                              ? 'text-sky-700'
+                              : sortie
+                                ? 'text-rose-600'
+                                : 'text-emerald-600'
                         }`}
                       >
-                        {sortie ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
-                        {sortie ? '-' : '+'}
+                        {transfert ? (
+                          <ArrowRightLeft className="h-3.5 w-3.5" />
+                        ) : sortie ? (
+                          <ArrowUpRight className="h-3.5 w-3.5" />
+                        ) : (
+                          <ArrowDownRight className="h-3.5 w-3.5" />
+                        )}
+                        {transfert ? '' : sortie ? '-' : '+'}
                         {formatMontant(t.montant)}
                       </span>
                     </td>

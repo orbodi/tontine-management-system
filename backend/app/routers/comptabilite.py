@@ -36,11 +36,13 @@ def overview(
     C.ensure_comptabilite_seed(db)
     exercices = [C.serialize_exercice(e) for e in db.query(m.ExerciceComptable).order_by(m.ExerciceComptable.annee.desc()).all()]
     ouvert = C.exercice_ouvert(db)
+    agence_id = user.get("agenceId") if user.get("role") == "chef_agence" else None
     return {
         "exercices": exercices,
         "exerciceOuvert": C.serialize_exercice(ouvert) if ouvert else None,
         "nbComptes": db.query(m.CompteComptable).count(),
         "nbJournaux": db.query(m.JournalComptable).count(),
+        "coffre": C.snapshot_coffre(db, agence_id=agence_id),
     }
 
 

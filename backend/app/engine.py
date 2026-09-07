@@ -1700,6 +1700,87 @@ def retrait_cycle(d, u, p):
     return (None, d, {})
 
 
+def transfert_tontine_compte(d, u, p):
+    """Vire des carreaux d'un carnet vers un compte banque du même client, sans mouvement de caisse."""
+    err = _verif_caisse(d, u)
+    if err:
+        return {"erreur": err}
+    carnet_id = p.get("carnetId")
+    compte_id = p.get("compteId")
+    cycle = int(p.get("cycle") or 0)
+    nombre = int(p.get("nombreCarreaux") or 0)
+    if nombre <= 0:
+        return {"erreur": "Nombre invalide."}
+    if not compte_id:
+        return {"erreur": "Indiquez le compte banque destinataire."}
+
+    d = copy.deepcopy(d)
+    carnet = next((c for c in d["carnets"] if c["id"] == carnet_id), None)
+    if not carnet:
+        return {"erreur": "Carnet introuvable."}
+    if carnet.get("verrouille"):
+        return {"erreur": "Carnet verrouille."}
+    elig = M.eligibilite_retrait_carnet(carnet, d["mises"])
+    if not elig.get("autorise"):
+        return {"erreur": "Retrait non autorise pour ce type de carnet."}
+    retirables = M.carreaux_retirables(carnet, d["mises"], cycle, d.get("transactions") or [])
+    if nombre > retirables:
+        return {"erreur": "Pas assez de carreaux."}
+
+    compte = next((c for c in d["comptes"] if c["id"] == compte_id), None)
+    if not compte:
+        return {"erreur": "Compte banque introuvable."}
+    if compte.get("verrouille"):
+        return {"erreur": "Ce compte est verrouille."}
+    if compte.get("clientId") != carnet.get("clientId"):
+        return {"erreur": "Le compte banque doit appartenir au même client que le carnet."}
+
+    montant = carnet["mise"] * nombre
+    if montant <= 0:
+        return {"erreur": "Montant invalide."}
+
+    date = _horodate_caisse_agence(d, carnet.get("agenceId") or u.get("agenceId"))
+    nature = "épargne" if compte.get("type") == "epargne" else "courant"
+    d["mises"].append(
+        {
+            "id": uid(),
+            "carnetId": carnet_id,
+            "cycle": cycle,
+            "nombreMises": -nombre,
+            "montant": -montant,
+            "date": date,
+        }
+    )
+    d["comptes"] = [
+        {**c, "solde": c["solde"] + montant} if c["id"] == compte_id else c for c in d["comptes"]
+    ]
+    d["mouvements"].append(
+        {
+            "id": uid(),
+            "compteId": compte_id,
+            "type": "depot",
+            "montant": montant,
+            "date": date,
+            "note": f"Transfert depuis carnet {carnet['numero']} cycle {cycle}",
+        }
+    )
+    tx = _mk_tx(
+        u,
+        {
+            "type": "transfert_tontine_compte",
+            "clientId": carnet["clientId"],
+            "montant": montant,
+            "date": date,
+            "description": (
+                f"Transfert tontine {carnet['numero']} → {compte['numero']} ({nature}) "
+                f"x{nombre} (carnet {carnet['numero']}, cycle {cycle}) — {_nom_client(d, carnet['clientId'])}"
+            ),
+        },
+    )
+    d = _enregistrer_tx(d, [tx])
+    return (None, d, {})
+
+
 def basculer_verrou_carnet(d, u, p):
     if not _a_droit(u, "verrouiller_comptes") and not _est_admin(u):
         return {"erreur": "Droit insuffisant."}
@@ -1736,6 +1817,7 @@ def _txs_lies_au_carnet(d: dict, carnet: dict) -> list[dict]:
         "commission_tontine",
         "complement_mise",
         "retrait_tontine",
+        "transfert_tontine_compte",
     }
     autres = [
         c for c in d.get("carnets") or [] if c.get("clientId") == client_id and c["id"] != carnet["id"]
@@ -1806,6 +1888,10 @@ def supprimer_carnet(d, u, p):
     d = copy.deepcopy(d)
     carnet = next((c for c in d["carnets"] if c["id"] == id_), None)
     txs = _txs_lies_au_carnet(d, carnet)
+    if any(t.get("type") == "transfert_tontine_compte" and M.est_tx_active(t) for t in txs):
+        return {
+            "erreur": "Impossible : ce carnet a des virements vers un compte banque. Annulez-les d'abord."
+        }
     mises = [mi for mi in d.get("mises") or [] if mi.get("carnetId") == id_]
 
     jours: set[str] = set()
@@ -2984,6 +3070,7 @@ TYPES_TX_MODIFIABLES = {
     "remboursement_credit",
     "part_sociale",
     "droit_adhesion",
+    "transfert_tontine_compte",
 }
 
 TYPES_TX_ANNULABLES = TYPES_TX_MODIFIABLES | {"vente_carnet"}
@@ -2993,11 +3080,13 @@ def _numero_compte_depuis_description(description: str) -> str | None:
     """Extrait le n° de compte (B0001) depuis dépôt, retrait, adhésion ou part sociale."""
     if not description:
         return None
-    m = re.search(
-        r"(?:Depot|Dépôt|Retrait|adhésion|adhesion|Part sociale(?:\s+ouverture)?)\s+(?:promo\s+)?(B[0-9]+)",
+    m = re.search(r"(?:Depot|Dépôt|Retrait|adhésion|adhesion|Part sociale(?:\s+ouverture)?)\s+(?:promo\s+)?(B[0-9]+)",
         description,
         re.IGNORECASE,
     )
+    if m:
+        return m.group(1)
+    m = re.search(r"→\s*(B[0-9]+)", description)
     if m:
         return m.group(1)
     m = re.search(r"\b(B\d{4,})\b", description)
@@ -3093,6 +3182,9 @@ def _numero_carnet_depuis_description(description: str) -> str | None:
     m = re.search(r"carnet\s+([A-Za-z0-9]{4,})", description, re.IGNORECASE)
     if m:
         return m.group(1)
+    m = re.search(r"Transfert tontine\s+([A-Za-z0-9]{4,})", description, re.IGNORECASE)
+    if m:
+        return m.group(1)
     m = re.search(r"Retrait\s+([A-Za-z0-9]{4,})\s+x", description, re.IGNORECASE)
     return m.group(1) if m else None
 
@@ -3146,7 +3238,7 @@ def _trouver_mise_tontine(
                 continue
             if cycle_hint is not None and int(mi.get("cycle") or 0) != cycle_hint:
                 continue
-            if typ == "retrait_tontine":
+            if typ in ("retrait_tontine", "transfert_tontine_compte"):
                 if float(mi.get("nombreMises") or 0) >= 0:
                     continue
                 if abs(float(mi.get("montant") or 0) + montant) < 0.005:
@@ -3241,7 +3333,7 @@ def _appliquer_correction_mise_tontine(
             {**m, "montant": montant_total, "nombreMises": n_total} if m["id"] == mi["id"] else m
             for m in d["mises"]
         ]
-    elif typ == "retrait_tontine":
+    elif typ in ("retrait_tontine", "transfert_tontine_compte"):
         d["mises"] = [
             {**m, "montant": -nouveau, "nombreMises": -n} if m["id"] == mi["id"] else m
             for m in d["mises"]
@@ -3266,6 +3358,33 @@ def _appliquer_correction_mise_tontine(
 
     d = _recalculer_cycle_actuel_carnet(d, carnet["id"])
     return None, d
+
+
+def _trouver_compte_depot_tx(
+    d: dict, *, client_id: str | None, montant: float, date_tx: str, description: str
+) -> tuple[dict | None, dict | None]:
+    """Retrouve (compte, mouvement dépôt) liés à une transaction créditant un compte B…."""
+    numero = _numero_compte_depuis_description(description or "")
+    cible = next((c for c in d["comptes"] if numero and c.get("numero") == numero), None)
+    if not cible and client_id:
+        for c in d["comptes"]:
+            if c.get("clientId") != client_id:
+                continue
+            if _trouver_mouvement_compte(
+                d, compte_id=c["id"], type_mvt="depot", montant=montant, date_tx=date_tx
+            ):
+                cible = c
+                break
+    if not cible and client_id:
+        comptes_client = [c for c in d["comptes"] if c.get("clientId") == client_id]
+        if comptes_client:
+            cible = next((c for c in comptes_client if c.get("type") == "courant"), comptes_client[0])
+    if not cible:
+        return None, None
+    mvt = _trouver_mouvement_compte(
+        d, compte_id=cible["id"], type_mvt="depot", montant=montant, date_tx=date_tx
+    )
+    return cible, mvt
 
 
 def _journee_operation_cloturee(d: dict, tx: dict) -> bool:
@@ -3442,6 +3561,58 @@ def corriger_montant_transaction(d, u, p):
         if err_m:
             return {"erreur": err_m}
 
+    elif typ == "transfert_tontine_compte":
+        trouve = _trouver_mise_tontine(
+            d,
+            client_id=client_id or "",
+            typ=typ,
+            montant=ancien,
+            date_tx=date_tx,
+            description=tx.get("description") or "",
+        )
+        if not trouve:
+            return {"erreur": "Mise / carreaux liés à la transaction introuvables."}
+        carnet, mi = trouve
+        err_m, d = _appliquer_correction_mise_tontine(d, typ, carnet, mi, ancien, nouveau)
+        if err_m:
+            return {"erreur": err_m}
+        cible, mvt = _trouver_compte_depot_tx(
+            d,
+            client_id=client_id,
+            montant=ancien,
+            date_tx=date_tx,
+            description=tx.get("description") or "",
+        )
+        if not cible:
+            return {"erreur": "Compte banque lié à la transaction introuvable."}
+        if mvt:
+            d["mouvements"] = [
+                {
+                    **mv,
+                    "montant": nouveau,
+                    "note": ((mv.get("note") or "") + " " + note_corr).strip(),
+                }
+                if mv["id"] == mvt["id"]
+                else mv
+                for mv in d["mouvements"]
+            ]
+        elif abs(diff) > 0.005:
+            adj_type = "depot" if diff > 0 else "retrait"
+            d["mouvements"].append(
+                {
+                    "id": uid(),
+                    "compteId": cible["id"],
+                    "type": adj_type,
+                    "montant": abs(diff),
+                    "date": date_tx or M.maintenant(),
+                    "note": f"Ajustement correction {note_corr}",
+                }
+            )
+        d = _recalculer_solde_compte_client(d, cible["id"])
+        compte_client_id = cible["id"]
+        if float(next(c for c in d["comptes"] if c["id"] == cible["id"])["solde"]) < -0.005:
+            return {"erreur": "Correction impossible : solde du compte client insuffisant."}
+
     elif typ == "remboursement_credit":
         remb = next(
             (
@@ -3579,7 +3750,7 @@ def _appliquer_annulation_mise_tontine(
         d = _recalculer_cycle_actuel_carnet(d, carnet["id"])
         return None, d
 
-    if typ == "retrait_tontine":
+    if typ == "retrait_tontine" or typ == "transfert_tontine_compte":
         d["mises"] = [m for m in d["mises"] if m["id"] != mi["id"]]
         d = _recalculer_cycle_actuel_carnet(d, carnet["id"])
         return None, d
@@ -3746,6 +3917,38 @@ def annuler_transaction(d, u, p):
             if err2:
                 return {"erreur": err2}
 
+    elif typ == "transfert_tontine_compte":
+        trouve = _trouver_mise_tontine(
+            d,
+            client_id=client_id or "",
+            typ=typ,
+            montant=montant,
+            date_tx=date_tx,
+            description=tx.get("description") or "",
+        )
+        if not trouve:
+            return {"erreur": "Mise / carreaux liés à la transaction introuvables."}
+        carnet, mi = trouve
+        err_m, d = _appliquer_annulation_mise_tontine(
+            d, typ, carnet, mi, montant, tx.get("description") or ""
+        )
+        if err_m:
+            return {"erreur": err_m}
+        cible, mvt = _trouver_compte_depot_tx(
+            d,
+            client_id=client_id,
+            montant=montant,
+            date_tx=date_tx,
+            description=tx.get("description") or "",
+        )
+        if not cible:
+            return {"erreur": "Compte banque lié à la transaction introuvable."}
+        if mvt:
+            d["mouvements"] = [mv for mv in d["mouvements"] if mv["id"] != mvt["id"]]
+        d = _recalculer_solde_compte_client(d, cible["id"])
+        if float(next(c for c in d["comptes"] if c["id"] == cible["id"])["solde"]) < -0.005:
+            return {"erreur": "Annulation impossible : solde du compte client insuffisant."}
+
     elif typ == "vente_carnet":
         if not _est_admin(u):
             err2 = _verif_solde_sortie(d, u, montant)
@@ -3828,6 +4031,7 @@ ACTIONS = {
     "renouvelerCarnet": renouveler_carnet,
     "changerMiseCarnet": changer_mise_carnet,
     "retraitCycle": retrait_cycle,
+    "transfertTontineCompte": transfert_tontine_compte,
     "basculerVerrouCarnet": basculer_verrou_carnet,
     "basculerRetraitCarnetAdmin": basculer_retrait_carnet_admin,
     "supprimerCarnet": supprimer_carnet,

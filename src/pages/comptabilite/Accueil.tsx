@@ -7,6 +7,7 @@ import {
   Landmark,
   Scale,
   ScrollText,
+  Vault,
 } from 'lucide-react'
 import { comptaApi, type ComptaOverview } from '../../api/comptabilite'
 import { EnTetePage } from '../../components/ui'
@@ -19,6 +20,7 @@ const sousMenus = [
   { to: '/comptabilite/journaux', label: 'Journaux', icon: ScrollText, desc: 'Caisse, banque, OD…' },
   { to: '/comptabilite/grand-livre', label: 'Grand livre', icon: Landmark, desc: 'Par compte' },
   { to: '/comptabilite/balance', label: 'Balance générale', icon: FileSpreadsheet, desc: 'Soldes' },
+  { to: '/comptabilite/coffre', label: 'Coffre-fort', icon: Vault, desc: 'Espèces : livres et tiroirs' },
 ]
 
 export default function ComptabiliteAccueil() {

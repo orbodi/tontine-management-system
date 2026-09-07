@@ -131,6 +131,12 @@ interface StoreApi {
     dateCollecte?: string,
   ) => Promise<string | null>
   retraitCycle: (carnetId: string, cycle: number, nombreCarreaux: number) => Promise<string | null>
+  transfertTontineCompte: (
+    carnetId: string,
+    cycle: number,
+    nombreCarreaux: number,
+    compteId: string,
+  ) => Promise<string | null>
   basculerVerrouCarnet: (id: string) => Promise<void>
   basculerRetraitCarnetAdmin: (id: string) => Promise<string | null>
   supprimerCarnet: (id: string) => Promise<string | null>
@@ -432,6 +438,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       async retraitCycle(carnetId, cycle, nombreCarreaux) {
         const res = await muter('retraitCycle', { carnetId, cycle, nombreCarreaux })
+        return res.erreur ?? null
+      },
+      async transfertTontineCompte(carnetId, cycle, nombreCarreaux, compteId) {
+        const res = await muter('transfertTontineCompte', {
+          carnetId,
+          cycle,
+          nombreCarreaux,
+          compteId,
+        })
         return res.erreur ?? null
       },
       async basculerVerrouCarnet(id) {

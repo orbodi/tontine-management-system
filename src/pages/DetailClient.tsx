@@ -19,6 +19,7 @@ import {
   CARNETS_RETRAIT_6_MOIS,
   LIBELLES_CARNET,
   TYPES_SORTIE,
+  estTransfertInterne,
   besoinRenouvellementCarnet,
   fraisOuvertureComptePour,
   libelleCycleCarnet,
@@ -671,6 +672,7 @@ export default function DetailClient() {
         ) : (
           <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
             {activite.transactions.map((t) => {
+              const transfert = estTransfertInterne(t.type)
               const sortie = TYPES_SORTIE.includes(t.type)
               return (
                 <div key={t.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
@@ -680,8 +682,12 @@ export default function DetailClient() {
                       {formatDateHeure(t.date)} — par {t.operateur}
                     </p>
                   </div>
-                  <span className={`shrink-0 font-bold ${sortie ? 'text-rose-600' : 'text-emerald-600'}`}>
-                    {sortie ? '-' : '+'}
+                  <span
+                    className={`shrink-0 font-bold ${
+                      transfert ? 'text-sky-700' : sortie ? 'text-rose-600' : 'text-emerald-600'
+                    }`}
+                  >
+                    {transfert ? '' : sortie ? '-' : '+'}
                     {formatMontant(t.montant)}
                   </span>
                 </div>

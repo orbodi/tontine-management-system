@@ -9,6 +9,7 @@ import {
   TYPES_COMPTE_BANQUE,
   TYPES_COMPTE_TONTINE,
   TYPES_SORTIE,
+  TYPES_SORTIE_TONTINE,
   situationCredit,
 } from '../metier'
 import type { TypeCompte, TypeTransaction } from '../types'
@@ -152,22 +153,25 @@ function FiltresPeriode({
   )
 }
 
-function totauxOperations(ops: { type: TypeTransaction; montant: number }[]) {
-  const parType = new Map<string, { entrees: number; sorties: number; nombre: number }>()
-  let entrees = 0
-  let sorties = 0
+function totauxOperations(
+  ops: { type: TypeTransaction; montant: number }[],
+  typesSortie: readonly TypeTransaction[] = TYPES_SORTIE,
+) {
+    const parType = new Map<string, { entrees: number; sorties: number; nombre: number }>()
+    let entrees = 0
+    let sorties = 0
   ops.forEach((t) => {
-    const ligne = parType.get(t.type) ?? { entrees: 0, sorties: 0, nombre: 0 }
-    ligne.nombre++
-    if (TYPES_SORTIE.includes(t.type)) {
-      ligne.sorties += t.montant
-      sorties += t.montant
-    } else {
-      ligne.entrees += t.montant
-      entrees += t.montant
-    }
-    parType.set(t.type, ligne)
-  })
+      const ligne = parType.get(t.type) ?? { entrees: 0, sorties: 0, nombre: 0 }
+      ligne.nombre++
+      if (typesSortie.includes(t.type)) {
+        ligne.sorties += t.montant
+        sorties += t.montant
+      } else {
+        ligne.entrees += t.montant
+        entrees += t.montant
+      }
+      parType.set(t.type, ligne)
+    })
   return { parType, entrees, sorties }
 }
 
@@ -475,7 +479,7 @@ export default function Rapports() {
       if (clientIdTontine && t.clientId !== clientIdTontine) return false
       return true
     })
-    const { parType, entrees, sorties } = totauxOperations(ops)
+    const { parType, entrees, sorties } = totauxOperations(ops, TYPES_SORTIE_TONTINE)
 
     const parClient = new Map<
       string,
@@ -488,7 +492,7 @@ export default function Rapports() {
     ops.forEach((t) => {
       const client = data.clients.find((c) => c.id === t.clientId)
       const zoneId = client?.zoneId ?? ''
-      const sortie = TYPES_SORTIE.includes(t.type)
+      const sortie = TYPES_SORTIE_TONTINE.includes(t.type)
       const ligneC = parClient.get(t.clientId) ?? {
         nom: client ? `${client.prenom} ${client.nom}` : 'Client',
         numero: afficherNumeroClient(client?.codeClient),
@@ -777,19 +781,19 @@ export default function Rapports() {
         const agence = data.agences.find((a) => a.id === c.agenceId)
         const zoneClient = data.zones.find((z) => z.id === c.zoneId)
         return [
-          c.codeClient,
-          c.nom,
-          c.prenom,
-          c.sexe,
-          c.telephone,
-          c.email ?? '',
-          c.profession ?? '',
-          c.adresse ?? '',
-          c.pieceIdentite ?? '',
-          formatDate(c.dateInscription),
+        c.codeClient,
+        c.nom,
+        c.prenom,
+        c.sexe,
+        c.telephone,
+        c.email ?? '',
+        c.profession ?? '',
+        c.adresse ?? '',
+        c.pieceIdentite ?? '',
+        formatDate(c.dateInscription),
           agence?.nom ?? '',
           zoneClient ? `${zoneClient.code}${zoneClient.nom ? ` — ${zoneClient.nom}` : ''}` : '',
-          c.actif ? 'Actif' : 'Inactif',
+        c.actif ? 'Actif' : 'Inactif',
         ]
       }),
     ])
@@ -1007,7 +1011,7 @@ export default function Rapports() {
             {label}
           </button>
         ))}
-      </div>
+        </div>
 
       {onglet === 'caisses' && (
       <div className="card mb-6 !p-0 overflow-hidden print:overflow-visible">
@@ -1018,7 +1022,7 @@ export default function Rapports() {
               <p className="text-sm text-slate-500">
                 Opérations (dépôts / retraits) — {libellePeriode}
               </p>
-            </div>
+        </div>
             <button
               className="btn-secondary !py-2 text-xs print:hidden"
               onClick={exporterRapportCaisse}
@@ -1029,7 +1033,7 @@ export default function Rapports() {
               <Download className="h-3.5 w-3.5" />
               Excel
             </button>
-          </div>
+        </div>
 
           <div className="flex flex-wrap items-end gap-3 print:hidden">
             <div className="flex flex-wrap gap-2">
@@ -1063,7 +1067,7 @@ export default function Rapports() {
               >
                 Par intervalle
               </button>
-            </div>
+      </div>
 
             {modePeriode === 'mois' ? (
               <div>
@@ -1080,9 +1084,9 @@ export default function Rapports() {
               <>
                 <div>
                   <label className="label !mb-1">Du</label>
-                  <input
-                    className="input !w-auto"
-                    type="date"
+            <input
+              className="input !w-auto"
+              type="date"
                     value={debut}
                     max={fin || aujourdhuiLocalIso()}
                     onChange={(e) => setDebut(e.target.value)}
@@ -1109,7 +1113,7 @@ export default function Rapports() {
                   }}
                 >
                   Mois en cours
-                </button>
+            </button>
               </>
             )}
 
@@ -1128,9 +1132,9 @@ export default function Rapports() {
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
           </div>
+            )}
+        </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 p-5 lg:grid-cols-5">
@@ -1623,7 +1627,7 @@ export default function Rapports() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {rapportTontine.detail.map((t) => {
-                    const sortie = TYPES_SORTIE.includes(t.type)
+                    const sortie = TYPES_SORTIE_TONTINE.includes(t.type)
                     return (
                       <tr key={t.id}>
                         <td className="py-2 pr-4 whitespace-nowrap text-slate-600">
@@ -2148,7 +2152,7 @@ export default function Rapports() {
                             }`}
                           >
                             {c.actif ? 'Actif' : 'Inactif'}
-                          </span>
+              </span>
                         </td>
                       </tr>
                     )
@@ -2156,8 +2160,8 @@ export default function Rapports() {
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+        )}
+      </div>
       )}
 
       {onglet === 'employes' && (
@@ -2261,60 +2265,60 @@ export default function Rapports() {
 
       {MODULE_CREDITS_ACTIF && onglet === 'caisses' && (
         <div className="card mb-6 print:hidden">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-semibold text-slate-900">
-              Portefeuille de crédits actifs ({portefeuille.lignes.length}
-              {portefeuille.enRetard.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-semibold text-slate-900">
+            Portefeuille de crédits actifs ({portefeuille.lignes.length}
+            {portefeuille.enRetard.length > 0 && (
                 <span className="text-rose-600">
                   {' '}
                   dont {portefeuille.enRetard.length} en retard
                 </span>
-              )}
-              )
-            </h3>
-            <button
-              className="btn-secondary !py-2 text-xs print:hidden"
-              onClick={exporterPortefeuille}
-              disabled={portefeuille.lignes.length === 0}
-            >
-              <Download className="h-3.5 w-3.5" />
-              Excel
-            </button>
-          </div>
-          {portefeuille.lignes.length === 0 ? (
-            <p className="text-sm text-slate-500">Aucun crédit actif.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="py-2.5 pr-4">N°</th>
-                    <th className="py-2.5 pr-4">Client</th>
-                    <th className="py-2.5 pr-4 text-right">Montant</th>
-                    <th className="py-2.5 pr-4 text-right">Déjà payé</th>
-                    <th className="py-2.5 pr-4 text-right">Reste dû</th>
-                    <th className="py-2.5">Statut</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {portefeuille.lignes.map(({ credit, client, sit }) => (
-                    <tr key={credit.id}>
+            )}
+            )
+          </h3>
+          <button
+            className="btn-secondary !py-2 text-xs print:hidden"
+            onClick={exporterPortefeuille}
+            disabled={portefeuille.lignes.length === 0}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Excel
+          </button>
+        </div>
+        {portefeuille.lignes.length === 0 ? (
+          <p className="text-sm text-slate-500">Aucun crédit actif.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="py-2.5 pr-4">N°</th>
+                  <th className="py-2.5 pr-4">Client</th>
+                  <th className="py-2.5 pr-4 text-right">Montant</th>
+                  <th className="py-2.5 pr-4 text-right">Déjà payé</th>
+                  <th className="py-2.5 pr-4 text-right">Reste dû</th>
+                  <th className="py-2.5">Statut</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {portefeuille.lignes.map(({ credit, client, sit }) => (
+                  <tr key={credit.id}>
                       <td className="py-2.5 pr-4 font-mono text-xs font-semibold text-brand-700">
                         {credit.numero}
                       </td>
-                      <td className="py-2.5 pr-4 text-slate-800">
-                        {client ? `${client.prenom} ${client.nom}` : 'Inconnu'}
-                      </td>
+                    <td className="py-2.5 pr-4 text-slate-800">
+                      {client ? `${client.prenom} ${client.nom}` : 'Inconnu'}
+                    </td>
                       <td className="py-2.5 pr-4 text-right text-slate-600">
                         {formatMontant(credit.montant)}
                       </td>
                       <td className="py-2.5 pr-4 text-right text-slate-600">
                         {formatMontant(Math.round(sit.dejaPaye))}
                       </td>
-                      <td className="py-2.5 pr-4 text-right font-semibold text-slate-900">
-                        {formatMontant(Math.round(sit.resteAPayer))}
-                      </td>
-                      <td className="py-2.5">
+                    <td className="py-2.5 pr-4 text-right font-semibold text-slate-900">
+                      {formatMontant(Math.round(sit.resteAPayer))}
+                    </td>
+                    <td className="py-2.5">
                         <span
                           className={`badge ${
                             credit.statut === 'en_retard'
@@ -2322,16 +2326,16 @@ export default function Rapports() {
                               : 'bg-sky-100 text-sky-700'
                           }`}
                         >
-                          {credit.statut === 'en_retard' ? 'En retard' : 'En cours'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                        {credit.statut === 'en_retard' ? 'En retard' : 'En cours'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
       )}
     </div>
   )

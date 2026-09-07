@@ -30,6 +30,7 @@ export const LIBELLES_TYPE: Record<TypeTransaction, string> = {
   complement_mise: 'Complément de mise',
   depot_compte: 'Dépôt',
   retrait_compte: 'Retrait',
+  transfert_tontine_compte: 'Transfert tontine → compte',
   octroi_credit: 'Octroi de crédit',
   remboursement_credit: 'Remboursement crédit',
   part_sociale: 'Part sociale',
@@ -45,7 +46,11 @@ export const TYPES_COMPTE_TONTINE: TypeTransaction[] = [
   'retrait_tontine',
   'commission_tontine',
   'complement_mise',
+  'transfert_tontine_compte',
 ]
+
+/** Sorties du carnet tontine (retrait espèces ou virement vers compte banque). */
+export const TYPES_SORTIE_TONTINE: TypeTransaction[] = ['retrait_tontine', 'transfert_tontine_compte']
 
 /** Opérations des comptes courant / épargne (rapport par agence). */
 export const TYPES_COMPTE_BANQUE: TypeTransaction[] = [
@@ -53,7 +58,12 @@ export const TYPES_COMPTE_BANQUE: TypeTransaction[] = [
   'retrait_compte',
   'part_sociale',
   'droit_adhesion',
+  'transfert_tontine_compte',
 ]
+
+export function estTransfertInterne(type: TypeTransaction): boolean {
+  return type === 'transfert_tontine_compte'
+}
 
 /** Types d'opérations qui alimentent le compte de caisse d'un caissier. */
 export const TYPES_OPERATION_CAISSE: TypeTransaction[] = [
