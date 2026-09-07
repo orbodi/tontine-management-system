@@ -792,17 +792,13 @@ def snapshot_coffre(db: Session, *, agence_id: str | None = None) -> dict[str, A
     """Rapprochement caisse comptable (57x) vs caisses opérationnelles des agences."""
     ouvert = exercice_ouvert(db)
     caisse_compta: float | None = None
-    banque_compta: float | None = None
     if ouvert:
         caisse_compta = 0.0
-        banque_compta = 0.0
         for r in balance_generale(db, exercice_id=ouvert.id):
             num = str(r.get("compteNumero") or "")
             solde = _solde_actif(r)
             if num.startswith("57") and len(num) >= 3:
                 caisse_compta += solde
-            if num.startswith("521"):
-                banque_compta += solde
 
     q = db.query(m.CompteCaisse).filter_by(actif=True)
     if agence_id:
@@ -827,7 +823,6 @@ def snapshot_coffre(db: Session, *, agence_id: str | None = None) -> dict[str, A
     return {
         "exerciceId": ouvert.id if ouvert else None,
         "caisseComptable": caisse_compta,
-        "banqueComptable": banque_compta,
         "caisseOperationnelle": total_op,
         "ecart": ecart,
         "parAgence": par_agence,

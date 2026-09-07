@@ -18,7 +18,6 @@ export interface CoffreAgence {
 export interface CoffreFort {
   exerciceId: string | null
   caisseComptable: number | null
-  banqueComptable: number | null
   caisseOperationnelle: number
   ecart: number | null
   parAgence: CoffreAgence[]
