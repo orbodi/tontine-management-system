@@ -20,6 +20,7 @@ const TYPES_MODIFIABLES = new Set<TypeTransaction>([
   'part_sociale',
   'droit_adhesion',
   'transfert_tontine_compte',
+  'transfert_compte_compte',
 ])
 
 const TYPES_ANNULABLES = new Set<TypeTransaction>([...TYPES_MODIFIABLES, 'vente_carnet'])
@@ -184,6 +185,8 @@ export default function Transactions() {
         `Montant passé de ${formatMontant(txEdition.montant)} à ${formatMontant(montant)}.\n` +
           (txEdition.type === 'transfert_tontine_compte'
             ? 'Les carreaux du carnet et le solde du compte banque ont été recalculés. La caisse n’a pas bougé.'
+            : txEdition.type === 'transfert_compte_compte'
+            ? 'Les soldes des deux comptes ont été recalculés. La caisse n’a pas bougé.'
             : estTontine
             ? 'Les mises / carreaux du carnet et le cycle ont été recalculés.'
             : 'Le compte concerné et la caisse ont été recalculés.'),

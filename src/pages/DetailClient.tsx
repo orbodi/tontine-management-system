@@ -116,7 +116,7 @@ export default function DetailClient() {
     const comptes = data.comptes.filter((c) => c.clientId === client.id)
     const credits = data.credits.filter((c) => c.clientId === client.id)
     const transactions = data.transactions.filter((t) => {
-      if (t.clientId !== client.id) return false
+      if (t.clientId !== client.id && t.clientDestinationId !== client.id) return false
       // Caissier : uniquement ses propres opérations
       if (estCaissier && employeConnecte && t.operateurId !== employeConnecte.id) return false
       return true

@@ -31,6 +31,7 @@ export const LIBELLES_TYPE: Record<TypeTransaction, string> = {
   depot_compte: 'Dépôt',
   retrait_compte: 'Retrait',
   transfert_tontine_compte: 'Transfert tontine → compte',
+  transfert_compte_compte: 'Transfert compte → compte',
   octroi_credit: 'Octroi de crédit',
   remboursement_credit: 'Remboursement crédit',
   part_sociale: 'Part sociale',
@@ -59,10 +60,11 @@ export const TYPES_COMPTE_BANQUE: TypeTransaction[] = [
   'part_sociale',
   'droit_adhesion',
   'transfert_tontine_compte',
+  'transfert_compte_compte',
 ]
 
 export function estTransfertInterne(type: TypeTransaction): boolean {
-  return type === 'transfert_tontine_compte'
+  return type === 'transfert_tontine_compte' || type === 'transfert_compte_compte'
 }
 
 /** Types d'opérations qui alimentent le compte de caisse d'un caissier. */

@@ -32,6 +32,7 @@ from .db import (
     migrate_clients_zone_nullable,
     migrate_clients_origine_tontine,
     migrate_transactions_annulation,
+    migrate_transactions_client_destination,
 )
 from .models.entities import SchemaMigration
 
@@ -163,6 +164,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         kind="schema",
         description="Colonnes d'annulation (contrepassation) sur les transactions",
         apply=migrate_transactions_annulation,
+    ),
+    Migration(
+        id="011_transactions_client_destination",
+        kind="schema",
+        description="Client crédité par un transfert (compte → compte, tontine → compte)",
+        apply=migrate_transactions_client_destination,
     ),
 )
 

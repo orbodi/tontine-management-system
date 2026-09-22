@@ -288,6 +288,7 @@ def replace_state(db: Session, data: dict[str, Any], *, hash_plain_passwords: bo
                 date_annulation=t.get("dateAnnulation"),
                 annule_par_id=t.get("annuleParId"),
                 annule_par_nom=t.get("annuleParNom"),
+                client_destination_id=t.get("clientDestinationId") or None,
             )
         )
 
@@ -634,6 +635,7 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "dateAnnulation": getattr(t, "date_annulation", None),
                 "annuleParId": getattr(t, "annule_par_id", None),
                 "annuleParNom": getattr(t, "annule_par_nom", None),
+                "clientDestinationId": getattr(t, "client_destination_id", None),
             }
             for t in db.query(m.Transaction).all()
         ],

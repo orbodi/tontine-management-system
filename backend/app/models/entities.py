@@ -219,6 +219,8 @@ class Transaction(Base):
     date_annulation: Mapped[str | None] = mapped_column(String, nullable=True)
     annule_par_id: Mapped[str | None] = mapped_column(String, nullable=True)
     annule_par_nom: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Transfert : client crédité (peut différer de client_id, le client débité)
+    client_destination_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class CompteCaisse(Base):

@@ -599,13 +599,32 @@ export default function Rapports() {
       const client = data.clients.find((c) => c.id === t.clientId)
       if (!client || !agencesOk.has(client.agenceId)) return false
       if (compteCible) {
-        if (t.clientId !== compteCible.clientId) return false
+        if (t.clientId !== compteCible.clientId && t.clientDestinationId !== compteCible.clientId) return false
         if (t.type === 'part_sociale' || t.type === 'droit_adhesion') return true
         return t.description.includes(compteCible.numero)
       }
       return true
     })
-    const { parType, entrees, sorties } = totauxOperations(ops)
+    const totaux = totauxOperations(ops.filter((t) => t.type !== 'transfert_compte_compte'))
+    const { parType } = totaux
+    let { entrees, sorties } = totaux
+    // Compte → compte : sortie côté source, entrée côté destination (les deux pour une vue globale)
+    ops
+      .filter((t) => t.type === 'transfert_compte_compte')
+      .forEach((t) => {
+        const ligne = parType.get(t.type) ?? { entrees: 0, sorties: 0, nombre: 0 }
+        ligne.nombre++
+        const estSource = t.description.startsWith(`Transfert compte ${compteCible?.numero} `)
+        if (!compteCible || estSource) {
+          ligne.sorties += t.montant
+          sorties += t.montant
+        }
+        if (!compteCible || !estSource) {
+          ligne.entrees += t.montant
+          entrees += t.montant
+        }
+        parType.set(t.type, ligne)
+      })
 
     const parCompte = new Map<
       string,

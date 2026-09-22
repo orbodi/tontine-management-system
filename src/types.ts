@@ -404,6 +404,7 @@ export type TypeTransaction =
   | 'depot_compte'
   | 'retrait_compte'
   | 'transfert_tontine_compte'
+  | 'transfert_compte_compte'
   | 'octroi_credit'
   | 'remboursement_credit'
   | 'part_sociale'
@@ -426,6 +427,8 @@ export interface Transaction {
   dateAnnulation?: string
   annuleParId?: string
   annuleParNom?: string
+  /** Transfert : client crédité (peut différer de clientId, le client débité). */
+  clientDestinationId?: string | null
 }
 
 // ---------- Comptabilité générale ----------

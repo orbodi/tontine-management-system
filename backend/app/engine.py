@@ -1700,8 +1700,39 @@ def retrait_cycle(d, u, p):
     return (None, d, {})
 
 
+def _agence_du_client(d: dict, client_id: str | None) -> str | None:
+    c = next((x for x in d["clients"] if x["id"] == client_id), None)
+    return c.get("agenceId") if c else None
+
+
+def _motif_transfert(p: dict) -> str:
+    return " ".join(str(p.get("motif") or "").split())[:200]
+
+
+def _controle_transfert(
+    d: dict, u: dict, *, client_source_id: str, client_dest_id: str, agences: set[str | None]
+) -> str | None:
+    """Droits communs aux transferts (tontine → compte, compte → compte)."""
+    if not _a_droit(u, "operer_comptes"):
+        return "Droit insuffisant."
+    if client_source_id != client_dest_id and not (_est_admin(u) or _est_chef(u)):
+        return "Transfert vers un autre client : réservé à l'administrateur ou au chef d'agence."
+    if not _est_admin(u) and agences != {u.get("agenceId")}:
+        return "Le transfert est limité aux comptes de votre agence."
+    return None
+
+
+def _suffixe_transfert(d: dict, client_source_id: str, client_dest_id: str, motif: str) -> str:
+    s = f" — {_nom_client(d, client_source_id)}"
+    if client_dest_id != client_source_id:
+        s += f" → {_nom_client(d, client_dest_id)}"
+    if motif:
+        s += f" — Motif : {motif}"
+    return s
+
+
 def transfert_tontine_compte(d, u, p):
-    """Vire des carreaux d'un carnet vers un compte banque du même client, sans mouvement de caisse."""
+    """Vire des carreaux d'un carnet vers un compte banque (même client ou non), sans mouvement de caisse."""
     err = _verif_caisse(d, u)
     if err:
         return {"erreur": err}
@@ -1709,6 +1740,7 @@ def transfert_tontine_compte(d, u, p):
     compte_id = p.get("compteId")
     cycle = int(p.get("cycle") or 0)
     nombre = int(p.get("nombreCarreaux") or 0)
+    motif = _motif_transfert(p)
     if nombre <= 0:
         return {"erreur": "Nombre invalide."}
     if not compte_id:
@@ -1732,8 +1764,18 @@ def transfert_tontine_compte(d, u, p):
         return {"erreur": "Compte banque introuvable."}
     if compte.get("verrouille"):
         return {"erreur": "Ce compte est verrouille."}
-    if compte.get("clientId") != carnet.get("clientId"):
-        return {"erreur": "Le compte banque doit appartenir au même client que le carnet."}
+    err = _controle_transfert(
+        d,
+        u,
+        client_source_id=carnet["clientId"],
+        client_dest_id=compte["clientId"],
+        agences={
+            carnet.get("agenceId") or _agence_du_client(d, carnet["clientId"]),
+            _agence_du_client(d, compte["clientId"]),
+        },
+    )
+    if err:
+        return {"erreur": err}
 
     montant = carnet["mise"] * nombre
     if montant <= 0:
@@ -1769,11 +1811,100 @@ def transfert_tontine_compte(d, u, p):
         {
             "type": "transfert_tontine_compte",
             "clientId": carnet["clientId"],
+            "clientDestinationId": compte["clientId"],
             "montant": montant,
             "date": date,
             "description": (
                 f"Transfert tontine {carnet['numero']} → {compte['numero']} ({nature}) "
-                f"x{nombre} (carnet {carnet['numero']}, cycle {cycle}) — {_nom_client(d, carnet['clientId'])}"
+                f"x{nombre} (carnet {carnet['numero']}, cycle {cycle})"
+                + _suffixe_transfert(d, carnet["clientId"], compte["clientId"], motif)
+            ),
+        },
+    )
+    d = _enregistrer_tx(d, [tx])
+    return (None, d, {})
+
+
+def transfert_compte_compte(d, u, p):
+    """Vire un montant d'un compte courant/épargne vers un autre (même client ou non), sans mouvement de caisse."""
+    err = _verif_caisse(d, u)
+    if err:
+        return {"erreur": err}
+    source_id = p.get("compteSourceId")
+    dest_id = p.get("compteDestinationId")
+    montant = float(p.get("montant") or 0)
+    motif = _motif_transfert(p)
+    if montant <= 0:
+        return {"erreur": "Montant invalide."}
+    if not source_id or not dest_id:
+        return {"erreur": "Indiquez le compte source et le compte destinataire."}
+    if source_id == dest_id:
+        return {"erreur": "Le compte source et le compte destinataire doivent être différents."}
+
+    d = copy.deepcopy(d)
+    source = next((c for c in d["comptes"] if c["id"] == source_id), None)
+    dest = next((c for c in d["comptes"] if c["id"] == dest_id), None)
+    if not source:
+        return {"erreur": "Compte source introuvable."}
+    if not dest:
+        return {"erreur": "Compte destinataire introuvable."}
+    if source.get("verrouille"):
+        return {"erreur": f"Le compte source {source['numero']} est verrouillé."}
+    if dest.get("verrouille"):
+        return {"erreur": f"Le compte destinataire {dest['numero']} est verrouillé."}
+    err = _controle_transfert(
+        d,
+        u,
+        client_source_id=source["clientId"],
+        client_dest_id=dest["clientId"],
+        agences={_agence_du_client(d, source["clientId"]), _agence_du_client(d, dest["clientId"])},
+    )
+    if err:
+        return {"erreur": err}
+    if float(source["solde"]) < montant - 0.005:
+        return {"erreur": "Solde insuffisant sur le compte source."}
+
+    date = _horodate_caisse_agence(d, _agence_du_client(d, source["clientId"]) or u.get("agenceId"))
+    d["comptes"] = [
+        {**c, "solde": c["solde"] - montant}
+        if c["id"] == source_id
+        else {**c, "solde": c["solde"] + montant}
+        if c["id"] == dest_id
+        else c
+        for c in d["comptes"]
+    ]
+    d["mouvements"].extend(
+        [
+            {
+                "id": uid(),
+                "compteId": source_id,
+                "type": "retrait",
+                "montant": montant,
+                "date": date,
+                "note": f"Transfert vers {dest['numero']}" + (f" — {motif}" if motif else ""),
+            },
+            {
+                "id": uid(),
+                "compteId": dest_id,
+                "type": "depot",
+                "montant": montant,
+                "date": date,
+                "note": f"Transfert depuis {source['numero']}" + (f" — {motif}" if motif else ""),
+            },
+        ]
+    )
+    nature = lambda c: "épargne" if c.get("type") == "epargne" else "courant"  # noqa: E731
+    tx = _mk_tx(
+        u,
+        {
+            "type": "transfert_compte_compte",
+            "clientId": source["clientId"],
+            "clientDestinationId": dest["clientId"],
+            "montant": montant,
+            "date": date,
+            "description": (
+                f"Transfert compte {source['numero']} ({nature(source)}) → {dest['numero']} ({nature(dest)})"
+                + _suffixe_transfert(d, source["clientId"], dest["clientId"], motif)
             ),
         },
     )
@@ -2807,8 +2938,21 @@ def annuler_ouverture_journee_caisse(d, u, p):
         else x
         for x in (d.get("demandesOuvertureCompte") or [])
     ]
+    # Transferts du jour (hors caisse) : leurs mises / mouvements viennent d'être retirés ci-dessus
+    op_ids = M.operateurs_caisse_agence(d.get("employes") or [], agence_id)
+    transferts_ids = {
+        t["id"]
+        for t in d.get("transactions") or []
+        if t.get("type") in ("transfert_tontine_compte", "transfert_compte_compte")
+        and not t.get("annulee")
+        and (t.get("agenceId") == agence_id or t.get("operateurId") in op_ids)
+        and M.jour_iso_depuis_date(t.get("date") or "") in jours
+    }
+
     # Transactions du jour
-    d["transactions"] = [t for t in d.get("transactions") or [] if t.get("id") not in tx_ids]
+    d["transactions"] = [
+        t for t in d.get("transactions") or [] if t.get("id") not in tx_ids and t.get("id") not in transferts_ids
+    ]
 
     # Mouvements de caisse du jour + recalcul du solde (somme des mouvements restants, depuis 0)
     titulaire_id = ouverture.get("employeId") or cible["id"]
@@ -2842,7 +2986,7 @@ def annuler_ouverture_journee_caisse(d, u, p):
         if not (o.get("agenceId") == agence_id and o.get("journee") == jour)
     ]
 
-    nb_ops = len(txs)
+    nb_ops = len(txs) + len(transferts_ids)
     return (
         None,
         d,
@@ -3071,6 +3215,7 @@ TYPES_TX_MODIFIABLES = {
     "part_sociale",
     "droit_adhesion",
     "transfert_tontine_compte",
+    "transfert_compte_compte",
 }
 
 TYPES_TX_ANNULABLES = TYPES_TX_MODIFIABLES | {"vente_carnet"}
@@ -3080,6 +3225,10 @@ def _numero_compte_depuis_description(description: str) -> str | None:
     """Extrait le n° de compte (B0001) depuis dépôt, retrait, adhésion ou part sociale."""
     if not description:
         return None
+    # Transfert « … → B0001 » : priorité, le motif libre en fin de description ne doit pas l'emporter
+    m = re.search(r"^Transfert tontine\s+\S+\s*→\s*(B[0-9]+)", description)
+    if m:
+        return m.group(1)
     m = re.search(r"(?:Depot|Dépôt|Retrait|adhésion|adhesion|Part sociale(?:\s+ouverture)?)\s+(?:promo\s+)?(B[0-9]+)",
         description,
         re.IGNORECASE,
@@ -3387,6 +3536,33 @@ def _trouver_compte_depot_tx(
     return cible, mvt
 
 
+def _mouvements_transfert_compte(
+    d: dict, tx: dict, montant: float
+) -> tuple[str | None, dict | None, dict | None, dict | None, dict | None]:
+    """(erreur, compte source, compte destinataire, mvt retrait, mvt dépôt) d'un transfert compte → compte."""
+    m = re.match(r"Transfert compte\s+(B[0-9]+)\s.*?→\s*(B[0-9]+)", tx.get("description") or "")
+    if not m:
+        return "Comptes liés au transfert introuvables.", None, None, None, None
+    source = next((c for c in d["comptes"] if c.get("numero") == m.group(1)), None)
+    dest = next((c for c in d["comptes"] if c.get("numero") == m.group(2)), None)
+    if not source or not dest:
+        return "Compte lié au transfert introuvable (supprimé ?).", None, None, None, None
+    date_tx = tx.get("date") or ""
+    mv_src = _trouver_mouvement_compte(d, compte_id=source["id"], type_mvt="retrait", montant=montant, date_tx=date_tx)
+    mv_dst = _trouver_mouvement_compte(d, compte_id=dest["id"], type_mvt="depot", montant=montant, date_tx=date_tx)
+    if not mv_src or not mv_dst:
+        return "Mouvements liés au transfert introuvables.", None, None, None, None
+    return None, source, dest, mv_src, mv_dst
+
+
+def _verifier_soldes_positifs(d: dict, compte_ids: list[str], action: str) -> str | None:
+    for cid in compte_ids:
+        c = next(x for x in d["comptes"] if x["id"] == cid)
+        if float(c["solde"]) < -0.005:
+            return f"{action} impossible : solde du compte {c['numero']} insuffisant."
+    return None
+
+
 def _journee_operation_cloturee(d: dict, tx: dict) -> bool:
     """True si la journée de caisse (agence, sinon opérateur) de la transaction est déjà clôturée."""
     jour = (tx.get("date") or "")[:10]
@@ -3612,6 +3788,24 @@ def corriger_montant_transaction(d, u, p):
         compte_client_id = cible["id"]
         if float(next(c for c in d["comptes"] if c["id"] == cible["id"])["solde"]) < -0.005:
             return {"erreur": "Correction impossible : solde du compte client insuffisant."}
+
+    elif typ == "transfert_compte_compte":
+        err_t, source, dest, mv_src, mv_dst = _mouvements_transfert_compte(d, tx, ancien)
+        if err_t:
+            return {"erreur": err_t}
+        ids = {mv_src["id"], mv_dst["id"]}
+        d["mouvements"] = [
+            {**mv, "montant": nouveau, "note": ((mv.get("note") or "") + " " + note_corr).strip()}
+            if mv["id"] in ids
+            else mv
+            for mv in d["mouvements"]
+        ]
+        d = _recalculer_solde_compte_client(d, source["id"])
+        d = _recalculer_solde_compte_client(d, dest["id"])
+        err_s = _verifier_soldes_positifs(d, [source["id"], dest["id"]], "Correction")
+        if err_s:
+            return {"erreur": err_s}
+        compte_client_id = source["id"]
 
     elif typ == "remboursement_credit":
         remb = next(
@@ -3949,6 +4143,18 @@ def annuler_transaction(d, u, p):
         if float(next(c for c in d["comptes"] if c["id"] == cible["id"])["solde"]) < -0.005:
             return {"erreur": "Annulation impossible : solde du compte client insuffisant."}
 
+    elif typ == "transfert_compte_compte":
+        err_t, source, dest, mv_src, mv_dst = _mouvements_transfert_compte(d, tx, montant)
+        if err_t:
+            return {"erreur": err_t}
+        ids = {mv_src["id"], mv_dst["id"]}
+        d["mouvements"] = [mv for mv in d["mouvements"] if mv["id"] not in ids]
+        d = _recalculer_solde_compte_client(d, source["id"])
+        d = _recalculer_solde_compte_client(d, dest["id"])
+        err_s = _verifier_soldes_positifs(d, [dest["id"]], "Annulation")
+        if err_s:
+            return {"erreur": err_s}
+
     elif typ == "vente_carnet":
         if not _est_admin(u):
             err2 = _verif_solde_sortie(d, u, montant)
@@ -4032,6 +4238,7 @@ ACTIONS = {
     "changerMiseCarnet": changer_mise_carnet,
     "retraitCycle": retrait_cycle,
     "transfertTontineCompte": transfert_tontine_compte,
+    "transfertCompteCompte": transfert_compte_compte,
     "basculerVerrouCarnet": basculer_verrou_carnet,
     "basculerRetraitCarnetAdmin": basculer_retrait_carnet_admin,
     "supprimerCarnet": supprimer_carnet,

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowDownToLine,
+  ArrowRightLeft,
   ArrowUpFromLine,
   Lock,
   LockOpen,
@@ -22,6 +23,7 @@ import {
   type DonneesFicheOperationCompte,
 } from '../components/FicheOperationCompte'
 import { useConfirmation } from '../components/Confirmation'
+import { ModaleTransfert, type InitialTransfert } from '../components/ModaleTransfert'
 
 const LIBELLES_COMPTE: Record<TypeCompte, string> = {
   courant: 'Compte courant',
@@ -69,6 +71,7 @@ export default function Comptes() {
   const [noteOp, setNoteOp] = useState('')
   const [erreur, setErreur] = useState('')
   const [fiche, setFiche] = useState<DonneesFicheOperationCompte | null>(null)
+  const [transfert, setTransfert] = useState<InitialTransfert | null>(null)
   const { confirmer, alerter } = useConfirmation()
   const peutOperer = aDroit('operer_comptes')
   const peutVerrouiller = aDroit('verrouiller_comptes')
@@ -201,29 +204,41 @@ export default function Comptes() {
 
   return (
     <div>
+      <ModaleTransfert
+        ouverte={transfert !== null}
+        onFermer={() => setTransfert(null)}
+        initial={transfert ?? undefined}
+      />
       <div className={fiche ? 'print:hidden' : undefined}>
         <EnTetePage
           titre="Comptes"
           sousTitre={`${data.comptes.length} comptes — courant : ${formatMontant(totalCourant)} — épargne : ${formatMontant(totalEpargne)}`}
           action={
-            peutOperer &&
-            !estCaissier && (
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  setErreur('')
-                  setClientPourCompte('')
-                  setCaissierPourCompte('')
-                  setPromoCompte(false)
-                  setPayerPartSociale(true)
-                  setPayerAdhesion(true)
-                  setTypeNouveauCompte('courant')
-                  setModaleOuverture(true)
-                }}
-              >
-                <Plus className="h-4 w-4" />
-                Ouvrir un compte
-              </button>
+            peutOperer && (
+              <div className="flex flex-wrap gap-2">
+                <button className="btn-secondary" onClick={() => setTransfert({})}>
+                  <ArrowRightLeft className="h-4 w-4" />
+                  Transfert
+                </button>
+                {!estCaissier && (
+                  <button
+                    className="btn-primary"
+                    onClick={() => {
+                      setErreur('')
+                      setClientPourCompte('')
+                      setCaissierPourCompte('')
+                      setPromoCompte(false)
+                      setPayerPartSociale(true)
+                      setPayerAdhesion(true)
+                      setTypeNouveauCompte('courant')
+                      setModaleOuverture(true)
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Ouvrir un compte
+                  </button>
+                )}
+              </div>
             )
           }
         />
@@ -430,6 +445,14 @@ export default function Comptes() {
                         >
                           <ArrowUpFromLine className="h-4 w-4" />
                           Retrait
+                        </button>
+                        <button
+                          className="btn-secondary !px-3 !py-2 text-xs"
+                          title="Transférer depuis ce compte"
+                          disabled={c.verrouille || c.solde <= 0}
+                          onClick={() => setTransfert({ type: 'compte', compteSourceId: c.id })}
+                        >
+                          <ArrowRightLeft className="h-4 w-4" />
                         </button>
                       </>
                     )}

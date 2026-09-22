@@ -218,6 +218,16 @@ def migrate_transactions_annulation(conn) -> None:
         conn.execute(text(sql))
 
 
+def migrate_transactions_client_destination(conn) -> None:
+    """Client crédité par un transfert (peut différer du client débité)."""
+    try:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(transactions)")).fetchall()}
+    except Exception:  # noqa: BLE001
+        return
+    if cols and "client_destination_id" not in cols:
+        conn.execute(text("ALTER TABLE transactions ADD COLUMN client_destination_id VARCHAR"))
+
+
 def migrate_clients_origine_tontine(conn) -> None:
     """Client ancien (papier) : origine_tontine + reprise_papier sur les carnets."""
     try:
