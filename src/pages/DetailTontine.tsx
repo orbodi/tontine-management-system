@@ -6,6 +6,7 @@ import {
   ArrowRightLeft,
   ArrowUpFromLine,
   BookPlus,
+  CircleStop,
   Lock,
   LockOpen,
   RefreshCw,
@@ -100,6 +101,7 @@ export default function DetailTontine() {
     renouvelerCarnet,
     changerMiseCarnet,
     retraitCycle,
+    cloturerCycle,
     basculerVerrouCarnet,
     basculerRetraitCarnetAdmin,
     supprimerCarnet,
@@ -332,6 +334,34 @@ export default function DetailTontine() {
   const ouvrirTransfert = (et: EtatCycle) => {
     if (!retraitAutorise) return
     setTransfertCycle(et.cycle)
+  }
+
+  /** Clôture anticipée : le client arrête le cycle, récupère ses mises en espèces, le cycle suivant s’ouvre. */
+  const cloturerCycleEnCours = async (et: EtatCycle) => {
+    if (!retraitAutorise || !carnet) return
+    const pcPayee = pcPayeeSurCycle(carnet, data.transactions, et.cycle)
+    const suivant = moisDuCycle(carnet, et.cycle + 1).label
+    const ok = await confirmer({
+      titre: `Clôturer le cycle — ${et.moisLabel}`,
+      message:
+        `Le client arrête ce cycle avant qu’il soit plein.\n\n` +
+        `Mises cotisées : ${et.deposes}/${carnet.misesParCycle}\n` +
+        (et.retires > 0 ? `Déjà retirées : ${et.retires}\n` : '') +
+        (pcPayee ? `P.C. retenue (commission) : ${formatMontant(carnet.mise)}\n` : '') +
+        `À remettre en espèces : ${formatMontant(et.montantRetirable)} (${et.retirables} mise${et.retirables > 1 ? 's' : ''})\n\n` +
+        `Le cycle sera clôturé et le cycle suivant (${suivant}) s’ouvrira.`,
+      labelValider: 'Clôturer et rembourser',
+      danger: true,
+    })
+    if (!ok) return
+    const resultat = await cloturerCycle(carnet.id, et.cycle)
+    if (resultat) await alerter('Clôture impossible', resultat)
+    else
+      await alerter(
+        'Cycle clôturé',
+        `${formatMontant(et.montantRetirable)} remis au client en espèces — ${et.moisLabel}.\n` +
+          `Nouveau cycle ouvert : ${suivant}.`,
+      )
   }
 
   return (
@@ -669,7 +699,8 @@ export default function DetailTontine() {
           <p className="text-xs text-slate-500">
             Chaque cycle correspond à un mois. Un mois soldé (retrait total) apparaît grisé.
             La P.C. n’est déduite des mises disponibles que si elle a été cochée au dépôt.
-            Retrait partiel possible aussi sur le mois en cours.
+            Retrait partiel possible aussi sur le mois en cours. « Clôturer le cycle » rembourse le
+            client et ouvre le cycle suivant, même si le mois n’est pas plein.
           </p>
         </div>
         <div className="divide-y divide-slate-100">
@@ -694,13 +725,14 @@ export default function DetailTontine() {
                     {!et.estActuel && et.complet && !et.grise && (
                       <span className="badge bg-amber-100 text-amber-800">Mois passé — à retirer</span>
                     )}
-                    {et.grise && <span className="badge bg-slate-200 text-slate-600">Mois soldé</span>}
+                    {et.cloture && <span className="badge bg-slate-200 text-slate-700">Clôturé</span>}
+                    {et.grise && !et.cloture && <span className="badge bg-slate-200 text-slate-600">Mois soldé</span>}
                     {pcPayeeSurCycle(carnet, data.transactions, et.cycle) ? (
                       <span className="badge bg-emerald-100 text-emerald-800">P.C. payée</span>
                     ) : (
                       <span className="badge bg-amber-100 text-amber-800">P.C. non payée</span>
                     )}
-                    {!et.estActuel && !et.complet && (
+                    {!et.estActuel && !et.complet && !et.cloture && (
                       <span className="badge bg-slate-100 text-slate-600">Mois passé</span>
                     )}
                   </div>
@@ -732,6 +764,24 @@ export default function DetailTontine() {
                           <ArrowUpFromLine className="h-3.5 w-3.5" />
                           Retrait partiel
                         </button>
+                        {et.estActuel && !et.complet && (
+                          <button
+                            type="button"
+                            className="btn-danger !py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={!retraitAutorise}
+                            title={
+                              !retraitAutorise
+                                ? carnet.verrouille
+                                  ? 'Carnet verrouillé'
+                                  : 'Retrait non activé par l’administrateur'
+                                : 'Le client arrête ce cycle : il récupère ses mises en espèces et le cycle suivant s’ouvre'
+                            }
+                            onClick={() => void cloturerCycleEnCours(et)}
+                          >
+                            <CircleStop className="h-3.5 w-3.5" />
+                            Clôturer le cycle
+                          </button>
+                        )}
                         {!et.estActuel && (
                           <button
                             type="button"

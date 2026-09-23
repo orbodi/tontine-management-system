@@ -227,14 +227,22 @@ export function estPremierCycleRenouvellement(cycle: number): boolean {
 
 const RE_ANNEE_RENOUVELLEMENT = /carnet\s+(\d+),\s*cycle\s+1\//i
 
+/** Cycle clôturé avant d’être plein (clôture anticipée) : plus aucun dépôt dessus. */
+export function estCycleCloture(carnet: Pick<CarnetTontine, 'cyclesClotures'>, cycle: number): boolean {
+  return (carnet.cyclesClotures ?? []).includes(cycle)
+}
+
 export function cycleCourantEffectif(
-  carnet: Pick<CarnetTontine, 'id' | 'cycleActuel' | 'misesParCycle'>,
+  carnet: Pick<CarnetTontine, 'id' | 'cycleActuel' | 'misesParCycle' | 'cyclesClotures'>,
   mises: MiseTontine[],
 ): number {
   const parCycle = carnet.misesParCycle
   let cycle = carnet.cycleActuel
   let garde = 0
-  while (garde < 200 && carreauxNets(carnet as CarnetTontine, mises, cycle) >= parCycle) {
+  while (
+    garde < 200 &&
+    (estCycleCloture(carnet, cycle) || carreauxNets(carnet as CarnetTontine, mises, cycle) >= parCycle)
+  ) {
     cycle += 1
     garde += 1
   }
@@ -410,6 +418,8 @@ export type EtatCycle = {
   nets: number
   retirables: number
   complet: boolean
+  /** Clôturé avant d’être plein (clôture anticipée). */
+  cloture: boolean
   /** Cycle passé entièrement retiré (grisé). */
   grise: boolean
   montantRetirable: number
@@ -463,8 +473,9 @@ export function situationsCycles(
       const nets = carreauxNets(carnet, mises, cycle)
       const retirables = carreauxRetirables(carnet, mises, cycle, transactions)
       const complet = deposes >= carnet.misesParCycle
+      const cloture = estCycleCloture(carnet, cycle)
       const estActuel = cycle === carnet.cycleActuel
-      const grise = !estActuel && complet && retirables === 0
+      const grise = !estActuel && (complet || cloture) && retirables === 0
       const mois = moisDuCycle(carnet, cycle)
       return {
         cycle,
@@ -476,6 +487,7 @@ export function situationsCycles(
         nets,
         retirables,
         complet,
+        cloture,
         grise,
         montantRetirable: retirables * carnet.mise,
         estActuel,
@@ -518,7 +530,10 @@ export type TrancheDepotCycle = {
  * Ex. mise 300, cycle vide : 18 600 F → 31 + 31 carreaux sur 2 cycles.
  */
 export function repartirDepotSurCycles(
-  carnet: Pick<CarnetTontine, 'id' | 'clientId' | 'numero' | 'cycleActuel' | 'misesParCycle' | 'reprisePapier'>,
+  carnet: Pick<
+    CarnetTontine,
+    'id' | 'clientId' | 'numero' | 'cycleActuel' | 'misesParCycle' | 'reprisePapier' | 'cyclesClotures'
+  >,
   mises: MiseTontine[],
   nombreMises: number,
   transactions: Transaction[] = [],
@@ -550,7 +565,7 @@ export function repartirDepotSurCycles(
     }
     const payeesAvant = carreauxNets(carnet as CarnetTontine, mises, cycle)
     const restants = parCycle - payeesAvant
-    if (restants <= 0) {
+    if (restants <= 0 || estCycleCloture(carnet, cycle)) {
       cycle += 1
       continue
     }

@@ -127,6 +127,8 @@ class Carnet(Base):
     retrait_active_par_admin: Mapped[bool] = mapped_column(Boolean, default=True)
     actif: Mapped[bool] = mapped_column(Boolean, default=True)
     reprise_papier: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Cycles clôturés avant d'être pleins (client remboursé, cycle suivant ouvert) — liste JSON
+    cycles_clotures_json: Mapped[str] = mapped_column(Text, default="[]")
 
 
 class Mise(Base):

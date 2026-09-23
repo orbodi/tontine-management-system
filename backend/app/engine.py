@@ -1700,6 +1700,86 @@ def retrait_cycle(d, u, p):
     return (None, d, {})
 
 
+def _infos_cloture_tx(tx: dict) -> tuple[str, int] | None:
+    """(n° carnet, cycle) si la transaction est le retrait d'une clôture anticipée de cycle."""
+    if tx.get("type") != "retrait_tontine":
+        return None
+    desc = tx.get("description") or ""
+    if "clôture anticipée" not in desc.lower():
+        return None
+    m = re.search(r"\(carnet\s+(\S+),\s*cycle\s+(\d+)\)", desc)
+    return (m.group(1), int(m.group(2))) if m else None
+
+
+def cloturer_cycle(d, u, p):
+    """Clôture anticipée du cycle en cours : rembourse en espèces ses mises (hors P.C. payée)
+    et ouvre le cycle suivant, même si le cycle n'est pas plein."""
+    err = _verif_caisse(d, u)
+    if err:
+        return {"erreur": err}
+    if not _a_droit(u, "operer_comptes"):
+        return {"erreur": "Droit insuffisant."}
+    d = copy.deepcopy(d)
+    carnet = next((c for c in d["carnets"] if c["id"] == p.get("carnetId")), None)
+    if not carnet or not carnet.get("actif"):
+        return {"erreur": "Carnet introuvable."}
+    if carnet.get("verrouille"):
+        return {"erreur": "Carnet verrouille."}
+    agence_carnet = carnet.get("agenceId") or _agence_du_client(d, carnet["clientId"])
+    if not _est_admin(u) and agence_carnet != u.get("agenceId"):
+        return {"erreur": "Ce carnet n'appartient pas à votre agence."}
+    if not M.eligibilite_retrait_carnet(carnet, d["mises"]).get("autorise"):
+        return {"erreur": "Retrait non autorise pour ce type de carnet."}
+
+    cycle = M.cycle_courant_effectif(carnet, d["mises"])
+    if p.get("cycle") is not None and int(p["cycle"]) != cycle:
+        return {"erreur": f"Seul le cycle en cours (cycle {cycle}) peut être clôturé."}
+    if M.carreaux_deposes(carnet, d["mises"], cycle) <= 0:
+        return {"erreur": "Aucune mise sur ce cycle : rien à clôturer."}
+    txs = d.get("transactions") or []
+    nombre = M.carreaux_retirables(carnet, d["mises"], cycle, txs)
+    if nombre <= 0:
+        return {"erreur": "Rien à rembourser sur ce cycle (seule la P.C. y est inscrite)."}
+    montant = carnet["mise"] * nombre
+    err2 = _verif_solde_sortie(d, u, montant)
+    if err2:
+        return {"erreur": err2}
+
+    date = _horodate_caisse_agence(d, agence_carnet or u.get("agenceId"))
+    d["mises"].append(
+        {
+            "id": uid(),
+            "carnetId": carnet["id"],
+            "cycle": cycle,
+            "nombreMises": -nombre,
+            "montant": -montant,
+            "date": date,
+        }
+    )
+    carnet_maj = {**carnet, "cyclesClotures": sorted({*(carnet.get("cyclesClotures") or []), cycle})}
+    carnet_maj["cycleActuel"] = M.cycle_courant_effectif(carnet_maj, d["mises"])
+    d["carnets"] = [carnet_maj if c["id"] == carnet["id"] else c for c in d["carnets"]]
+    tx = _mk_tx(
+        u,
+        {
+            "type": "retrait_tontine",
+            "clientId": carnet["clientId"],
+            "montant": montant,
+            "date": date,
+            "description": (
+                f"Retrait {carnet['numero']} x{nombre} — {_nom_client(d, carnet['clientId'])} "
+                f"(carnet {carnet['numero']}, cycle {cycle}) — clôture anticipée du cycle"
+            ),
+        },
+    )
+    d = _enregistrer_tx(d, [tx])
+    return (
+        None,
+        d,
+        {"montant": montant, "nombreMises": nombre, "cycleSuivant": carnet_maj["cycleActuel"]},
+    )
+
+
 def _agence_du_client(d: dict, client_id: str | None) -> str | None:
     c = next((x for x in d["clients"] if x["id"] == client_id), None)
     return c.get("agenceId") if c else None
@@ -2827,6 +2907,19 @@ def annuler_ouverture_journee_caisse(d, u, p):
                 {**c, "mise": float(ancienne)} if c["id"] == cid else c for c in d["carnets"]
             ]
 
+    # Clôtures anticipées du jour : le cycle est rouvert (ses mises sont restituées ci-dessous)
+    for tx in txs:
+        infos = _infos_cloture_tx(tx)
+        if not infos:
+            continue
+        numero, cycle_clos = infos
+        d["carnets"] = [
+            {**c, "cyclesClotures": [x for x in (c.get("cyclesClotures") or []) if int(x) != cycle_clos]}
+            if c.get("clientId") == tx.get("clientId") and c.get("numero") == numero
+            else c
+            for c in d["carnets"]
+        ]
+
     # Mises tontine du jour (agence)
     mises_gardees = [
         mi
@@ -3346,13 +3439,15 @@ def _cycle_depuis_description(description: str) -> int | None:
 
 
 def _recalculer_cycle_actuel_carnet(d: dict, carnet_id: str) -> dict:
-    """Recalcule cycleActuel d'après les carreaux nets de chaque cycle (sans plafond à 12)."""
+    """Recalcule cycleActuel d'après les carreaux nets de chaque cycle (sans plafond à 12).
+
+    Un cycle clôturé par anticipation compte comme terminé.
+    """
     carnet = next((c for c in d["carnets"] if c["id"] == carnet_id), None)
     if not carnet:
         return d
-    par_cycle = int(carnet.get("misesParCycle") or M.CARREAUX_PAR_CYCLE)
     cycle = 1
-    while cycle < 500 and M.carreaux_nets(carnet, d["mises"], cycle) >= par_cycle:
+    while cycle < 500 and M.cycle_termine(carnet, d["mises"], cycle):
         cycle += 1
     d["carnets"] = [{**c, "cycleActuel": cycle} if c["id"] == carnet_id else c for c in d["carnets"]]
     return d
@@ -3617,6 +3712,9 @@ def corriger_montant_transaction(d, u, p):
     err_droit = _droit_modifier_transaction(d, u, tx)
     if err_droit:
         return {"erreur": err_droit}
+
+    if _infos_cloture_tx(tx):
+        return {"erreur": "Une clôture de cycle ne se corrige pas : annulez-la puis refaites-la."}
 
     ancien = float(tx["montant"])
     if abs(nouveau - ancien) < 0.005:
@@ -4089,6 +4187,46 @@ def annuler_transaction(d, u, p):
             if err2:
                 return {"erreur": err2}
 
+    elif _infos_cloture_tx(tx):
+        # Clôture anticipée : on rend les mises au cycle et on le rouvre
+        numero, cycle_clos = _infos_cloture_tx(tx)
+        carnet = next(
+            (c for c in d["carnets"] if c.get("clientId") == client_id and c.get("numero") == numero), None
+        )
+        if not carnet:
+            return {"erreur": "Carnet lié à la clôture introuvable."}
+        if any(
+            mi.get("carnetId") == carnet["id"] and int(mi.get("cycle") or 0) > cycle_clos
+            and int(mi.get("nombreMises") or 0) > 0
+            for mi in d["mises"]
+        ):
+            return {"erreur": "Annulation impossible : des dépôts ont déjà été faits sur les cycles suivants."}
+        mi = next(
+            (
+                x
+                for x in d["mises"]
+                if x.get("carnetId") == carnet["id"]
+                and int(x.get("cycle") or 0) == cycle_clos
+                and int(x.get("nombreMises") or 0) < 0
+                and abs(float(x.get("montant") or 0) + montant) < 0.005
+                and (x.get("date") or "")[:10] == date_tx[:10]
+            ),
+            None,
+        )
+        if not mi:
+            return {"erreur": "Mises liées à la clôture introuvables."}
+        d["mises"] = [x for x in d["mises"] if x["id"] != mi["id"]]
+        d["carnets"] = [
+            {
+                **c,
+                "cyclesClotures": [x for x in (c.get("cyclesClotures") or []) if int(x) != cycle_clos],
+                "cycleActuel": cycle_clos,
+            }
+            if c["id"] == carnet["id"]
+            else c
+            for c in d["carnets"]
+        ]
+
     elif typ in ("mise_tontine", "commission_tontine", "complement_mise", "retrait_tontine"):
         trouve = _trouver_mise_tontine(
             d,
@@ -4239,6 +4377,7 @@ ACTIONS = {
     "retraitCycle": retrait_cycle,
     "transfertTontineCompte": transfert_tontine_compte,
     "transfertCompteCompte": transfert_compte_compte,
+    "cloturerCycle": cloturer_cycle,
     "basculerVerrouCarnet": basculer_verrou_carnet,
     "basculerRetraitCarnetAdmin": basculer_retrait_carnet_admin,
     "supprimerCarnet": supprimer_carnet,

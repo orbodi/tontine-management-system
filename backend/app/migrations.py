@@ -33,6 +33,7 @@ from .db import (
     migrate_clients_origine_tontine,
     migrate_transactions_annulation,
     migrate_transactions_client_destination,
+    migrate_carnets_cycles_clotures,
 )
 from .models.entities import SchemaMigration
 
@@ -170,6 +171,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         kind="schema",
         description="Client crédité par un transfert (compte → compte, tontine → compte)",
         apply=migrate_transactions_client_destination,
+    ),
+    Migration(
+        id="012_carnets_cycles_clotures",
+        kind="schema",
+        description="Clôture anticipée d'un cycle tontine (liste des cycles clôturés)",
+        apply=migrate_carnets_cycles_clotures,
     ),
 )
 

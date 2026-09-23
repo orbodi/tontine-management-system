@@ -228,6 +228,16 @@ def migrate_transactions_client_destination(conn) -> None:
         conn.execute(text("ALTER TABLE transactions ADD COLUMN client_destination_id VARCHAR"))
 
 
+def migrate_carnets_cycles_clotures(conn) -> None:
+    """Cycles clôturés avant d'être pleins (clôture anticipée)."""
+    try:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(carnets)")).fetchall()}
+    except Exception:  # noqa: BLE001
+        return
+    if cols and "cycles_clotures_json" not in cols:
+        conn.execute(text("ALTER TABLE carnets ADD COLUMN cycles_clotures_json TEXT DEFAULT '[]'"))
+
+
 def migrate_clients_origine_tontine(conn) -> None:
     """Client ancien (papier) : origine_tontine + reprise_papier sur les carnets."""
     try:

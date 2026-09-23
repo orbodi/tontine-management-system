@@ -184,6 +184,8 @@ export interface CarnetTontine {
   actif: boolean
   /** Ouvert pour un client ancien : pas de P.C. sur le cycle 1 dans l’app. */
   reprisePapier?: boolean
+  /** Cycles clôturés avant d’être pleins (client remboursé, cycle suivant ouvert). */
+  cyclesClotures?: number[]
 }
 
 export interface MiseTontine {

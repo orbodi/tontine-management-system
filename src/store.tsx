@@ -131,6 +131,8 @@ interface StoreApi {
     dateCollecte?: string,
   ) => Promise<string | null>
   retraitCycle: (carnetId: string, cycle: number, nombreCarreaux: number) => Promise<string | null>
+  /** Clôture anticipée du cycle en cours : remboursement en espèces puis ouverture du cycle suivant. */
+  cloturerCycle: (carnetId: string, cycle: number) => Promise<string | null>
   transfertTontineCompte: (
     carnetId: string,
     cycle: number,
@@ -441,6 +443,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           nouvelleMise,
           ...(dateCollecte ? { dateCollecte } : {}),
         })
+        return res.erreur ?? null
+      },
+      async cloturerCycle(carnetId, cycle) {
+        const res = await muter('cloturerCycle', { carnetId, cycle })
         return res.erreur ?? null
       },
       async retraitCycle(carnetId, cycle, nombreCarreaux) {

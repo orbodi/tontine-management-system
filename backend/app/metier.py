@@ -44,12 +44,22 @@ def est_premier_cycle_renouvellement(cycle: int) -> bool:
     return int(cycle) > 1 and cycle_dans_annee(cycle) == 1
 
 
-def cycle_courant_effectif(carnet: dict, mises: list) -> int:
-    """Cycle à alimenter (saute les cycles déjà complets)."""
+def est_cycle_cloture(carnet: dict, cycle: int) -> bool:
+    """Cycle clôturé avant d'être plein (clôture anticipée) : plus aucun dépôt dessus."""
+    return int(cycle) in {int(x) for x in (carnet.get("cyclesClotures") or [])}
+
+
+def cycle_termine(carnet: dict, mises: list, cycle: int) -> bool:
+    """Cycle plein ou clôturé : les dépôts passent au cycle suivant."""
     par_cycle = int(carnet.get("misesParCycle") or CARREAUX_PAR_CYCLE)
+    return est_cycle_cloture(carnet, cycle) or carreaux_nets(carnet, mises, cycle) >= par_cycle
+
+
+def cycle_courant_effectif(carnet: dict, mises: list) -> int:
+    """Cycle à alimenter (saute les cycles déjà complets ou clôturés)."""
     cycle = int(carnet.get("cycleActuel") or 1)
     garde = 0
-    while garde < 200 and carreaux_nets(carnet, mises, cycle) >= par_cycle:
+    while garde < 200 and cycle_termine(carnet, mises, cycle):
         cycle += 1
         garde += 1
     return cycle
@@ -367,7 +377,7 @@ def repartir_depot_sur_cycles(
             }
         payees = carreaux_nets(carnet, mises, cycle)
         restants = par_cycle - payees
-        if restants <= 0:
+        if restants <= 0 or est_cycle_cloture(carnet, cycle):
             cycle += 1
             continue
         nombre = min(reste, restants)

@@ -61,6 +61,8 @@ export default function Transactions() {
   const peutCorriger = (t: Transaction) => {
     if (t.annulee) return false
     if (!TYPES_MODIFIABLES.has(t.type)) return false
+    // Clôture anticipée d'un cycle : annuler puis refaire, pas de correction du montant
+    if (t.type === 'retrait_tontine' && t.description.toLowerCase().includes('clôture anticipée')) return false
     if (estAdmin) return true
     if (estChefAgence && employeConnecte) {
       return t.agenceId === employeConnecte.agenceId
