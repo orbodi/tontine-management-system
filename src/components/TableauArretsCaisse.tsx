@@ -47,6 +47,10 @@ type Props = {
   /** Masquer le filtre période (ex. historique déjà restreint). */
   sansFiltrePeriode?: boolean
   onAnnulerCloture?: (arret: ArretCaisse) => void
+  /** Admin : corriger l’ouverture et / ou le montant compté de la journée. */
+  onCorriger?: (arret: ArretCaisse) => void
+  /** Admin / chef : rouvrir la journée (opérations conservées) pour un complément de saisie. */
+  onRouvrir?: (arret: ArretCaisse) => void
 }
 
 /**
@@ -61,6 +65,8 @@ export function TableauArretsCaisse({
   journeeSelectionnee,
   sansFiltrePeriode = false,
   onAnnulerCloture,
+  onCorriger,
+  onRouvrir,
 }: Props) {
   const [modePeriode, setModePeriode] = useState<'mois' | 'intervalle'>('mois')
   const [mois, setMois] = useState(moisEnCoursLocal)
@@ -235,7 +241,7 @@ export function TableauArretsCaisse({
                 <th className="px-5 py-3 text-right">Fermeture th.</th>
                 <th className="px-5 py-3 text-right">Compté</th>
                 <th className="px-5 py-3">Écart</th>
-                {onAnnulerCloture && <th className="px-5 py-3" />}
+                {(onAnnulerCloture || onCorriger || onRouvrir) && <th className="px-5 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -274,19 +280,85 @@ export function TableauArretsCaisse({
                     <td className="px-5 py-3 text-right">{formatMontant(a.montantCompte)}</td>
                     <td className="px-5 py-3">
                       <BadgeEcart ecart={a.ecart} />
+                      {(() => {
+                        const corrections = (a.corrections ?? []).filter((c) => c.type !== 'reouverture')
+                        const reouvertures = (a.corrections ?? []).filter((c) => c.type === 'reouverture')
+                        return (
+                          <>
+                            {corrections.length > 0 && (
+                              <span
+                                className="badge ml-1.5 cursor-help bg-amber-100 text-amber-800"
+                                title={corrections
+                                  .map(
+                                    (c) =>
+                                      `${formatDateHeure(c.date)} — ${c.parNom} : ouverture ${formatMontant(c.ouvertureAvant)} → ${formatMontant(c.ouvertureApres)}` +
+                                      (c.compteApres !== undefined
+                                        ? `, compté ${formatMontant(c.compteAvant ?? 0)} → ${formatMontant(c.compteApres)}, écart ${formatMontant(c.ecartAvant ?? 0)} → ${formatMontant(c.ecartApres ?? 0)}`
+                                        : '') +
+                                      ` (${c.motif})`,
+                                  )
+                                  .join('\n')}
+                              >
+                                Corrigé ({corrections.length})
+                              </span>
+                            )}
+                            {reouvertures.length > 0 && (
+                              <span
+                                className="badge ml-1.5 cursor-help bg-sky-100 text-sky-800"
+                                title={reouvertures
+                                  .map(
+                                    (c) =>
+                                      `${formatDateHeure(c.date)} — rouverte par ${c.parNom} (ancien compté ${formatMontant(c.compteAvant ?? 0)}, écart ${formatMontant(c.ecartAvant ?? 0)}) : ${c.motif}`,
+                                  )
+                                  .join('\n')}
+                              >
+                                Rouverte ({reouvertures.length})
+                              </span>
+                            )}
+                          </>
+                        )
+                      })()}
                     </td>
-                    {onAnnulerCloture && (
+                    {(onAnnulerCloture || onCorriger || onRouvrir) && (
                       <td className="px-5 py-3 text-right">
-                        <button
-                          type="button"
-                          className="text-xs font-medium text-rose-700 hover:underline"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onAnnulerCloture(a)
-                          }}
-                        >
-                          Annuler la clôture
-                        </button>
+                        <div className="flex flex-col items-end gap-1">
+                          {onRouvrir && (
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-sky-700 hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onRouvrir(a)
+                              }}
+                            >
+                              Rouvrir
+                            </button>
+                          )}
+                          {onCorriger && (
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-brand-700 hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onCorriger(a)
+                              }}
+                            >
+                              Corriger
+                            </button>
+                          )}
+                          {onAnnulerCloture && (
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-rose-700 hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onAnnulerCloture(a)
+                              }}
+                            >
+                              Annuler la clôture
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>

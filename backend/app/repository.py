@@ -197,6 +197,7 @@ def replace_state(db: Session, data: dict[str, Any], *, hash_plain_passwords: bo
                 nombre_mises=x["nombreMises"],
                 montant=x["montant"],
                 date=x["date"],
+                transaction_id=x.get("transactionId") or None,
             )
         )
 
@@ -358,6 +359,7 @@ def replace_state(db: Session, data: dict[str, Any], *, hash_plain_passwords: bo
                 ouvert_par_id=o["ouvertParId"],
                 ouvert_par_nom=o["ouvertParNom"],
                 note=o.get("note"),
+                corrections_json=json.dumps(o.get("corrections") or [], ensure_ascii=False),
             )
         )
 
@@ -382,6 +384,7 @@ def replace_state(db: Session, data: dict[str, Any], *, hash_plain_passwords: bo
                 note=a.get("note"),
                 valide_par_id=a.get("valideParId"),
                 valide_par_nom=a.get("valideParNom"),
+                corrections_json=json.dumps(a.get("corrections") or [], ensure_ascii=False),
             )
         )
 
@@ -551,6 +554,7 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "nombreMises": x.nombre_mises,
                 "montant": x.montant,
                 "date": x.date,
+                "transactionId": getattr(x, "transaction_id", None),
             }
             for x in db.query(m.Mise).all()
         ],
@@ -702,6 +706,7 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "ouvertParId": o.ouvert_par_id,
                 "ouvertParNom": o.ouvert_par_nom,
                 "note": o.note,
+                "corrections": json.loads(getattr(o, "corrections_json", None) or "[]"),
             }
             for o in db.query(m.OuvertureCaisse).all()
         ],
@@ -725,6 +730,7 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "note": a.note,
                 "valideParId": a.valide_par_id,
                 "valideParNom": a.valide_par_nom,
+                "corrections": json.loads(getattr(a, "corrections_json", None) or "[]"),
             }
             for a in db.query(m.ArretCaisse).all()
         ],

@@ -450,7 +450,7 @@ export default function Comptes() {
                           className="btn-secondary !px-3 !py-2 text-xs"
                           title="Transférer depuis ce compte"
                           disabled={c.verrouille || c.solde <= 0}
-                          onClick={() => setTransfert({ type: 'compte', compteSourceId: c.id })}
+                          onClick={() => setTransfert({ type: 'compte_compte', compteSourceId: c.id })}
                         >
                           <ArrowRightLeft className="h-4 w-4" />
                         </button>

@@ -139,6 +139,8 @@ class Mise(Base):
     nombre_mises: Mapped[int] = mapped_column(Integer)
     montant: Mapped[float] = mapped_column(Float)
     date: Mapped[str] = mapped_column(String)
+    # Transaction à l'origine de la ligne (transferts vers / depuis la tontine) — annulation fiable
+    transaction_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class Compte(Base):
@@ -281,6 +283,8 @@ class OuvertureCaisse(Base):
     ouvert_par_id: Mapped[str] = mapped_column(String)
     ouvert_par_nom: Mapped[str] = mapped_column(String)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Historique des corrections du solde d'ouverture (admin) — liste JSON
+    corrections_json: Mapped[str] = mapped_column(Text, default="[]")
 
 
 class ArretCaisse(Base):
@@ -303,6 +307,8 @@ class ArretCaisse(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     valide_par_id: Mapped[str | None] = mapped_column(String, nullable=True)
     valide_par_nom: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Historique des corrections ouverture / montant compté (admin) — liste JSON
+    corrections_json: Mapped[str] = mapped_column(Text, default="[]")
 
 
 class JournalConnexion(Base):

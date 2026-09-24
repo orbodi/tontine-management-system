@@ -32,7 +32,7 @@ import {
   pcASaisir,
   pcPayeeSurCycle,
   preparerDepotTontine,
-  carreauxNets,
+  carreauxDeposes,
   eligibiliteRetraitCarnet,
   journeeZoneDuJour,
   joursCollecteSaisissables,
@@ -116,6 +116,9 @@ export default function DetailTontine() {
   const [retraitSur, setRetraitSur] = useState<EtatCycle | null>(null)
   const [nbCarreaux, setNbCarreaux] = useState('1')
   const [transfertCycle, setTransfertCycle] = useState<number | null>(null)
+  const [clotureSur, setClotureSur] = useState<EtatCycle | null>(null)
+  const [clotureAvecRetrait, setClotureAvecRetrait] = useState(true)
+  const [clotureEnCours, setClotureEnCours] = useState(false)
   const [erreur, setErreur] = useState('')
   const [dateCollecte, setDateCollecte] = useState(() => aujourdHuiIso())
   const [modaleRenouvellement, setModaleRenouvellement] = useState(false)
@@ -133,10 +136,24 @@ export default function DetailTontine() {
   const peutVerrouiller = aDroit('verrouiller_comptes')
 
   const aujourdhui = aujourdHuiIso()
-  const joursSaisissables = carnet
+  const joursZoneSaisissables = carnet
     ? joursCollecteSaisissables(data.journeesCompteZone, carnet.zoneId, aujourdhui)
     : []
+  // Dépôt / renouvellement / complément sont datés du jour de collecte : la caisse de l'agence
+  // doit être ouverte et non clôturée ce jour-là (le serveur applique la même règle).
+  const caisseOuverteLe = (jour: string) =>
+    !!carnet &&
+    (data.ouverturesCaisse ?? []).some((o) => o.agenceId === carnet.agenceId && o.journee === jour) &&
+    !data.arretsCaisse.some((a) => a.agenceId === carnet.agenceId && a.journee === jour)
+  const joursSaisissables = joursZoneSaisissables.filter(caisseOuverteLe)
+  const joursSansCaisse = joursZoneSaisissables.filter((j) => !caisseOuverteLe(j))
   const collecteOuverte = joursSaisissables.length > 0
+  const messageCollecteFermee =
+    joursSansCaisse.length > 0
+      ? `Caisse non ouverte (ou clôturée) le ${joursSansCaisse
+          .map((j) => formatDate(j + 'T12:00:00'))
+          .join(', ')} : ouvrez la caisse du jour, ou rouvrez la journée pour un complément de saisie.`
+      : 'Saisissez d’abord le montant réel collecté (journée du jour ou journée antérieure encore ouverte)'
   const journeeAujourdhui = carnet
     ? journeeZoneDuJour(data.journeesCompteZone, carnet.zoneId, aujourdhui)
     : undefined
@@ -147,7 +164,8 @@ export default function DetailTontine() {
     [carnet, data.mises, data.transactions],
   )
 
-  const payeesActuel = carnet ? carreauxNets(carnet, data.mises) : 0
+  // Cases cotisées sur le mois en cours (un retrait ne les libère pas)
+  const payeesActuel = carnet ? carreauxDeposes(carnet, data.mises, carnet.cycleActuel) : 0
   const moisActuel = carnet ? moisDuCycle(carnet, carnet.cycleActuel) : null
   const eligibilite = carnet ? eligibiliteRetraitCarnet(carnet, data.mises) : { autorise: true }
   const carteRestreinte = carnet ? CARNETS_RETRAIT_6_MOIS.includes(carnet.typeCarnet) : false
@@ -206,7 +224,7 @@ export default function DetailTontine() {
       setErreur(
         !collecteOuverte && collecteAujourdhuiCloturee
           ? 'Aucune collecte ouverte : la journée d’aujourd’hui est déjà clôturée.'
-          : 'Saisissez d’abord le montant réel collecté sur le compte zone, puis choisissez le jour de collecte.',
+          : messageCollecteFermee,
       )
       return
     }
@@ -286,7 +304,7 @@ export default function DetailTontine() {
       setErreur(
         !collecteOuverte && collecteAujourdhuiCloturee
           ? 'Aucune collecte ouverte : la journée d’aujourd’hui est déjà clôturée.'
-          : 'Saisissez d’abord le montant réel collecté sur le compte zone, puis choisissez le jour de collecte.',
+          : messageCollecteFermee,
       )
       return
     }
@@ -336,32 +354,36 @@ export default function DetailTontine() {
     setTransfertCycle(et.cycle)
   }
 
-  /** Clôture anticipée : le client arrête le cycle, récupère ses mises en espèces, le cycle suivant s’ouvre. */
-  const cloturerCycleEnCours = async (et: EtatCycle) => {
-    if (!retraitAutorise || !carnet) return
-    const pcPayee = pcPayeeSurCycle(carnet, data.transactions, et.cycle)
+  /** Clôture anticipée du mois en cours (même non plein) : avec ou sans retrait, le cycle suivant s’ouvre. */
+  const peutCloturer = (et: EtatCycle) =>
+    peutOperer && et.estActuel && !et.complet && et.deposes > 0 && !carnet?.verrouille
+
+  const ouvrirCloture = (et: EtatCycle) => {
+    setClotureSur(et)
+    // Avec retrait par défaut, s'il est possible
+    setClotureAvecRetrait(retraitAutorise && et.retirables > 0)
+  }
+
+  const validerCloture = async () => {
+    if (!clotureSur || !carnet) return
+    const et = clotureSur
+    const avecRetrait = clotureAvecRetrait
     const suivant = moisDuCycle(carnet, et.cycle + 1).label
-    const ok = await confirmer({
-      titre: `Clôturer le cycle — ${et.moisLabel}`,
-      message:
-        `Le client arrête ce cycle avant qu’il soit plein.\n\n` +
-        `Mises cotisées : ${et.deposes}/${carnet.misesParCycle}\n` +
-        (et.retires > 0 ? `Déjà retirées : ${et.retires}\n` : '') +
-        (pcPayee ? `P.C. retenue (commission) : ${formatMontant(carnet.mise)}\n` : '') +
-        `À remettre en espèces : ${formatMontant(et.montantRetirable)} (${et.retirables} mise${et.retirables > 1 ? 's' : ''})\n\n` +
-        `Le cycle sera clôturé et le cycle suivant (${suivant}) s’ouvrira.`,
-      labelValider: 'Clôturer et rembourser',
-      danger: true,
-    })
-    if (!ok) return
-    const resultat = await cloturerCycle(carnet.id, et.cycle)
-    if (resultat) await alerter('Clôture impossible', resultat)
-    else
-      await alerter(
-        'Cycle clôturé',
-        `${formatMontant(et.montantRetirable)} remis au client en espèces — ${et.moisLabel}.\n` +
-          `Nouveau cycle ouvert : ${suivant}.`,
-      )
+    setClotureEnCours(true)
+    const resultat = await cloturerCycle(carnet.id, et.cycle, avecRetrait)
+    setClotureEnCours(false)
+    if (resultat) {
+      await alerter('Clôture impossible', resultat)
+      return
+    }
+    setClotureSur(null)
+    await alerter(
+      'Cycle clôturé',
+      (avecRetrait
+        ? `${formatMontant(et.montantRetirable)} remis au client en espèces — ${et.moisLabel}.\n`
+        : `${formatMontant(et.montantRetirable)} restent disponibles sur ${et.moisLabel} (retrait ou transfert plus tard).\n`) +
+        `Nouveau cycle ouvert : ${suivant}.`,
+    )
   }
 
   return (
@@ -384,7 +406,7 @@ export default function DetailTontine() {
                   carnet.verrouille
                     ? 'Carnet verrouillé'
                     : !collecteOuverte
-                      ? 'Saisissez d’abord le montant réel collecté (journée du jour ou journée antérieure encore ouverte)'
+                      ? messageCollecteFermee
                       : `Encaisser ${formatMontant(PRIX_CARNET)} et ouvrir 12 nouveaux cycles`
                 }
                 onClick={() => {
@@ -407,7 +429,7 @@ export default function DetailTontine() {
                     : besoinRenouvellement
                       ? `Année terminée : renouvelez le carnet (${formatMontant(PRIX_CARNET)}) pour ouvrir 12 nouveaux cycles`
                       : !collecteOuverte
-                      ? 'Saisissez d’abord le montant réel collecté (journée du jour ou journée antérieure encore ouverte)'
+                      ? messageCollecteFermee
                       : payeesActuel >= carnet.misesParCycle
                         ? 'Mois complet : le prochain dépôt passera au mois suivant'
                         : undefined
@@ -518,6 +540,11 @@ export default function DetailTontine() {
               aujourd’hui, et aucune journée antérieure n’est encore ouverte — plus de dépôt
               possible.
             </p>
+          ) : joursSansCaisse.length > 0 ? (
+            <>
+              <p className="font-semibold">Caisse non ouverte pour la collecte</p>
+              <p className="mt-1">{messageCollecteFermee}</p>
+            </>
           ) : (
             <>
               <p className="font-semibold">Montant réel collecté requis</p>
@@ -699,8 +726,9 @@ export default function DetailTontine() {
           <p className="text-xs text-slate-500">
             Chaque cycle correspond à un mois. Un mois soldé (retrait total) apparaît grisé.
             La P.C. n’est déduite des mises disponibles que si elle a été cochée au dépôt.
-            Retrait partiel possible aussi sur le mois en cours. « Clôturer le cycle » rembourse le
-            client et ouvre le cycle suivant, même si le mois n’est pas plein.
+            Retrait partiel possible aussi sur le mois en cours. « Clôturer le cycle » ouvre le cycle
+            suivant même si le mois n’est pas plein : avec retrait (le client est remboursé) ou sans
+            retrait (l’argent reste disponible sur le mois clôturé).
           </p>
         </div>
         <div className="divide-y divide-slate-100">
@@ -725,7 +753,11 @@ export default function DetailTontine() {
                     {!et.estActuel && et.complet && !et.grise && (
                       <span className="badge bg-amber-100 text-amber-800">Mois passé — à retirer</span>
                     )}
-                    {et.cloture && <span className="badge bg-slate-200 text-slate-700">Clôturé</span>}
+                    {et.cloture && (
+                      <span className="badge bg-slate-200 text-slate-700">
+                        {et.retirables > 0 ? 'Clôturé — à retirer' : 'Clôturé'}
+                      </span>
+                    )}
                     {et.grise && !et.cloture && <span className="badge bg-slate-200 text-slate-600">Mois soldé</span>}
                     {pcPayeeSurCycle(carnet, data.transactions, et.cycle) ? (
                       <span className="badge bg-emerald-100 text-emerald-800">P.C. payée</span>
@@ -740,43 +772,38 @@ export default function DetailTontine() {
                     Cotisé : {et.deposes}/{carnet.misesParCycle} mises
                   </p>
                 </div>
-                {peutOperer && et.retirables > 0 && (
+                {peutOperer && (et.retirables > 0 || peutCloturer(et)) && (
                     <div className="flex flex-col items-end gap-1">
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className="btn-secondary !py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={!retraitAutorise}
-                          title={
-                            !retraitAutorise
-                              ? carnet.verrouille
-                                ? 'Carnet verrouillé'
-                                : 'Retrait non activé par l’administrateur'
-                              : 'Retrait partiel'
-                          }
-                          onClick={() => {
-                            if (!retraitAutorise) return
-                            setRetraitSur(et)
-                            setNbCarreaux('1')
-                            setErreur('')
-                          }}
-                        >
-                          <ArrowUpFromLine className="h-3.5 w-3.5" />
-                          Retrait partiel
-                        </button>
-                        {et.estActuel && !et.complet && (
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {et.retirables > 0 && (
                           <button
                             type="button"
-                            className="btn-danger !py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+                            className="btn-secondary !py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
                             disabled={!retraitAutorise}
                             title={
                               !retraitAutorise
                                 ? carnet.verrouille
                                   ? 'Carnet verrouillé'
                                   : 'Retrait non activé par l’administrateur'
-                                : 'Le client arrête ce cycle : il récupère ses mises en espèces et le cycle suivant s’ouvre'
+                                : 'Retrait partiel'
                             }
-                            onClick={() => void cloturerCycleEnCours(et)}
+                            onClick={() => {
+                              if (!retraitAutorise) return
+                              setRetraitSur(et)
+                              setNbCarreaux('1')
+                              setErreur('')
+                            }}
+                          >
+                            <ArrowUpFromLine className="h-3.5 w-3.5" />
+                            Retrait partiel
+                          </button>
+                        )}
+                        {peutCloturer(et) && (
+                          <button
+                            type="button"
+                            className="btn-danger !py-1.5 text-xs"
+                            title="Le client arrête ce cycle (avec ou sans retrait) : le cycle suivant s’ouvre"
+                            onClick={() => ouvrirCloture(et)}
                           >
                             <CircleStop className="h-3.5 w-3.5" />
                             Clôturer le cycle
@@ -824,22 +851,24 @@ export default function DetailTontine() {
                             Retrait total
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className="btn-secondary !py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={!retraitAutorise}
-                          title={
-                            !retraitAutorise
-                              ? carnet.verrouille
-                                ? 'Carnet verrouillé'
-                                : 'Retrait non activé par l’administrateur'
-                              : 'Virer des mises vers un compte banque, sans passer par la caisse'
-                          }
-                          onClick={() => ouvrirTransfert(et)}
-                        >
-                          <ArrowRightLeft className="h-3.5 w-3.5" />
-                          Transfert
-                        </button>
+                        {et.retirables > 0 && (
+                          <button
+                            type="button"
+                            className="btn-secondary !py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={!retraitAutorise}
+                            title={
+                              !retraitAutorise
+                                ? carnet.verrouille
+                                  ? 'Carnet verrouillé'
+                                  : 'Retrait non activé par l’administrateur'
+                                : 'Virer des mises vers un compte banque, sans passer par la caisse'
+                            }
+                            onClick={() => ouvrirTransfert(et)}
+                          >
+                            <ArrowRightLeft className="h-3.5 w-3.5" />
+                            Transfert
+                          </button>
+                        )}
                       </div>
                       {!retraitAutorise && carteRestreinte && (
                         <span className="text-[10px] text-slate-500">En attente d’activation admin</span>
@@ -1063,7 +1092,7 @@ export default function DetailTontine() {
               setErreur(
                 !collecteOuverte && collecteAujourdhuiCloturee
                   ? 'Aucune collecte ouverte : la journée d’aujourd’hui est déjà clôturée.'
-                  : 'Saisissez d’abord le montant réel collecté sur le compte zone, puis choisissez le jour de collecte.',
+                  : messageCollecteFermee,
               )
               return
             }
@@ -1317,10 +1346,120 @@ export default function DetailTontine() {
         )}
       </Modale>
 
+      <Modale
+        titre={clotureSur ? `Clôturer le cycle — ${clotureSur.moisLabel}` : ''}
+        ouverte={clotureSur !== null}
+        onFermer={() => setClotureSur(null)}
+      >
+        {clotureSur &&
+          (() => {
+            const et = clotureSur
+            const pcPayee = pcPayeeSurCycle(carnet, data.transactions, et.cycle)
+            const suivant = moisDuCycle(carnet, et.cycle + 1).label
+            const retraitPossible = retraitAutorise && et.retirables > 0
+            const raisonSansRetrait = !retraitAutorise
+              ? 'Retrait non activé par l’administrateur pour cette carte.'
+              : 'Rien à remettre : seule la P.C. est inscrite sur ce mois.'
+            return (
+              <form
+                className="space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void validerCloture()
+                }}
+              >
+                <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700 ring-1 ring-slate-100">
+                  <div>Le client arrête ce mois avant qu’il soit plein.</div>
+                  <div className="mt-1">
+                    Mises cotisées : <strong>{et.deposes}/{carnet.misesParCycle}</strong>
+                    {et.retires > 0 && <> — déjà retirées : {et.retires}</>}
+                  </div>
+                  {pcPayee && <div>P.C. retenue (commission) : {formatMontant(carnet.mise)}</div>}
+                  <div>
+                    Mises disponibles : <strong>{et.retirables}</strong> ({formatMontant(et.montantRetirable)})
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    className={`flex gap-3 rounded-xl p-3 ring-1 ${
+                      !retraitPossible
+                        ? 'cursor-not-allowed opacity-50 ring-slate-200'
+                        : clotureAvecRetrait
+                          ? 'cursor-pointer bg-rose-50 ring-rose-300'
+                          : 'cursor-pointer ring-slate-200'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="choixCloture"
+                      className="mt-1"
+                      disabled={!retraitPossible}
+                      checked={clotureAvecRetrait}
+                      onChange={() => setClotureAvecRetrait(true)}
+                    />
+                    <div className="text-sm">
+                      <div className="font-semibold text-slate-900">Avec retrait</div>
+                      <div className="text-slate-600">
+                        {retraitPossible
+                          ? `${formatMontant(et.montantRetirable)} remis au client en espèces (sortie de caisse).`
+                          : raisonSansRetrait}
+                      </div>
+                    </div>
+                  </label>
+                  <label
+                    className={`flex cursor-pointer gap-3 rounded-xl p-3 ring-1 ${
+                      !clotureAvecRetrait ? 'bg-brand-50 ring-brand-300' : 'ring-slate-200'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="choixCloture"
+                      className="mt-1"
+                      checked={!clotureAvecRetrait}
+                      onChange={() => setClotureAvecRetrait(false)}
+                    />
+                    <div className="text-sm">
+                      <div className="font-semibold text-slate-900">Sans retrait</div>
+                      <div className="text-slate-600">
+                        {et.retirables > 0
+                          ? `${formatMontant(et.montantRetirable)} restent disponibles sur ${et.moisLabel} : retrait ou transfert plus tard. La caisse ne bouge pas.`
+                          : 'Aucun mouvement d’argent. La caisse ne bouge pas.'}
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                <p className="text-xs text-slate-500">
+                  Le mois sera clôturé et <strong>{suivant}</strong> deviendra le mois en cours. Pour revenir en
+                  arrière, annulez la ligne correspondante dans le journal des transactions.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button type="button" className="btn-secondary" onClick={() => setClotureSur(null)}>
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className={clotureAvecRetrait ? 'btn-danger' : 'btn-primary'}
+                    disabled={clotureEnCours}
+                  >
+                    <CircleStop className="h-4 w-4" />
+                    {clotureEnCours
+                      ? 'Clôture…'
+                      : clotureAvecRetrait
+                        ? 'Clôturer et rembourser'
+                        : 'Clôturer sans retrait'}
+                  </button>
+                </div>
+              </form>
+            )
+          })()}
+      </Modale>
+
       <ModaleTransfert
         ouverte={transfertCycle !== null}
         onFermer={() => setTransfertCycle(null)}
-        initial={{ type: 'tontine', carnetId: carnet.id, cycle: transfertCycle ?? undefined }}
+        initial={{ type: 'tontine_compte', carnetId: carnet.id, cycle: transfertCycle ?? undefined }}
       />
 
       <Modale

@@ -14,7 +14,7 @@ import {
   LIBELLES_CARNET,
   LIBELLES_TYPE,
   TYPES_SORTIE_TONTINE,
-  carreauxNets,
+  carreauxDeposes,
   libelleCycleCarnet,
   anneeCarnet,
   besoinRenouvellementCarnet,
@@ -174,8 +174,15 @@ export default function Tontines() {
     const datesMises = new Set(
       data.mises.filter((m) => m.carnetId === carnetSelectionne.id).map((m) => m.date),
     )
+    // Transferts tontine (liés aux mises du carnet), y compris ceux d'un autre client
+    const txLiees = new Set(
+      data.mises
+        .filter((m) => m.carnetId === carnetSelectionne.id && m.transactionId)
+        .map((m) => m.transactionId as string),
+    )
     return [...data.transactions]
       .filter((t) => {
+        if (txLiees.has(t.id)) return !(estCaissier && employeConnecte && t.operateurId !== employeConnecte.id)
         if (t.clientId !== carnetSelectionne.clientId) return false
         if (!TYPES_TX_CARNET.includes(t.type)) return false
         if (estCaissier && employeConnecte && t.operateurId !== employeConnecte.id) return false
@@ -316,7 +323,7 @@ export default function Tontines() {
           {carnetsFiltres.map((carnet) => {
             const client = data.clients.find((c) => c.id === carnet.clientId)
             if (!client) return null
-            const payees = carreauxNets(carnet, data.mises)
+            const payees = carreauxDeposes(carnet, data.mises, carnet.cycleActuel)
             const cycles = situationsCycles(carnet, data.mises, data.transactions)
             const mois = moisDuCycle(carnet, carnet.cycleActuel)
             const passés = cycles.filter((c) => !c.estActuel)
@@ -432,7 +439,11 @@ export default function Tontines() {
           ) : (
             <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
               {historiqueSelectionne.map((t) => {
-                const sortie = TYPES_SORTIE_TONTINE.includes(t.type)
+                // Transfert tontine lié : sortie si ce carnet a donné des mises, entrée s'il en a reçu
+                const ligneLiee = data.mises.find(
+                  (m) => m.transactionId === t.id && m.carnetId === carnetSelectionne?.id,
+                )
+                const sortie = ligneLiee ? ligneLiee.nombreMises < 0 : TYPES_SORTIE_TONTINE.includes(t.type)
                 return (
                   <div key={t.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
                     <div className="min-w-0">

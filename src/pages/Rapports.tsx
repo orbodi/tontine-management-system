@@ -12,7 +12,7 @@ import {
   TYPES_SORTIE_TONTINE,
   situationCredit,
 } from '../metier'
-import type { TypeCompte, TypeTransaction } from '../types'
+import type { Transaction, TypeCompte, TypeTransaction } from '../types'
 import { exporterCsv, formatDate, formatDateHeure, formatMontant, afficherNumeroClient } from '../utils'
 import { EnTetePage } from '../components/ui'
 
@@ -470,16 +470,44 @@ export default function Rapports() {
         : zonesRapport.filter((z) => z.id === zoneIdTontine)
       ).map((z) => z.id),
     )
-    const ops = data.transactions.filter((t) => {
-      if (!TYPES_COMPTE_TONTINE.includes(t.type)) return false
-      if (t.annulee) return false
+    // Un transfert tontine → tontine compte en sortie pour le client source et en entrée pour le
+    // client destinataire ; un transfert compte → tontine en entrée pour le client destinataire.
+    const lignes = data.transactions.flatMap((t): (Transaction & { sortieRapport: boolean })[] => {
+      if (!TYPES_COMPTE_TONTINE.includes(t.type) || t.annulee) return []
+      const destinataire = t.clientDestinationId ?? t.clientId
+      if (t.type === 'transfert_tontine_tontine') {
+        return [
+          { ...t, sortieRapport: true },
+          { ...t, id: `${t.id}-dest`, clientId: destinataire, sortieRapport: false },
+        ]
+      }
+      if (t.type === 'transfert_compte_tontine') {
+        return [{ ...t, clientId: destinataire, sortieRapport: false }]
+      }
+      return [{ ...t, sortieRapport: TYPES_SORTIE_TONTINE.includes(t.type) }]
+    })
+    const ops = lignes.filter((t) => {
       if (!dansPeriodeComptes(t.date.slice(0, 10))) return false
       const client = data.clients.find((c) => c.id === t.clientId)
       if (!client?.zoneId || !zonesOk.has(client.zoneId)) return false
       if (clientIdTontine && t.clientId !== clientIdTontine) return false
       return true
     })
-    const { parType, entrees, sorties } = totauxOperations(ops, TYPES_SORTIE_TONTINE)
+    const parType = new Map<string, { entrees: number; sorties: number; nombre: number }>()
+    let entrees = 0
+    let sorties = 0
+    ops.forEach((t) => {
+      const ligne = parType.get(t.type) ?? { entrees: 0, sorties: 0, nombre: 0 }
+      ligne.nombre++
+      if (t.sortieRapport) {
+        ligne.sorties += t.montant
+        sorties += t.montant
+      } else {
+        ligne.entrees += t.montant
+        entrees += t.montant
+      }
+      parType.set(t.type, ligne)
+    })
 
     const parClient = new Map<
       string,
@@ -492,7 +520,7 @@ export default function Rapports() {
     ops.forEach((t) => {
       const client = data.clients.find((c) => c.id === t.clientId)
       const zoneId = client?.zoneId ?? ''
-      const sortie = TYPES_SORTIE_TONTINE.includes(t.type)
+      const sortie = t.sortieRapport
       const ligneC = parClient.get(t.clientId) ?? {
         nom: client ? `${client.prenom} ${client.nom}` : 'Client',
         numero: afficherNumeroClient(client?.codeClient),
@@ -605,7 +633,10 @@ export default function Rapports() {
       }
       return true
     })
-    const totaux = totauxOperations(ops.filter((t) => t.type !== 'transfert_compte_compte'))
+    const totaux = totauxOperations(
+      ops.filter((t) => t.type !== 'transfert_compte_compte'),
+      [...TYPES_SORTIE, 'transfert_compte_tontine'],
+    )
     const { parType } = totaux
     let { entrees, sorties } = totaux
     // Compte → compte : sortie côté source, entrée côté destination (les deux pour une vue globale)
@@ -1646,7 +1677,7 @@ export default function Rapports() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {rapportTontine.detail.map((t) => {
-                    const sortie = TYPES_SORTIE_TONTINE.includes(t.type)
+                    const sortie = t.sortieRapport
                     return (
                       <tr key={t.id}>
                         <td className="py-2 pr-4 whitespace-nowrap text-slate-600">

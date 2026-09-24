@@ -50,9 +50,13 @@ def est_cycle_cloture(carnet: dict, cycle: int) -> bool:
 
 
 def cycle_termine(carnet: dict, mises: list, cycle: int) -> bool:
-    """Cycle plein ou clôturé : les dépôts passent au cycle suivant."""
+    """Cycle plein ou clôturé : les dépôts passent au cycle suivant.
+
+    « Plein » = 31 mises cotisées, même si elles ont été retirées ensuite : un mois
+    payé au client (retrait total, il ne reste que la P.C.) ne redevient pas « en cours ».
+    """
     par_cycle = int(carnet.get("misesParCycle") or CARREAUX_PAR_CYCLE)
-    return est_cycle_cloture(carnet, cycle) or carreaux_nets(carnet, mises, cycle) >= par_cycle
+    return est_cycle_cloture(carnet, cycle) or carreaux_deposes(carnet, mises, cycle) >= par_cycle
 
 
 def cycle_courant_effectif(carnet: dict, mises: list) -> int:
@@ -375,7 +379,8 @@ def repartir_depot_sur_cycles(
                 "erreur": f"Depot trop important : au plus {MAX_CYCLES_DEPOT} cycles d'un coup.",
                 "tranches": [],
             }
-        payees = carreaux_nets(carnet, mises, cycle)
+        # Cases déjà cotisées (un retrait ne libère pas de case : 31 cotisations max par mois)
+        payees = carreaux_deposes(carnet, mises, cycle)
         restants = par_cycle - payees
         if restants <= 0 or est_cycle_cloture(carnet, cycle):
             cycle += 1
@@ -554,6 +559,28 @@ def eligibilite_retrait_carnet(carnet: dict, mises: list) -> dict[str, Any]:
     return {"autorise": False, "dateDeblocage": deb.isoformat()}
 
 
+def delta_mouvement_caisse(m: dict) -> float:
+    mt = float(m.get("montant") or 0)
+    return mt if m.get("sens") == "credit" else -mt
+
+
+def solde_caisse_fin_journee(compte: dict | None, mouvements: list, journee: str) -> float:
+    """Solde du compte caisse à la fin du jour (aujourd'hui ou plus tard = solde courant).
+
+    Même calcul que soldeCompteCaisseFinJour côté front : solde courant moins les mouvements
+    datés après ce jour. Sert de théorique pour clôturer une journée passée (rouverte ou en retard).
+    """
+    if not compte:
+        return 0.0
+    solde = float(compte.get("solde") or 0)
+    if journee >= aujourd_hui_iso():
+        return solde
+    for m in mouvements or []:
+        if m.get("compteCaisseId") == compte.get("id") and jour_iso_depuis_date(m.get("date") or "") > journee:
+            solde -= delta_mouvement_caisse(m)
+    return solde
+
+
 def situation_caisse(
     employe_id: str,
     transactions: list,
@@ -609,10 +636,10 @@ def situation_caisse(
         solde_th = arret["soldeTheorique"]
     elif ouverture:
         solde_ouv = ouverture["soldeOuverture"]
-        solde_th = float(compte.get("solde", 0)) if compte else 0.0
+        solde_th = solde_caisse_fin_journee(compte, mouvements, journee)
     else:
         solde_ouv = 0
-        solde_th = float(compte.get("solde", 0)) if compte else 0.0
+        solde_th = solde_caisse_fin_journee(compte, mouvements, journee)
     return {
         "transactions": periode,
         "nombreOperations": len(periode),

@@ -624,7 +624,7 @@ export default function DetailClient() {
               const cycles = situationsCycles(carnet, data.mises, data.transactions)
               const actuel = cycles.find((c) => c.estActuel)
               const mois = moisDuCycle(carnet, carnet.cycleActuel)
-              const mises = actuel?.nets ?? 0
+              const mises = actuel?.deposes ?? 0
               return (
                 <Link
                   key={carnet.id}
@@ -684,11 +684,23 @@ export default function DetailClient() {
                   </div>
                   <span
                     className={`shrink-0 font-bold ${
-                      transfert ? 'text-sky-700' : sortie ? 'text-rose-600' : 'text-emerald-600'
+                      t.type === 'cloture_cycle'
+                        ? 'text-slate-500'
+                        : transfert
+                          ? 'text-sky-700'
+                          : sortie
+                            ? 'text-rose-600'
+                            : 'text-emerald-600'
                     }`}
                   >
-                    {transfert ? '' : sortie ? '-' : '+'}
-                    {formatMontant(t.montant)}
+                    {t.type === 'cloture_cycle' ? (
+                      'Clôture'
+                    ) : (
+                      <>
+                        {transfert ? '' : sortie ? '-' : '+'}
+                        {formatMontant(t.montant)}
+                      </>
+                    )}
                   </span>
                 </div>
               )

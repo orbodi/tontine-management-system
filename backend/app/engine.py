@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import math
 import random
 import re
 import time
@@ -737,6 +738,21 @@ def _erreur_date_collecte(d: dict, zone_id: str, jour: str) -> str | None:
     return None
 
 
+def _erreur_caisse_jour_collecte(d: dict, carnet: dict, jour: str) -> str | None:
+    """Dépôt / renouvellement / complément sont datés du jour de collecte : la caisse de l'agence
+    doit être ouverte et non clôturée ce jour-là (tous rôles, admin compris)."""
+    agence_id = carnet.get("agenceId") or _agence_du_client(d, carnet.get("clientId"))
+    libelle = f"{jour[8:10]}/{jour[5:7]}/{jour[:4]}" if len(jour) == 10 else jour
+    if not M.ouverture_caisse_agence(d.get("ouverturesCaisse") or [], agence_id, jour):
+        return (
+            f"La caisse du {libelle} n'est pas ouverte : choisissez la collecte d'un jour dont la caisse "
+            "est ouverte, ou ouvrez d'abord cette journée."
+        )
+    if M.arret_caisse_agence(d.get("arretsCaisse") or [], agence_id, jour):
+        return f"La caisse du {libelle} est clôturée : rouvrez-la pour faire un complément de saisie."
+    return None
+
+
 def _verif_solde_sortie(d: dict, u: dict, montant: float) -> str | None:
     if _est_admin(u):
         return None
@@ -1399,9 +1415,7 @@ def ouvrir_carnet(d, u, p):
 
 
 def encaisser_cotisation(d, u, p):
-    err = _verif_caisse(d, u)
-    if err:
-        return {"erreur": err}
+    # Caisse contrôlée : celle du jour de collecte (voir _erreur_caisse_jour_collecte), tous rôles
     carnet_id = p["carnetId"]
     montant = float(p["montant"])
     d = copy.deepcopy(d)
@@ -1412,7 +1426,7 @@ def encaisser_cotisation(d, u, p):
         return {"erreur": "Ce carnet est verrouille."}
 
     jour = _jour_collecte_payload(p)
-    err_jour = _erreur_date_collecte(d, carnet["zoneId"], jour)
+    err_jour = _erreur_caisse_jour_collecte(d, carnet, jour) or _erreur_date_collecte(d, carnet["zoneId"], jour)
     if err_jour:
         return {"erreur": err_jour}
 
@@ -1520,9 +1534,6 @@ def encaisser_cotisation(d, u, p):
 
 def renouveler_carnet(d, u, p):
     """Encaissement des 300 F et ouverture de 12 nouveaux cycles, après une année complète."""
-    err = _verif_caisse(d, u)
-    if err:
-        return {"erreur": err}
     carnet_id = p["carnetId"]
     d = copy.deepcopy(d)
     carnet = next((c for c in d["carnets"] if c["id"] == carnet_id), None)
@@ -1534,7 +1545,7 @@ def renouveler_carnet(d, u, p):
         return {"erreur": "Ce carnet n'est pas encore a renouveler (12 cycles non termines)."}
 
     jour = _jour_collecte_payload(p)
-    err_jour = _erreur_date_collecte(d, carnet["zoneId"], jour)
+    err_jour = _erreur_caisse_jour_collecte(d, carnet, jour) or _erreur_date_collecte(d, carnet["zoneId"], jour)
     if err_jour:
         return {"erreur": err_jour}
 
@@ -1593,11 +1604,8 @@ def changer_mise_carnet(d, u, p):
     complement = deposes * (nouvelle - ancienne)
 
     if complement > 0:
-        err = _verif_caisse(d, u)
-        if err:
-            return {"erreur": err}
         jour = _jour_collecte_payload(p)
-        err_jour = _erreur_date_collecte(d, carnet["zoneId"], jour)
+        err_jour = _erreur_caisse_jour_collecte(d, carnet, jour) or _erreur_date_collecte(d, carnet["zoneId"], jour)
         if err_jour:
             return {"erreur": err_jour}
         date = M.horodater_sur_jour(jour)
@@ -1701,19 +1709,25 @@ def retrait_cycle(d, u, p):
 
 
 def _infos_cloture_tx(tx: dict) -> tuple[str, int] | None:
-    """(n° carnet, cycle) si la transaction est le retrait d'une clôture anticipée de cycle."""
-    if tx.get("type") != "retrait_tontine":
-        return None
+    """(n° carnet, cycle) si la transaction est une clôture anticipée de cycle (avec ou sans retrait)."""
     desc = tx.get("description") or ""
-    if "clôture anticipée" not in desc.lower():
+    if tx.get("type") == "retrait_tontine":
+        if "clôture anticipée" not in desc.lower():
+            return None
+    elif tx.get("type") != "cloture_cycle":
         return None
     m = re.search(r"\(carnet\s+(\S+),\s*cycle\s+(\d+)\)", desc)
     return (m.group(1), int(m.group(2))) if m else None
 
 
 def cloturer_cycle(d, u, p):
-    """Clôture anticipée du cycle en cours : rembourse en espèces ses mises (hors P.C. payée)
-    et ouvre le cycle suivant, même si le cycle n'est pas plein."""
+    """Clôture anticipée du cycle en cours, même s'il n'est pas plein ; le cycle suivant s'ouvre.
+
+    - avecRetrait (défaut) : les mises du cycle (hors P.C. payée) sont remises en espèces.
+    - sans retrait : aucun mouvement d'argent, les mises restent disponibles sur le cycle
+      clôturé (retrait ou transfert plus tard). Une ligne à 0 F trace la clôture au journal.
+    """
+    avec_retrait = p.get("avecRetrait", True) is not False
     err = _verif_caisse(d, u)
     if err:
         return {"erreur": err}
@@ -1728,7 +1742,7 @@ def cloturer_cycle(d, u, p):
     agence_carnet = carnet.get("agenceId") or _agence_du_client(d, carnet["clientId"])
     if not _est_admin(u) and agence_carnet != u.get("agenceId"):
         return {"erreur": "Ce carnet n'appartient pas à votre agence."}
-    if not M.eligibilite_retrait_carnet(carnet, d["mises"]).get("autorise"):
+    if avec_retrait and not M.eligibilite_retrait_carnet(carnet, d["mises"]).get("autorise"):
         return {"erreur": "Retrait non autorise pour ce type de carnet."}
 
     cycle = M.cycle_courant_effectif(carnet, d["mises"])
@@ -1738,45 +1752,57 @@ def cloturer_cycle(d, u, p):
         return {"erreur": "Aucune mise sur ce cycle : rien à clôturer."}
     txs = d.get("transactions") or []
     nombre = M.carreaux_retirables(carnet, d["mises"], cycle, txs)
-    if nombre <= 0:
-        return {"erreur": "Rien à rembourser sur ce cycle (seule la P.C. y est inscrite)."}
     montant = carnet["mise"] * nombre
-    err2 = _verif_solde_sortie(d, u, montant)
-    if err2:
-        return {"erreur": err2}
+    if avec_retrait:
+        if nombre <= 0:
+            return {"erreur": "Rien à rembourser sur ce cycle (seule la P.C. y est inscrite)."}
+        err2 = _verif_solde_sortie(d, u, montant)
+        if err2:
+            return {"erreur": err2}
 
     date = _horodate_caisse_agence(d, agence_carnet or u.get("agenceId"))
-    d["mises"].append(
-        {
-            "id": uid(),
-            "carnetId": carnet["id"],
-            "cycle": cycle,
-            "nombreMises": -nombre,
-            "montant": -montant,
-            "date": date,
+    nom = _nom_client(d, carnet["clientId"])
+    if avec_retrait:
+        d["mises"].append(
+            {
+                "id": uid(),
+                "carnetId": carnet["id"],
+                "cycle": cycle,
+                "nombreMises": -nombre,
+                "montant": -montant,
+                "date": date,
+            }
+        )
+        tx = {
+            "type": "retrait_tontine",
+            "montant": montant,
+            "description": (
+                f"Retrait {carnet['numero']} x{nombre} — {nom} "
+                f"(carnet {carnet['numero']}, cycle {cycle}) — clôture anticipée du cycle"
+            ),
         }
-    )
+    else:
+        tx = {
+            "type": "cloture_cycle",
+            "montant": 0,
+            "description": (
+                f"Clôture sans retrait {carnet['numero']} — {nom} (carnet {carnet['numero']}, cycle {cycle}) — "
+                f"{nombre} mise(s) restent disponibles ({int(montant)} F)"
+            ),
+        }
     carnet_maj = {**carnet, "cyclesClotures": sorted({*(carnet.get("cyclesClotures") or []), cycle})}
     carnet_maj["cycleActuel"] = M.cycle_courant_effectif(carnet_maj, d["mises"])
     d["carnets"] = [carnet_maj if c["id"] == carnet["id"] else c for c in d["carnets"]]
-    tx = _mk_tx(
-        u,
-        {
-            "type": "retrait_tontine",
-            "clientId": carnet["clientId"],
-            "montant": montant,
-            "date": date,
-            "description": (
-                f"Retrait {carnet['numero']} x{nombre} — {_nom_client(d, carnet['clientId'])} "
-                f"(carnet {carnet['numero']}, cycle {cycle}) — clôture anticipée du cycle"
-            ),
-        },
-    )
-    d = _enregistrer_tx(d, [tx])
+    d = _enregistrer_tx(d, [_mk_tx(u, {**tx, "clientId": carnet["clientId"], "date": date})])
     return (
         None,
         d,
-        {"montant": montant, "nombreMises": nombre, "cycleSuivant": carnet_maj["cycleActuel"]},
+        {
+            "montant": montant,
+            "nombreMises": nombre,
+            "avecRetrait": avec_retrait,
+            "cycleSuivant": carnet_maj["cycleActuel"],
+        },
     )
 
 
@@ -1903,6 +1929,222 @@ def transfert_tontine_compte(d, u, p):
     )
     d = _enregistrer_tx(d, [tx])
     return (None, d, {})
+
+
+def _erreur_montant_mises(montant: float, mise_dest: float, mise_src: float | None = None) -> str | None:
+    """Le montant transféré vers un carnet doit tomber juste en mises du carnet destinataire."""
+    if mise_dest <= 0:
+        return "Mise du carnet destinataire invalide."
+    if abs(montant % mise_dest) < 1e-6:
+        return None
+    if mise_src:
+        a, b = int(round(mise_src)), int(round(mise_dest))
+        pas = b // math.gcd(a, b) if a > 0 and b > 0 else 0
+        if pas > 0:
+            return (
+                f"Le montant ({int(montant)} F) doit être un multiple de la mise du carnet destinataire "
+                f"({int(mise_dest)} F) : transférez un multiple de {pas} mise(s)."
+            )
+    return f"Le montant doit être un multiple de la mise du carnet destinataire ({int(mise_dest)} F)."
+
+
+def _deposer_mises_transfert(d: dict, carnet: dict, montant: float, date: str, tx_id: str) -> tuple[str | None, dict, int]:
+    """Dépose `montant` en mises sur le carnet destinataire (cycle en cours puis suivants), sans P.C.
+    ni abonnement : un transfert n'achète que des mises. Les lignes sont liées à la transaction."""
+    nombre = int(round(montant / float(carnet["mise"])))
+    plan = M.repartir_depot_sur_cycles(carnet, d["mises"], nombre, d.get("transactions") or [])
+    if not plan.get("ok"):
+        return f"Carnet destinataire {carnet['numero']} : {plan.get('erreur') or 'dépôt impossible.'}", d, 0
+    for tr in plan["tranches"]:
+        d["mises"].append(
+            {
+                "id": uid(),
+                "carnetId": carnet["id"],
+                "cycle": int(tr["cycle"]),
+                "nombreMises": int(tr["nombre"]),
+                "montant": float(carnet["mise"]) * int(tr["nombre"]),
+                "date": date,
+                "transactionId": tx_id,
+            }
+        )
+    if plan.get("cycleFinal") and plan["cycleFinal"] != carnet.get("cycleActuel"):
+        d["carnets"] = [
+            {**c, "cycleActuel": plan["cycleFinal"]} if c["id"] == carnet["id"] else c for c in d["carnets"]
+        ]
+    return None, d, nombre
+
+
+def _erreur_carnet_destinataire(d: dict, carnet: dict | None) -> str | None:
+    if not carnet or not carnet.get("actif"):
+        return "Carnet destinataire introuvable."
+    if carnet.get("verrouille"):
+        return f"Le carnet destinataire {carnet['numero']} est verrouillé."
+    if M.besoin_renouvellement_carnet(carnet, d["mises"], d.get("transactions") or []):
+        return f"Le carnet destinataire {carnet['numero']} doit d'abord être renouvelé (300 F)."
+    return None
+
+
+def transfert_tontine_tontine(d, u, p):
+    """Vire des mises d'un carnet (cycle choisi) vers un autre carnet, même client ou non, sans caisse."""
+    err = _verif_caisse(d, u)
+    if err:
+        return {"erreur": err}
+    cycle = int(p.get("cycle") or 0)
+    nombre = int(p.get("nombreCarreaux") or 0)
+    motif = _motif_transfert(p)
+    if nombre <= 0:
+        return {"erreur": "Nombre de mises invalide."}
+    d = copy.deepcopy(d)
+    source = next((c for c in d["carnets"] if c["id"] == p.get("carnetSourceId")), None)
+    dest = next((c for c in d["carnets"] if c["id"] == p.get("carnetDestinationId")), None)
+    if not source or not source.get("actif"):
+        return {"erreur": "Carnet source introuvable."}
+    if dest and dest["id"] == source["id"]:
+        return {"erreur": "Le carnet source et le carnet destinataire doivent être différents."}
+    if source.get("verrouille"):
+        return {"erreur": f"Le carnet source {source['numero']} est verrouillé."}
+    if not M.eligibilite_retrait_carnet(source, d["mises"]).get("autorise"):
+        return {"erreur": "Retrait non autorise pour ce type de carnet."}
+    if nombre > M.carreaux_retirables(source, d["mises"], cycle, d.get("transactions") or []):
+        return {"erreur": "Pas assez de mises disponibles sur ce cycle."}
+    err = _erreur_carnet_destinataire(d, dest)
+    if err:
+        return {"erreur": err}
+    err = _controle_transfert(
+        d,
+        u,
+        client_source_id=source["clientId"],
+        client_dest_id=dest["clientId"],
+        agences={
+            source.get("agenceId") or _agence_du_client(d, source["clientId"]),
+            dest.get("agenceId") or _agence_du_client(d, dest["clientId"]),
+        },
+    )
+    if err:
+        return {"erreur": err}
+    montant = float(source["mise"]) * nombre
+    err = _erreur_montant_mises(montant, float(dest["mise"]), float(source["mise"]))
+    if err:
+        return {"erreur": err}
+
+    date = _horodate_caisse_agence(d, source.get("agenceId") or u.get("agenceId"))
+    tx = _mk_tx(u, {"type": "transfert_tontine_tontine", "clientId": source["clientId"],
+                    "clientDestinationId": dest["clientId"], "montant": montant, "date": date})
+    d["mises"].append(
+        {
+            "id": uid(),
+            "carnetId": source["id"],
+            "cycle": cycle,
+            "nombreMises": -nombre,
+            "montant": -montant,
+            "date": date,
+            "transactionId": tx["id"],
+        }
+    )
+    err, d, nombre_dest = _deposer_mises_transfert(d, dest, montant, date, tx["id"])
+    if err:
+        return {"erreur": err}
+    tx["description"] = (
+        f"Transfert tontine {source['numero']} → carnet {dest['numero']} x{nombre} "
+        f"(carnet {source['numero']}, cycle {cycle}) → x{nombre_dest} sur {dest['numero']}"
+        + _suffixe_transfert(d, source["clientId"], dest["clientId"], motif)
+    )
+    d = _enregistrer_tx(d, [tx])
+    return (None, d, {"nombreMisesDestination": nombre_dest})
+
+
+def transfert_compte_tontine(d, u, p):
+    """Vire un montant d'un compte courant / épargne vers un carnet (en mises), même client ou non, sans caisse."""
+    err = _verif_caisse(d, u)
+    if err:
+        return {"erreur": err}
+    montant = float(p.get("montant") or 0)
+    motif = _motif_transfert(p)
+    if montant <= 0:
+        return {"erreur": "Montant invalide."}
+    d = copy.deepcopy(d)
+    compte = next((c for c in d["comptes"] if c["id"] == p.get("compteSourceId")), None)
+    dest = next((c for c in d["carnets"] if c["id"] == p.get("carnetDestinationId")), None)
+    if not compte:
+        return {"erreur": "Compte source introuvable."}
+    if compte.get("verrouille"):
+        return {"erreur": f"Le compte source {compte['numero']} est verrouillé."}
+    err = _erreur_carnet_destinataire(d, dest)
+    if err:
+        return {"erreur": err}
+    err = _controle_transfert(
+        d,
+        u,
+        client_source_id=compte["clientId"],
+        client_dest_id=dest["clientId"],
+        agences={_agence_du_client(d, compte["clientId"]), dest.get("agenceId") or _agence_du_client(d, dest["clientId"])},
+    )
+    if err:
+        return {"erreur": err}
+    if float(compte["solde"]) < montant - 0.005:
+        return {"erreur": "Solde insuffisant sur le compte source."}
+    err = _erreur_montant_mises(montant, float(dest["mise"]))
+    if err:
+        return {"erreur": err}
+
+    date = _horodate_caisse_agence(d, _agence_du_client(d, compte["clientId"]) or u.get("agenceId"))
+    tx = _mk_tx(u, {"type": "transfert_compte_tontine", "clientId": compte["clientId"],
+                    "clientDestinationId": dest["clientId"], "montant": montant, "date": date})
+    err, d, nombre_dest = _deposer_mises_transfert(d, dest, montant, date, tx["id"])
+    if err:
+        return {"erreur": err}
+    d["comptes"] = [{**c, "solde": c["solde"] - montant} if c["id"] == compte["id"] else c for c in d["comptes"]]
+    d["mouvements"].append(
+        {
+            "id": uid(),
+            "compteId": compte["id"],
+            "type": "retrait",
+            "montant": montant,
+            "date": date,
+            "note": f"Transfert vers carnet {dest['numero']}" + (f" — {motif}" if motif else ""),
+        }
+    )
+    nature = "épargne" if compte.get("type") == "epargne" else "courant"
+    tx["description"] = (
+        f"Transfert compte {compte['numero']} ({nature}) → carnet {dest['numero']} x{nombre_dest}"
+        + _suffixe_transfert(d, compte["clientId"], dest["clientId"], motif)
+    )
+    d = _enregistrer_tx(d, [tx])
+    return (None, d, {"nombreMisesDestination": nombre_dest})
+
+
+def _annuler_mises_transfert(d: dict, tx: dict) -> tuple[str | None, dict]:
+    """Retire les lignes de mises liées à un transfert tontine et recalcule les cycles des carnets."""
+    lignes = [mi for mi in d.get("mises") or [] if mi.get("transactionId") == tx["id"]]
+    if not lignes:
+        return "Mises liées au transfert introuvables.", d
+    entrees = [mi for mi in lignes if int(mi.get("nombreMises") or 0) > 0]
+    # Destination : refus si des dépôts ont été faits depuis sur les cycles suivants
+    for carnet_id in {mi["carnetId"] for mi in entrees}:
+        premier = min(int(mi["cycle"]) for mi in entrees if mi["carnetId"] == carnet_id)
+        if any(
+            x.get("carnetId") == carnet_id
+            and x.get("transactionId") != tx["id"]
+            and int(x.get("nombreMises") or 0) > 0
+            and int(x.get("cycle") or 0) > premier
+            and (x.get("date") or "") > (tx.get("date") or "")
+            for x in d["mises"]
+        ):
+            return "Annulation impossible : des dépôts ont été faits depuis sur les cycles suivants du carnet destinataire.", d
+    ids = {mi["id"] for mi in lignes}
+    d["mises"] = [mi for mi in d["mises"] if mi["id"] not in ids]
+    for carnet_id in {mi["carnetId"] for mi in lignes}:
+        carnet = next((c for c in d["carnets"] if c["id"] == carnet_id), None)
+        if not carnet:
+            continue
+        for cycle in {int(mi["cycle"]) for mi in lignes if mi["carnetId"] == carnet_id}:
+            if M.carreaux_nets(carnet, d["mises"], cycle) < 0:
+                return (
+                    f"Annulation impossible : les mises transférées ont déjà été retirées du carnet {carnet['numero']}.",
+                    d,
+                )
+        d = _recalculer_cycle_actuel_carnet(d, carnet_id)
+    return None, d
 
 
 def transfert_compte_compte(d, u, p):
@@ -2104,6 +2346,9 @@ def supprimer_carnet(d, u, p):
             "erreur": "Impossible : ce carnet a des virements vers un compte banque. Annulez-les d'abord."
         }
     mises = [mi for mi in d.get("mises") or [] if mi.get("carnetId") == id_]
+    tx_liees = {mi.get("transactionId") for mi in mises if mi.get("transactionId")}
+    if any(t["id"] in tx_liees and M.est_tx_active(t) for t in d.get("transactions") or []):
+        return {"erreur": "Impossible : ce carnet a des transferts (vers ou depuis un autre carnet / compte). Annulez-les d'abord."}
 
     jours: set[str] = set()
     ouverture = M.jour_iso_depuis_date(carnet.get("dateOuverture") or "")
@@ -2907,18 +3152,35 @@ def annuler_ouverture_journee_caisse(d, u, p):
                 {**c, "mise": float(ancienne)} if c["id"] == cid else c for c in d["carnets"]
             ]
 
-    # Clôtures anticipées du jour : le cycle est rouvert (ses mises sont restituées ci-dessous)
-    for tx in txs:
+    # Clôtures anticipées du jour (avec retrait = opération de caisse, sans retrait = ligne à 0 F) :
+    # le cycle est rouvert (les mises d'une clôture avec retrait sont restituées ci-dessous)
+    op_ids = M.operateurs_caisse_agence(d.get("employes") or [], agence_id)
+    clotures_sans_retrait = [
+        t
+        for t in d.get("transactions") or []
+        if t.get("type") == "cloture_cycle"
+        and not t.get("annulee")
+        and (t.get("agenceId") == agence_id or t.get("operateurId") in op_ids)
+        and M.jour_iso_depuis_date(t.get("date") or "") in jours
+    ]
+    for tx in [*txs, *clotures_sans_retrait]:
         infos = _infos_cloture_tx(tx)
         if not infos:
             continue
         numero, cycle_clos = infos
+        ca = next(
+            (c for c in d["carnets"] if c.get("clientId") == tx.get("clientId") and c.get("numero") == numero),
+            None,
+        )
+        if not ca:
+            continue
         d["carnets"] = [
             {**c, "cyclesClotures": [x for x in (c.get("cyclesClotures") or []) if int(x) != cycle_clos]}
-            if c.get("clientId") == tx.get("clientId") and c.get("numero") == numero
+            if c["id"] == ca["id"]
             else c
             for c in d["carnets"]
         ]
+        d = _recalculer_cycle_actuel_carnet(d, ca["id"])
 
     # Mises tontine du jour (agence)
     mises_gardees = [
@@ -3031,12 +3293,14 @@ def annuler_ouverture_journee_caisse(d, u, p):
         else x
         for x in (d.get("demandesOuvertureCompte") or [])
     ]
-    # Transferts du jour (hors caisse) : leurs mises / mouvements viennent d'être retirés ci-dessus
-    op_ids = M.operateurs_caisse_agence(d.get("employes") or [], agence_id)
+    # Transferts et clôtures sans retrait du jour (hors caisse) : leurs effets viennent d'être retirés ci-dessus
     transferts_ids = {
         t["id"]
         for t in d.get("transactions") or []
-        if t.get("type") in ("transfert_tontine_compte", "transfert_compte_compte")
+        if t.get("type") in (
+            "transfert_tontine_compte", "transfert_compte_compte", "transfert_tontine_tontine",
+            "transfert_compte_tontine", "cloture_cycle",
+        )
         and not t.get("annulee")
         and (t.get("agenceId") == agence_id or t.get("operateurId") in op_ids)
         and M.jour_iso_depuis_date(t.get("date") or "") in jours
@@ -3150,45 +3414,45 @@ def arreter_caisse(d, u, p):
         "note": note,
         "valideParId": u["id"],
         "valideParNom": u["nomComplet"],
+        # Historique des réouvertures de cette journée (conservé sur le nouvel arrêt)
+        "corrections": [c for c in (ouverture.get("corrections") or []) if c.get("type") == "reouverture"],
     }
     d["arretsCaisse"] = [arret, *d["arretsCaisse"]]
     d, compte = _compte_caisse_operateur(d, cible["id"], cible["agenceId"])
     if compte:
-        cm = compte.get("cumulManquant", 0)
-        cs = compte.get("cumulSurplus", 0)
+        cm = float(compte.get("cumulManquant") or 0)
+        cs = float(compte.get("cumulSurplus") or 0)
         if ecart < 0:
             cm += abs(ecart)
         if ecart > 0:
             cs += ecart
-        mouvements = d["mouvementsCompteCaisse"]
-        solde = compte["solde"]
-        if ecart != 0 and compte["solde"] != montant:
-            solde = montant
-            mouvements = [
-                {
-                    "id": uid(),
-                    "compteCaisseId": compte["id"],
-                    "employeId": cible["id"],
-                    "type": "ajustement_arret",
-                    "montant": abs(ecart),
-                    "sens": "credit" if ecart > 0 else "debit",
-                    "soldeApres": solde,
-                    "date": now,
-                    "description": (
-                        f"Ajustement de fermeture — surplus {abs(ecart)} FCFA"
-                        if ecart > 0
-                        else f"Ajustement de fermeture — manquant {abs(ecart)} FCFA"
-                    ),
-                    "operateurId": u["id"],
-                    "operateurNom": u["nomComplet"],
-                },
-                *mouvements,
-            ]
         d["comptesCaisse"] = [
-            {**c, "solde": solde, "cumulManquant": cm, "cumulSurplus": cs} if c["id"] == compte["id"] else c
+            {**c, "cumulManquant": cm, "cumulSurplus": cs} if c["id"] == compte["id"] else c
             for c in d["comptesCaisse"]
         ]
-        d["mouvementsCompteCaisse"] = mouvements
+        if abs(ecart) >= 0.005:
+            titulaire = compte.get("employeId") or cible["id"]
+            # Ajustement daté du jour clôturé (fin de journée si arrêt en retard) : la caisse
+            # de ce jour finit au montant compté ; l'ouverture suivante éventuelle est préservée.
+            date_ajust = now if jour == auj else _fin_de_journee(jour)
+            d = _poser_mouvement_caisse(
+                d,
+                existant=None,
+                compte=compte,
+                employe_id=titulaire,
+                type_="ajustement_arret",
+                delta=ecart,
+                date=date_ajust,
+                description=(
+                    f"Ajustement de fermeture — {'surplus' if ecart > 0 else 'manquant'} {int(abs(ecart))} FCFA"
+                ),
+                u=u,
+            )
+            d = _preserver_ouverture_suivante(
+                d, compte=compte, employe_id=titulaire, agence_id=cible["agenceId"], jour=jour,
+                delta_solde=ecart, date_effet=date_ajust, u=u,
+            )
+            d = _recalculer_solde_compte_caisse(d, titulaire, 0.0)
     return (None, d, {})
 
 
@@ -3247,6 +3511,373 @@ def annuler_cloture_caisse(d, u, p):
             _rouvrir_journee_zone(d, z["id"], jour)
 
     return annuler_ouverture_journee_caisse(d, u, {"employeId": cible["id"], "journee": jour})
+
+
+def rouvrir_journee_caisse(d, u, p):
+    """Rouvre une journée de caisse clôturée pour un complément de saisie.
+
+    Contrairement à « Annuler la clôture », les opérations du jour sont conservées : seul l'arrêt est
+    retiré (écart ôté des cumuls, ajustement de caisse supprimé, ouverture suivante préservée).
+    La journée redevient ouverte ; on la reclôture ensuite avec un nouveau comptage.
+    """
+    if not _est_admin(u) and not _est_chef(u):
+        return {"erreur": "Seul l'administrateur ou le chef d'agence peut rouvrir une journée."}
+    motif = " ".join(str(p.get("motif") or "").split())[:300]
+    if not motif:
+        return {"erreur": "Le motif est obligatoire."}
+    cible_id = p.get("employeId") or p.get("cibleEmployeId")
+    jour = str(p.get("journee") or "")[:10]
+    cible = next((e for e in d["employes"] if e["id"] == cible_id), None)
+    if not cible or not jour:
+        return {"erreur": "Caisse ou journée non précisée."}
+    if _est_chef(u) and cible["agenceId"] != u["agenceId"]:
+        return {"erreur": "Vous ne pouvez rouvrir que les journées de votre agence."}
+    agence_id = cible["agenceId"]
+    d = copy.deepcopy(d)
+    arret = M.arret_caisse_agence(d.get("arretsCaisse") or [], agence_id, jour)
+    if not arret:
+        return {"erreur": f"La journée du {jour} n'est pas clôturée."}
+    ouverture = M.ouverture_caisse_agence(d.get("ouverturesCaisse") or [], agence_id, jour)
+    if not ouverture:
+        return {"erreur": f"Aucune ouverture de caisse le {jour} : utilisez « Annuler la clôture »."}
+
+    ecart = float(arret.get("ecart") or 0)
+    d["arretsCaisse"] = [a for a in d["arretsCaisse"] if a.get("id") != arret.get("id")]
+    d, compte = _compte_caisse_operateur(d, cible["id"], agence_id)
+    if compte:
+        titulaire = compte.get("employeId") or cible["id"]
+        cm = float(compte.get("cumulManquant") or 0)
+        cs = float(compte.get("cumulSurplus") or 0)
+        if ecart < 0:
+            cm = max(0.0, cm - abs(ecart))
+        elif ecart > 0:
+            cs = max(0.0, cs - ecart)
+        d["comptesCaisse"] = [
+            {**c, "cumulManquant": cm, "cumulSurplus": cs} if c["id"] == compte["id"] else c
+            for c in d["comptesCaisse"]
+        ]
+        mv = _mouvement_ajustement_arret(d, compte["id"], arret)
+        if mv:
+            valeur = _delta_mouvement_caisse(mv)
+            d["mouvementsCompteCaisse"] = [m for m in d["mouvementsCompteCaisse"] if m["id"] != mv["id"]]
+            d = _preserver_ouverture_suivante(
+                d, compte=compte, employe_id=titulaire, agence_id=agence_id, jour=jour,
+                delta_solde=-valeur, date_effet=mv.get("date") or "", u=u,
+            )
+        d = _recalculer_solde_compte_caisse(d, titulaire, 0.0)
+
+    historique = {
+        "type": "reouverture",
+        "date": M.maintenant(),
+        "parId": u["id"],
+        "parNom": u["nomComplet"],
+        "motif": motif,
+        "ouvertureAvant": float(ouverture.get("soldeOuverture") or 0),
+        "ouvertureApres": float(ouverture.get("soldeOuverture") or 0),
+        "compteAvant": float(arret.get("montantCompte") or 0),
+        "theoriqueAvant": float(arret.get("soldeTheorique") or 0),
+        "ecartAvant": ecart,
+    }
+    d["ouverturesCaisse"] = [
+        {**o, "corrections": [*(o.get("corrections") or []), historique]} if o.get("id") == ouverture.get("id") else o
+        for o in d["ouverturesCaisse"]
+    ]
+    return (None, d, {"journee": jour})
+
+
+def _delta_mouvement_caisse(m: dict | None) -> float:
+    if not m:
+        return 0.0
+    mt = float(m.get("montant") or 0)
+    return mt if m.get("sens") == "credit" else -mt
+
+
+def _mouvement_ouverture_du_jour(d: dict, compte_id: str, jour: str) -> dict | None:
+    return next(
+        (
+            m
+            for m in d.get("mouvementsCompteCaisse") or []
+            if m.get("compteCaisseId") == compte_id
+            and m.get("type") == "ouverture_journee"
+            and (m.get("date") or "")[:10] == jour
+        ),
+        None,
+    )
+
+
+def _mouvement_ajustement_arret(d: dict, compte_id: str, arret: dict) -> dict | None:
+    """Ajustement créé par cet arrêt : même horodatage que la clôture, sinon même montant et même jour."""
+    mvts = [
+        m
+        for m in d.get("mouvementsCompteCaisse") or []
+        if m.get("compteCaisseId") == compte_id and m.get("type") == "ajustement_arret"
+    ]
+    date_clot = arret.get("dateCloture") or arret.get("date") or ""
+    fin_jour = _fin_de_journee(arret.get("journee") or date_clot[:10])
+    exact = next((m for m in mvts if m.get("date") in (date_clot, fin_jour)), None)
+    if exact:
+        return exact
+    ecart = abs(float(arret.get("ecart") or 0))
+    if ecart < 0.005:
+        return None
+    jours = {date_clot[:10], arret.get("journee")}
+    return next(
+        (
+            m
+            for m in mvts
+            if abs(float(m.get("montant") or 0) - ecart) < 0.005 and (m.get("date") or "")[:10] in jours
+        ),
+        None,
+    )
+
+
+def _poser_mouvement_caisse(
+    d: dict, *, existant: dict | None, compte: dict, employe_id: str, type_: str,
+    delta: float, date: str, description: str, u: dict,
+) -> dict:
+    """Crée, met à jour ou supprime (delta nul) un ajustement de caisse pour qu'il vaille `delta`."""
+    autres = [m for m in d.get("mouvementsCompteCaisse") or [] if not existant or m["id"] != existant["id"]]
+    if abs(delta) < 0.005:
+        d["mouvementsCompteCaisse"] = autres
+        return d
+    base = existant or {
+        "id": uid(),
+        "compteCaisseId": compte["id"],
+        "employeId": employe_id,
+        "type": type_,
+        "date": date,
+        "soldeApres": 0,
+        "transactionId": None,
+        "operateurId": u["id"],
+        "operateurNom": u["nomComplet"],
+    }
+    d["mouvementsCompteCaisse"] = [
+        {**base, "montant": abs(delta), "sens": "credit" if delta > 0 else "debit", "description": description},
+        *autres,
+    ]
+    return d
+
+
+def _fin_de_journee(jour: str) -> str:
+    """Horodatage d'un ajustement d'arrêt : fin du jour clôturé, avant l'ouverture du lendemain."""
+    return f"{jour}T23:59:59"
+
+
+def _preserver_ouverture_suivante(
+    d: dict, *, compte: dict, employe_id: str, agence_id: str, jour: str, delta_solde: float, date_effet: str, u: dict
+) -> dict:
+    """Un mouvement daté `date_effet` change le solde de fin du `jour` de `delta_solde` : on ajuste
+    l'ouverture suivante de l'agence pour que son solde saisi (et donc les journées suivantes) ne bouge
+    pas. Rien à faire si aucune journée n'a été ouverte depuis, si le mouvement est daté après cette
+    ouverture (ex. ajustement d'une ancienne clôture en retard), ou si la caisse a été remise à zéro
+    (gel) entre-temps."""
+    if abs(delta_solde) < 0.005:
+        return d
+    suivante = min(
+        (o for o in d.get("ouverturesCaisse") or [] if o.get("agenceId") == agence_id and (o.get("journee") or "") > jour),
+        key=lambda o: o["journee"],
+        default=None,
+    )
+    if not suivante:
+        return d
+    mv = _mouvement_ouverture_du_jour(d, compte["id"], suivante["journee"])
+    # Position de l'ouverture suivante dans la chronologie de la caisse
+    date_ouv_suiv = suivante.get("dateOuverture") or ""
+    horodatage_suivante = (mv or {}).get("date") or (
+        date_ouv_suiv if date_ouv_suiv[:10] == suivante["journee"] else f"{suivante['journee']}T00:00:00"
+    )
+    if (date_effet or "") >= horodatage_suivante:
+        return d
+    if any(
+        m.get("compteCaisseId") == compte["id"]
+        and m.get("type") == "gel"
+        and (m.get("date") or "")[:10] > jour
+        and (m.get("date") or "")[:10] <= suivante["journee"]
+        for m in d.get("mouvementsCompteCaisse") or []
+    ):
+        return d
+    return _poser_mouvement_caisse(
+        d,
+        existant=mv,
+        compte=compte,
+        employe_id=employe_id,
+        type_="ouverture_journee",
+        delta=_delta_mouvement_caisse(mv) - delta_solde,
+        date=horodatage_suivante,
+        description=f"Ouverture de caisse — solde saisi {int(float(suivante.get('soldeOuverture') or 0))} FCFA",
+        u=u,
+    )
+
+
+def corriger_journee_caisse(d, u, p):
+    """Admin : corrige le solde d'ouverture et/ou le montant compté (fermeture) d'une journée de caisse.
+
+    Les opérations du jour ne changent pas. Théorique, écart et cumuls manquant / surplus sont
+    recalculés ; les ajustements de caisse (ouverture du jour, arrêt, ouverture suivante) sont remis
+    en cohérence pour que le solde des journées suivantes ne bouge pas ; la correction est historisée.
+    Journée encore ouverte : seule l'ouverture peut être corrigée.
+    """
+    if not _est_admin(u):
+        return {"erreur": "Seul l'administrateur peut corriger une journée de caisse."}
+    motif = " ".join(str(p.get("motif") or "").split())[:300]
+    if not motif:
+        return {"erreur": "Le motif est obligatoire."}
+    cible_id = p.get("employeId") or p.get("cibleEmployeId")
+    jour = str(p.get("journee") or "")[:10]
+    if not cible_id or not jour:
+        return {"erreur": "Caisse ou journée non précisée."}
+    cible = next((e for e in d["employes"] if e["id"] == cible_id), None)
+    if not cible:
+        return {"erreur": "Employe introuvable."}
+    agence_id = cible["agenceId"]
+
+    def _montant(cle: str) -> float | None:
+        v = p.get(cle)
+        if v is None or v == "":
+            return None
+        v = float(v)
+        if v < 0:
+            raise ValueError
+        return v
+
+    try:
+        saisie_ouv = _montant("soldeOuverture")
+        saisie_compte = _montant("montantCompte")
+    except (TypeError, ValueError):
+        return {"erreur": "Montant invalide."}
+
+    d = copy.deepcopy(d)
+    ouverture = M.ouverture_caisse_agence(d.get("ouverturesCaisse") or [], agence_id, jour)
+    if not ouverture:
+        return {"erreur": f"Aucune ouverture de caisse le {jour}."}
+    arret = M.arret_caisse_agence(d.get("arretsCaisse") or [], agence_id, jour)
+    if saisie_compte is not None and not arret:
+        return {"erreur": "La journée n'est pas clôturée : il n'y a pas de montant compté à corriger."}
+
+    o_old = float(ouverture.get("soldeOuverture") or 0)
+    o_new = o_old if saisie_ouv is None else saisie_ouv
+    delta_ouv = o_new - o_old
+    c_old = float(arret.get("montantCompte") or 0) if arret else 0.0
+    c_new = c_old if saisie_compte is None else saisie_compte
+    delta_c = c_new - c_old
+    if abs(delta_ouv) < 0.005 and abs(delta_c) < 0.005:
+        return {"erreur": "Aucun changement : les montants sont identiques."}
+
+    d, compte = _compte_caisse_operateur(d, cible["id"], agence_id)
+    if not compte:
+        return {"erreur": "Compte caisse introuvable."}
+    titulaire = compte.get("employeId") or cible["id"]
+    now = M.maintenant()
+    correction = {
+        "date": now,
+        "parId": u["id"],
+        "parNom": u["nomComplet"],
+        "motif": motif,
+        "ouvertureAvant": o_old,
+        "ouvertureApres": o_new,
+    }
+
+    # 1. Ajustement d'ouverture du jour : la caisse démarre au nouveau solde saisi
+    if abs(delta_ouv) >= 0.005:
+        mv = _mouvement_ouverture_du_jour(d, compte["id"], jour)
+        date_ouv = (mv or {}).get("date") or f"{jour}T00:00:00"
+        d = _poser_mouvement_caisse(
+            d,
+            existant=mv,
+            compte=compte,
+            employe_id=titulaire,
+            type_="ouverture_journee",
+            delta=_delta_mouvement_caisse(mv) + delta_ouv,
+            date=date_ouv,
+            description=f"Ouverture de caisse — solde saisi {int(o_new)} FCFA (corrigé)",
+            u=u,
+        )
+        d = _preserver_ouverture_suivante(
+            d, compte=compte, employe_id=titulaire, agence_id=agence_id, jour=jour,
+            delta_solde=delta_ouv, date_effet=date_ouv, u=u,
+        )
+
+    if arret:
+        t_old = float(arret.get("soldeTheorique") or 0)
+        t_new = t_old + delta_ouv
+        e_old = float(arret.get("ecart") or 0)
+        e_new = c_new - t_new
+        correction.update(
+            {
+                "compteAvant": c_old,
+                "compteApres": c_new,
+                "theoriqueAvant": t_old,
+                "theoriqueApres": t_new,
+                "ecartAvant": e_old,
+                "ecartApres": e_new,
+            }
+        )
+
+        # 2. Ajustement d'arrêt : ramène la caisse au montant compté
+        mv = _mouvement_ajustement_arret(d, compte["id"], arret)
+        valeur = _delta_mouvement_caisse(mv) + (e_new - e_old)
+        date_ajust = (mv or {}).get("date") or _fin_de_journee(jour)
+        d = _poser_mouvement_caisse(
+            d,
+            existant=mv,
+            compte=compte,
+            employe_id=titulaire,
+            type_="ajustement_arret",
+            delta=valeur,
+            date=date_ajust,
+            description=(
+                f"Ajustement de fermeture — {'surplus' if valeur > 0 else 'manquant'} {int(abs(valeur))} FCFA (corrigé)"
+            ),
+            u=u,
+        )
+
+        # 3. Ouverture suivante : son solde saisi ne change pas (sauf remise à zéro entre-temps)
+        d = _preserver_ouverture_suivante(
+            d, compte=compte, employe_id=titulaire, agence_id=agence_id, jour=jour,
+            delta_solde=e_new - e_old, date_effet=date_ajust, u=u,
+        )
+
+        # 4. Cumuls manquant / surplus : on retire l'ancien écart, on ajoute le nouveau
+        cm = float(compte.get("cumulManquant") or 0)
+        cs = float(compte.get("cumulSurplus") or 0)
+        if e_old < 0:
+            cm = max(0.0, cm - abs(e_old))
+        elif e_old > 0:
+            cs = max(0.0, cs - e_old)
+        if e_new < 0:
+            cm += abs(e_new)
+        elif e_new > 0:
+            cs += e_new
+        d["comptesCaisse"] = [
+            {**c, "cumulManquant": cm, "cumulSurplus": cs} if c["id"] == compte["id"] else c
+            for c in d["comptesCaisse"]
+        ]
+
+        # 5. Arrêt mis à jour + historique
+        d["arretsCaisse"] = [
+            {
+                **a,
+                "soldeOuverture": o_new,
+                "soldeTheorique": t_new,
+                "montantCompte": c_new,
+                "ecart": e_new,
+                "corrections": [*(a.get("corrections") or []), correction],
+            }
+            if a.get("id") == arret.get("id")
+            else a
+            for a in d["arretsCaisse"]
+        ]
+
+    if abs(delta_ouv) >= 0.005:
+        d["ouverturesCaisse"] = [
+            {**o, "soldeOuverture": o_new, "corrections": [*(o.get("corrections") or []), correction]}
+            if o.get("id") == ouverture.get("id")
+            else o
+            for o in d["ouverturesCaisse"]
+        ]
+
+    d = _recalculer_solde_compte_caisse(d, titulaire, 0.0)
+    return (None, d, {"correction": correction})
 
 
 def regulariser_cumul_compte_caisse(d, u, p):
@@ -3311,7 +3942,13 @@ TYPES_TX_MODIFIABLES = {
     "transfert_compte_compte",
 }
 
-TYPES_TX_ANNULABLES = TYPES_TX_MODIFIABLES | {"vente_carnet"}
+TYPES_TX_ANNULABLES = TYPES_TX_MODIFIABLES | {
+    "vente_carnet",
+    "cloture_cycle",
+    # Transferts vers la tontine : annulables (pas de correction de montant : annuler puis refaire)
+    "transfert_tontine_tontine",
+    "transfert_compte_tontine",
+}
 
 
 def _numero_compte_depuis_description(description: str) -> str | None:
@@ -3439,9 +4076,9 @@ def _cycle_depuis_description(description: str) -> int | None:
 
 
 def _recalculer_cycle_actuel_carnet(d: dict, carnet_id: str) -> dict:
-    """Recalcule cycleActuel d'après les carreaux nets de chaque cycle (sans plafond à 12).
+    """Recalcule cycleActuel : premier cycle ni plein (31 cotisées) ni clôturé (sans plafond à 12).
 
-    Un cycle clôturé par anticipation compte comme terminé.
+    Les retraits ne comptent pas : un mois déjà payé au client ne redevient pas « en cours ».
     """
     carnet = next((c for c in d["carnets"] if c["id"] == carnet_id), None)
     if not carnet:
@@ -3477,6 +4114,9 @@ def _trouver_mise_tontine(
     for carnet in carnets:
         for mi in d.get("mises") or []:
             if mi.get("carnetId") != carnet["id"]:
+                continue
+            # Lignes d'un transfert tontine (liées à leur transaction) : jamais confondues avec un dépôt
+            if mi.get("transactionId"):
                 continue
             if (mi.get("date") or "")[:10] != jour:
                 continue
@@ -3591,12 +4231,13 @@ def _appliquer_correction_mise_tontine(
     # Contrôle du cycle après correction
     carnet_maj = next(c for c in d["carnets"] if c["id"] == carnet["id"])
     nets = M.carreaux_nets(carnet_maj, d["mises"], cycle)
+    deposes = M.carreaux_deposes(carnet_maj, d["mises"], cycle)
     if nets < 0:
         return "Correction impossible : trop de carreaux retirés sur ce cycle.", d
-    if nets > par_cycle:
+    if deposes > par_cycle:
         return (
-            f"Correction impossible : le cycle {cycle} dépasserait {par_cycle} carreaux "
-            f"(actuellement {nets}).",
+            f"Correction impossible : le cycle {cycle} dépasserait {par_cycle} carreaux cotisés "
+            f"(actuellement {deposes}).",
             d,
         )
 
@@ -4089,9 +4730,9 @@ def _appliquer_annulation_mise_tontine(
     nets = M.carreaux_nets(carnet_maj, d["mises"], cycle)
     if nets < 0:
         return "Annulation impossible : trop de carreaux déjà retirés sur ce cycle.", d
-    if nets > par_cycle:
+    if M.carreaux_deposes(carnet_maj, d["mises"], cycle) > par_cycle:
         return (
-            f"Annulation impossible : le cycle {cycle} dépasserait {par_cycle} carreaux.",
+            f"Annulation impossible : le cycle {cycle} dépasserait {par_cycle} carreaux cotisés.",
             d,
         )
     d = _recalculer_cycle_actuel_carnet(d, carnet["id"])
@@ -4187,8 +4828,27 @@ def annuler_transaction(d, u, p):
             if err2:
                 return {"erreur": err2}
 
+    elif typ == "transfert_tontine_tontine":
+        err_t, d = _annuler_mises_transfert(d, tx)
+        if err_t:
+            return {"erreur": err_t}
+
+    elif typ == "transfert_compte_tontine":
+        err_t, d = _annuler_mises_transfert(d, tx)
+        if err_t:
+            return {"erreur": err_t}
+        m_num = re.match(r"Transfert compte\s+(B[0-9]+)", tx.get("description") or "")
+        source = next((c for c in d["comptes"] if m_num and c.get("numero") == m_num.group(1)), None)
+        if not source:
+            return {"erreur": "Compte source du transfert introuvable (supprimé ?)."}
+        mvt = _trouver_mouvement_compte(d, compte_id=source["id"], type_mvt="retrait", montant=montant, date_tx=date_tx)
+        if not mvt:
+            return {"erreur": "Mouvement du compte source introuvable."}
+        d["mouvements"] = [mv for mv in d["mouvements"] if mv["id"] != mvt["id"]]
+        d = _recalculer_solde_compte_client(d, source["id"])
+
     elif _infos_cloture_tx(tx):
-        # Clôture anticipée : on rend les mises au cycle et on le rouvre
+        # Clôture anticipée : on rouvre le cycle (et, si elle était avec retrait, on lui rend ses mises)
         numero, cycle_clos = _infos_cloture_tx(tx)
         carnet = next(
             (c for c in d["carnets"] if c.get("clientId") == client_id and c.get("numero") == numero), None
@@ -4201,21 +4861,22 @@ def annuler_transaction(d, u, p):
             for mi in d["mises"]
         ):
             return {"erreur": "Annulation impossible : des dépôts ont déjà été faits sur les cycles suivants."}
-        mi = next(
-            (
-                x
-                for x in d["mises"]
-                if x.get("carnetId") == carnet["id"]
-                and int(x.get("cycle") or 0) == cycle_clos
-                and int(x.get("nombreMises") or 0) < 0
-                and abs(float(x.get("montant") or 0) + montant) < 0.005
-                and (x.get("date") or "")[:10] == date_tx[:10]
-            ),
-            None,
-        )
-        if not mi:
-            return {"erreur": "Mises liées à la clôture introuvables."}
-        d["mises"] = [x for x in d["mises"] if x["id"] != mi["id"]]
+        if typ == "retrait_tontine":
+            mi = next(
+                (
+                    x
+                    for x in d["mises"]
+                    if x.get("carnetId") == carnet["id"]
+                    and int(x.get("cycle") or 0) == cycle_clos
+                    and int(x.get("nombreMises") or 0) < 0
+                    and abs(float(x.get("montant") or 0) + montant) < 0.005
+                    and (x.get("date") or "")[:10] == date_tx[:10]
+                ),
+                None,
+            )
+            if not mi:
+                return {"erreur": "Mises liées à la clôture introuvables."}
+            d["mises"] = [x for x in d["mises"] if x["id"] != mi["id"]]
         d["carnets"] = [
             {
                 **c,
@@ -4377,7 +5038,11 @@ ACTIONS = {
     "retraitCycle": retrait_cycle,
     "transfertTontineCompte": transfert_tontine_compte,
     "transfertCompteCompte": transfert_compte_compte,
+    "transfertTontineTontine": transfert_tontine_tontine,
+    "transfertCompteTontine": transfert_compte_tontine,
     "cloturerCycle": cloturer_cycle,
+    "corrigerJourneeCaisse": corriger_journee_caisse,
+    "rouvrirJourneeCaisse": rouvrir_journee_caisse,
     "basculerVerrouCarnet": basculer_verrou_carnet,
     "basculerRetraitCarnetAdmin": basculer_retrait_carnet_admin,
     "supprimerCarnet": supprimer_carnet,

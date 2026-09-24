@@ -4,7 +4,14 @@ import { MODULE_CREDITS_ACTIF } from '../config'
 import { ApiError } from '../api/client'
 import { useStore } from '../store'
 import type { Transaction, TypeTransaction } from '../types'
-import { estOperationCaisse, estTransactionActive, estTransfertInterne, LIBELLES_TYPE, TYPES_SORTIE } from '../metier'
+import {
+  estOperationCaisse,
+  estOperationNeutre,
+  estTransactionActive,
+  estTransfertInterne,
+  LIBELLES_TYPE,
+  TYPES_SORTIE,
+} from '../metier'
 import { exporterCsv, formatDateHeure, formatMontant } from '../utils'
 import { EnTetePage, EtatVide, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
@@ -23,7 +30,14 @@ const TYPES_MODIFIABLES = new Set<TypeTransaction>([
   'transfert_compte_compte',
 ])
 
-const TYPES_ANNULABLES = new Set<TypeTransaction>([...TYPES_MODIFIABLES, 'vente_carnet'])
+const TYPES_ANNULABLES = new Set<TypeTransaction>([
+  ...TYPES_MODIFIABLES,
+  'vente_carnet',
+  'cloture_cycle',
+  // Transferts vers la tontine : annulables, pas de correction (annuler puis refaire)
+  'transfert_tontine_tontine',
+  'transfert_compte_tontine',
+])
 
 export default function Transactions() {
   const {
@@ -90,7 +104,7 @@ export default function Transactions() {
     const q = recherche.trim().toLowerCase()
     return data.transactions.filter((t) => {
       // Périmètre caisse selon le rôle
-      if (!estOperationCaisse(t.type) && !estTransfertInterne(t.type)) return false
+      if (!estOperationCaisse(t.type) && !estOperationNeutre(t.type)) return false
       if (estCaissier) {
         if (!employeConnecte || t.operateurId !== employeConnecte.id) return false
       } else if (estChefAgence && agenceFiltreOperations) {
@@ -124,7 +138,7 @@ export default function Transactions() {
     let sorties = 0
     transactionsFiltrees.forEach((t) => {
       if (!estTransactionActive(t)) return
-      if (estTransfertInterne(t.type)) return
+      if (estOperationNeutre(t.type)) return
       if (TYPES_SORTIE.includes(t.type)) sorties += t.montant
       else entrees += t.montant
     })
@@ -139,7 +153,13 @@ export default function Transactions() {
         LIBELLES_TYPE[t.type],
         t.description,
         t.montant,
-        estTransfertInterne(t.type) ? 'Transfert' : TYPES_SORTIE.includes(t.type) ? 'Sortie' : 'Entrée',
+        t.type === 'cloture_cycle'
+          ? 'Clôture'
+          : estTransfertInterne(t.type)
+            ? 'Transfert'
+            : TYPES_SORTIE.includes(t.type)
+              ? 'Sortie'
+              : 'Entrée',
         t.operateur,
         t.annulee ? 'oui' : '',
       ]),
@@ -228,8 +248,10 @@ export default function Transactions() {
       setTxAnnulation(null)
       await alerter(
         'Transaction annulée',
-        `L'opération de ${formatMontant(txAnnulation.montant)} a été contrepassée.\n` +
-          'Le compte, le carnet et la caisse ont été reculés. La ligne reste visible au journal.',
+        txAnnulation.type === 'cloture_cycle'
+          ? 'La clôture a été annulée : le mois redevient le mois en cours. La ligne reste visible au journal.'
+          : `L'opération de ${formatMontant(txAnnulation.montant)} a été contrepassée.\n` +
+              'Le compte, le carnet et la caisse ont été reculés. La ligne reste visible au journal.',
       )
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "Impossible d'annuler la transaction."
@@ -298,6 +320,7 @@ export default function Transactions() {
             <tbody className="divide-y divide-slate-100">
               {transactionsFiltrees.map((t) => {
                 const transfert = estTransfertInterne(t.type)
+                const neutre = t.type === 'cloture_cycle'
                 const sortie = TYPES_SORTIE.includes(t.type)
                 const annulee = !!t.annulee
                 return (
@@ -318,22 +341,24 @@ export default function Transactions() {
                         className={`inline-flex items-center gap-1 font-bold ${
                           annulee
                             ? 'text-slate-400 line-through'
-                            : transfert
-                              ? 'text-sky-700'
-                              : sortie
-                                ? 'text-rose-600'
-                                : 'text-emerald-600'
+                            : neutre
+                              ? 'text-slate-500'
+                              : transfert
+                                ? 'text-sky-700'
+                                : sortie
+                                  ? 'text-rose-600'
+                                  : 'text-emerald-600'
                         }`}
                       >
-                        {transfert ? (
+                        {neutre ? null : transfert ? (
                           <ArrowRightLeft className="h-3.5 w-3.5" />
                         ) : sortie ? (
                           <ArrowUpRight className="h-3.5 w-3.5" />
                         ) : (
                           <ArrowDownRight className="h-3.5 w-3.5" />
                         )}
-                        {transfert ? '' : sortie ? '-' : '+'}
-                        {formatMontant(t.montant)}
+                        {transfert || neutre ? '' : sortie ? '-' : '+'}
+                        {t.type === 'cloture_cycle' ? '—' : formatMontant(t.montant)}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">
@@ -435,11 +460,23 @@ export default function Transactions() {
           <form onSubmit={validerAnnulation} className="space-y-4">
             <div className="rounded-xl bg-rose-50 p-3 text-sm text-rose-900">
               <p>
-                Contrepasser <strong>{LIBELLES_TYPE[txAnnulation.type]}</strong> de{' '}
-                <strong>{formatMontant(txAnnulation.montant)}</strong>.
+                {txAnnulation.type === 'cloture_cycle' ? (
+                  <>
+                    Annuler la <strong>clôture de cycle sans retrait</strong>.
+                  </>
+                ) : (
+                  <>
+                    Contrepasser <strong>{LIBELLES_TYPE[txAnnulation.type]}</strong> de{' '}
+                    <strong>{formatMontant(txAnnulation.montant)}</strong>.
+                  </>
+                )}
               </p>
               <p className="mt-1 truncate text-rose-800">{txAnnulation.description}</p>
               <p className="mt-2 text-xs text-rose-700">
+                {txAnnulation.type === 'cloture_cycle' ||
+                txAnnulation.description.toLowerCase().includes('clôture anticipée')
+                  ? 'Le mois clôturé redevient le mois en cours (refusé si des dépôts ont déjà été faits sur le mois suivant). '
+                  : ''}
                 Le compte, le carnet et la caisse sont reculés. La ligne reste au journal, barrée.
                 Ce n’est pas une correction de montant.
               </p>

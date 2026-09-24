@@ -32,6 +32,9 @@ export const LIBELLES_TYPE: Record<TypeTransaction, string> = {
   retrait_compte: 'Retrait',
   transfert_tontine_compte: 'Transfert tontine → compte',
   transfert_compte_compte: 'Transfert compte → compte',
+  transfert_tontine_tontine: 'Transfert tontine → tontine',
+  transfert_compte_tontine: 'Transfert compte → tontine',
+  cloture_cycle: 'Clôture de cycle (sans retrait)',
   octroi_credit: 'Octroi de crédit',
   remboursement_credit: 'Remboursement crédit',
   part_sociale: 'Part sociale',
@@ -48,6 +51,8 @@ export const TYPES_COMPTE_TONTINE: TypeTransaction[] = [
   'commission_tontine',
   'complement_mise',
   'transfert_tontine_compte',
+  'transfert_tontine_tontine',
+  'transfert_compte_tontine',
 ]
 
 /** Sorties du carnet tontine (retrait espèces ou virement vers compte banque). */
@@ -61,10 +66,21 @@ export const TYPES_COMPTE_BANQUE: TypeTransaction[] = [
   'droit_adhesion',
   'transfert_tontine_compte',
   'transfert_compte_compte',
+  'transfert_compte_tontine',
 ]
 
 export function estTransfertInterne(type: TypeTransaction): boolean {
-  return type === 'transfert_tontine_compte' || type === 'transfert_compte_compte'
+  return (
+    type === 'transfert_tontine_compte' ||
+    type === 'transfert_compte_compte' ||
+    type === 'transfert_tontine_tontine' ||
+    type === 'transfert_compte_tontine'
+  )
+}
+
+/** Ligne de journal sans entrée ni sortie d'argent (transfert interne, clôture de cycle sans retrait). */
+export function estOperationNeutre(type: TypeTransaction): boolean {
+  return estTransfertInterne(type) || type === 'cloture_cycle'
 }
 
 /** Types d'opérations qui alimentent le compte de caisse d'un caissier. */
@@ -239,9 +255,10 @@ export function cycleCourantEffectif(
   const parCycle = carnet.misesParCycle
   let cycle = carnet.cycleActuel
   let garde = 0
+  // Plein = 31 mises cotisées (même retirées ensuite) : un mois payé ne redevient pas « en cours »
   while (
     garde < 200 &&
-    (estCycleCloture(carnet, cycle) || carreauxNets(carnet as CarnetTontine, mises, cycle) >= parCycle)
+    (estCycleCloture(carnet, cycle) || carreauxDeposes(carnet as CarnetTontine, mises, cycle) >= parCycle)
   ) {
     cycle += 1
     garde += 1
@@ -563,7 +580,8 @@ export function repartirDepotSurCycles(
     if (tranches.length >= MAX_CYCLES_DEPOT) {
       return { ok: false, erreur: `Dépôt trop important : au plus ${MAX_CYCLES_DEPOT} cycles d’un coup.` }
     }
-    const payeesAvant = carreauxNets(carnet as CarnetTontine, mises, cycle)
+    // Cases déjà cotisées (un retrait ne libère pas de case : 31 cotisations max par mois)
+    const payeesAvant = carreauxDeposes(carnet as CarnetTontine, mises, cycle)
     const restants = parCycle - payeesAvant
     if (restants <= 0 || estCycleCloture(carnet, cycle)) {
       cycle += 1

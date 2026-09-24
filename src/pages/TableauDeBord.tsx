@@ -509,10 +509,14 @@ export default function TableauDeBord() {
                     {formatDate(t.date)} — par {t.operateur}
                   </p>
                 </div>
-                <div className={`text-sm font-bold ${sortie ? 'text-rose-600' : 'text-emerald-600'}`}>
-                  {sortie ? '-' : '+'}
-                  {formatMontant(t.montant)}
-                </div>
+                {t.type === 'cloture_cycle' ? (
+                  <div className="text-sm font-bold text-slate-500">Clôture</div>
+                ) : (
+                  <div className={`text-sm font-bold ${sortie ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {sortie ? '-' : '+'}
+                    {formatMontant(t.montant)}
+                  </div>
+                )}
               </div>
             )
           })}

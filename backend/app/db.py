@@ -238,6 +238,27 @@ def migrate_carnets_cycles_clotures(conn) -> None:
         conn.execute(text("ALTER TABLE carnets ADD COLUMN cycles_clotures_json TEXT DEFAULT '[]'"))
 
 
+def migrate_caisse_corrections(conn) -> None:
+    """Historique des corrections (ouverture / montant compté) sur ouvertures et arrêts de caisse."""
+    for table in ("ouvertures_caisse", "arrets_caisse"):
+        try:
+            cols = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()}
+        except Exception:  # noqa: BLE001
+            continue
+        if cols and "corrections_json" not in cols:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN corrections_json TEXT DEFAULT '[]'"))
+
+
+def migrate_mises_transaction(conn) -> None:
+    """Lien mise -> transaction (transferts tontine), pour une annulation fiable."""
+    try:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(mises)")).fetchall()}
+    except Exception:  # noqa: BLE001
+        return
+    if cols and "transaction_id" not in cols:
+        conn.execute(text("ALTER TABLE mises ADD COLUMN transaction_id VARCHAR"))
+
+
 def migrate_clients_origine_tontine(conn) -> None:
     """Client ancien (papier) : origine_tontine + reprise_papier sur les carnets."""
     try:

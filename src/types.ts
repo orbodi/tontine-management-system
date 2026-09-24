@@ -196,6 +196,8 @@ export interface MiseTontine {
   nombreMises: number
   montant: number
   date: string
+  /** Transaction à l’origine de la ligne (transferts vers / depuis la tontine). */
+  transactionId?: string | null
 }
 
 // ---------- Comptes à solde (courant et épargne) — n° B0001 ----------
@@ -346,6 +348,8 @@ export interface OuvertureCaisse {
   ouvertParId: string
   ouvertParNom: string
   note?: string
+  /** Corrections a posteriori (admin) du solde d’ouverture. */
+  corrections?: CorrectionJourneeCaisse[]
 }
 
 export interface ArretCaisse {
@@ -382,6 +386,30 @@ export interface ArretCaisse {
   /** Admin ou chef d'agence ayant validé l'arrêt. */
   valideParId?: string
   valideParNom?: string
+  /** Corrections a posteriori (admin) de l’ouverture et / ou du montant compté. */
+  corrections?: CorrectionJourneeCaisse[]
+}
+
+/**
+ * Historique d’une journée de caisse : correction de l’ouverture / du compté par l’admin,
+ * ou réouverture pour complément de saisie (les opérations du jour ne changent pas).
+ */
+export interface CorrectionJourneeCaisse {
+  /** Absent = correction. */
+  type?: 'correction' | 'reouverture'
+  date: string
+  parId: string
+  parNom: string
+  motif: string
+  ouvertureAvant: number
+  ouvertureApres: number
+  /** Présents seulement si la journée était clôturée. */
+  compteAvant?: number
+  compteApres?: number
+  theoriqueAvant?: number
+  theoriqueApres?: number
+  ecartAvant?: number
+  ecartApres?: number
 }
 
 // ---------- Audit ----------
@@ -407,6 +435,9 @@ export type TypeTransaction =
   | 'retrait_compte'
   | 'transfert_tontine_compte'
   | 'transfert_compte_compte'
+  | 'transfert_tontine_tontine'
+  | 'transfert_compte_tontine'
+  | 'cloture_cycle'
   | 'octroi_credit'
   | 'remboursement_credit'
   | 'part_sociale'

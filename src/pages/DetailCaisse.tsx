@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Banknote, DoorOpen, Scale, Snowflake, Undo2 } from 'lucide-react'
+import { ArrowLeft, Banknote, DoorOpen, Pencil, RotateCcw, Scale, Snowflake, Undo2 } from 'lucide-react'
 import { useStore } from '../store'
 import {
   aujourdHuiIso,
@@ -51,6 +51,8 @@ export default function DetailCaisse() {
     alimenterCompteCaisse,
     gelerCompteCaisse,
     regulariserCumulCompteCaisse,
+    corrigerJourneeCaisse,
+    rouvrirJourneeCaisse,
   } = useStore()
   const { alerter, confirmer } = useConfirmation()
   const [modaleOuverture, setModaleOuverture] = useState(false)
@@ -72,6 +74,24 @@ export default function DetailCaisse() {
   const [confirmationGel, setConfirmationGel] = useState('')
   const [erreurGel, setErreurGel] = useState('')
   const [jourCibleCloture, setJourCibleCloture] = useState(aujourdHuiIso)
+  // Correction admin d'une journée (ouverture et / ou montant compté)
+  const [correction, setCorrection] = useState<{
+    journee: string
+    ouverture: number
+    /** Présents si la journée est clôturée. */
+    compte?: number
+    theorique?: number
+  } | null>(null)
+  const [corrOuverture, setCorrOuverture] = useState('')
+  const [corrCompte, setCorrCompte] = useState('')
+  const [corrMotif, setCorrMotif] = useState('')
+  const [corrErreur, setCorrErreur] = useState('')
+  const [corrEnvoi, setCorrEnvoi] = useState(false)
+  // Réouverture d'une journée clôturée (complément de saisie)
+  const [reouverture, setReouverture] = useState<string | null>(null)
+  const [reouvMotif, setReouvMotif] = useState('')
+  const [reouvErreur, setReouvErreur] = useState('')
+  const [reouvEnvoi, setReouvEnvoi] = useState(false)
 
   const employe = data.employes.find((e) => e.id === employeId)
   const titulaireCaisse =
@@ -153,8 +173,19 @@ export default function DetailCaisse() {
     peutGerer && !!situationJour && !situationJour.ouverte && !situationJour.cloturee
   const peutCloturerAujourdhui =
     peutGerer && !!situationJour && situationJour.ouverte && !situationJour.cloturee
+  /** Une journée ne peut être clôturée que si la caisse de l'agence a été ouverte à cette date. */
+  const journeeCaisseOuverte = (jour: string) =>
+    !!employe &&
+    (data.ouverturesCaisse ?? []).some((o) => o.agenceId === employe.agenceId && o.journee === jour)
   const ouvrirModaleCloture = (jour: string) => {
     if (!employe) return
+    if (!journeeCaisseOuverte(jour)) {
+      void alerter(
+        'Clôture impossible',
+        `Aucune ouverture de caisse le ${formatDate(jour + 'T12:00:00')} : cette journée ne peut pas être clôturée.`,
+      )
+      return
+    }
     const sit = situationCaisse(
       employe.id,
       data.transactions,
@@ -179,6 +210,98 @@ export default function DetailCaisse() {
     if (!employe) return []
     return data.arretsCaisse.filter((a) => a.agenceId === employe.agenceId)
   }, [employe, data.arretsCaisse])
+
+  /** Admin : corriger l'ouverture (et le montant compté si la journée est clôturée). */
+  const ouvrirCorrection = (journee: string) => {
+    if (!employe) return
+    const ouverture = (data.ouverturesCaisse ?? []).find(
+      (o) => o.agenceId === employe.agenceId && o.journee === journee,
+    )
+    const arret = data.arretsCaisse.find((a) => a.agenceId === employe.agenceId && a.journee === journee)
+    if (!ouverture) {
+      void alerter('Correction impossible', `Aucune ouverture de caisse le ${formatDate(journee + 'T12:00:00')}.`)
+      return
+    }
+    setCorrection({
+      journee,
+      ouverture: ouverture.soldeOuverture,
+      compte: arret?.montantCompte,
+      theorique: arret?.soldeTheorique,
+    })
+    setCorrOuverture(String(ouverture.soldeOuverture))
+    setCorrCompte(arret ? String(arret.montantCompte) : '')
+    setCorrMotif('')
+    setCorrErreur('')
+  }
+
+  const ouvrirReouverture = (journee: string) => {
+    setReouverture(journee)
+    setReouvMotif('')
+    setReouvErreur('')
+  }
+
+  const validerReouverture = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!employe || !reouverture) return
+    if (!reouvMotif.trim()) {
+      setReouvErreur('Le motif est obligatoire.')
+      return
+    }
+    setReouvEnvoi(true)
+    const err = await rouvrirJourneeCaisse(employe.id, reouverture, reouvMotif.trim())
+    setReouvEnvoi(false)
+    if (err) {
+      setReouvErreur(err)
+      return
+    }
+    const jour = reouverture
+    setReouverture(null)
+    await alerter(
+      'Journée rouverte',
+      `La journée du ${formatDate(jour + 'T12:00:00')} est de nouveau ouverte. Ses opérations sont conservées.\n` +
+        'Faites le complément de saisie (collecte de ce jour), puis clôturez-la à nouveau avec le nouveau comptage.',
+    )
+  }
+
+  const validerCorrection = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!employe || !correction) return
+    const ouv = Number(corrOuverture)
+    const compte = correction.compte !== undefined ? Number(corrCompte) : undefined
+    if (corrOuverture === '' || !Number.isFinite(ouv) || ouv < 0) {
+      setCorrErreur('Solde d’ouverture invalide.')
+      return
+    }
+    if (compte !== undefined && (corrCompte === '' || !Number.isFinite(compte) || compte < 0)) {
+      setCorrErreur('Montant compté invalide.')
+      return
+    }
+    if (!corrMotif.trim()) {
+      setCorrErreur('Le motif est obligatoire.')
+      return
+    }
+    const montants: { soldeOuverture?: number; montantCompte?: number } = {}
+    if (ouv !== correction.ouverture) montants.soldeOuverture = ouv
+    if (compte !== undefined && compte !== correction.compte) montants.montantCompte = compte
+    if (Object.keys(montants).length === 0) {
+      setCorrErreur('Aucun changement : les montants sont identiques.')
+      return
+    }
+    setCorrEnvoi(true)
+    const err = await corrigerJourneeCaisse(employe.id, correction.journee, montants, corrMotif.trim())
+    setCorrEnvoi(false)
+    if (err) {
+      setCorrErreur(err)
+      return
+    }
+    setCorrection(null)
+    await alerter(
+      'Journée corrigée',
+      `La journée du ${formatDate(correction.journee + 'T12:00:00')} a été corrigée.` +
+        (correction.compte !== undefined ? ' Théorique, écart et cumuls ont été recalculés.' : '') +
+        ' Les opérations du jour ne changent pas.',
+    )
+  }
 
   const validerOuverture = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -492,6 +615,26 @@ export default function DetailCaisse() {
                   Annuler l’ouverture
                 </button>
               )}
+              {estAdmin && peutCloturerAujourdhui && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => ouvrirCorrection(jourOuverture)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Corriger l’ouverture
+                </button>
+              )}
+              {peutGerer && situationJour?.cloturee && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => ouvrirReouverture(jourOuverture)}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Rouvrir la journée
+                </button>
+              )}
               {peutGerer && situationJour?.cloturee && (
                 <button
                   type="button"
@@ -563,28 +706,45 @@ export default function DetailCaisse() {
           </p>
           {peutGerer && (
             <div className="mt-2 flex flex-wrap gap-2">
-              {joursRattrapage.map((j) => (
-                <div key={j} className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="btn-secondary !py-1.5 text-xs"
-                  onClick={() => ouvrirModaleCloture(j)}
-                >
-                  Clôturer le {formatDate(j + 'T12:00:00')}
-                </button>
-                {(data.ouverturesCaisse ?? []).some(
-                  (o) => o.agenceId === employe.agenceId && o.journee === j,
-                ) && (
-                  <button
-                    type="button"
-                    className="btn-secondary !py-1.5 text-xs"
-                    onClick={() => void annulerOuverture(j)}
-                  >
-                    Annuler l’ouverture du {formatDate(j + 'T12:00:00')}
-                  </button>
-                )}
-                </div>
-              ))}
+              {joursRattrapage.map((j) => {
+                // On ne peut clôturer qu'une journée ouverte à cette date (sinon le serveur refuse)
+                const ouverte = journeeCaisseOuverte(j)
+                return (
+                  <div key={j} className="flex flex-wrap items-center gap-2">
+                    {ouverte ? (
+                      <button
+                        type="button"
+                        className="btn-secondary !py-1.5 text-xs"
+                        onClick={() => ouvrirModaleCloture(j)}
+                      >
+                        Clôturer le {formatDate(j + 'T12:00:00')}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-amber-800">
+                        {formatDate(j + 'T12:00:00')} : aucune ouverture de caisse ce jour-là, clôture impossible.
+                      </span>
+                    )}
+                    {ouverte && (
+                      <button
+                        type="button"
+                        className="btn-secondary !py-1.5 text-xs"
+                        onClick={() => void annulerOuverture(j)}
+                      >
+                        Annuler l’ouverture du {formatDate(j + 'T12:00:00')}
+                      </button>
+                    )}
+                    {estAdmin && ouverte && (
+                      <button
+                        type="button"
+                        className="btn-secondary !py-1.5 text-xs"
+                        onClick={() => ouvrirCorrection(j)}
+                      >
+                        Corriger l’ouverture du {formatDate(j + 'T12:00:00')}
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -676,6 +836,8 @@ export default function DetailCaisse() {
           arrets={arretsHistorique}
           titre="État et historique des clôtures"
           onAnnulerCloture={peutGerer ? (a) => void annulerCloture(a.journee) : undefined}
+          onCorriger={estAdmin ? (a) => ouvrirCorrection(a.journee) : undefined}
+          onRouvrir={peutGerer ? (a) => ouvrirReouverture(a.journee) : undefined}
         />
       </div>
 
@@ -998,6 +1160,147 @@ export default function DetailCaisse() {
               </button>
               <button type="submit" className="btn-primary">
                 Valider la régularisation
+              </button>
+            </div>
+          </form>
+        </Modale>
+      )}
+      {estAdmin && (
+        <Modale
+          titre={correction ? `Corriger la journée du ${formatDate(correction.journee + 'T12:00:00')}` : ''}
+          ouverte={correction !== null}
+          onFermer={() => setCorrection(null)}
+        >
+          {correction &&
+            (() => {
+              const ouv = Number(corrOuverture) || 0
+              const deltaOuv = ouv - correction.ouverture
+              const cloturee = correction.compte !== undefined
+              const theoriqueApres = (correction.theorique ?? 0) + deltaOuv
+              const ecartAvant = (correction.compte ?? 0) - (correction.theorique ?? 0)
+              const ecartApres = (Number(corrCompte) || 0) - theoriqueApres
+              const soldeActuel = compteCaisse?.solde ?? 0
+              return (
+                <form onSubmit={validerCorrection} className="space-y-4">
+                  <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 ring-1 ring-slate-100">
+                    Les opérations du jour ne sont pas modifiées.{' '}
+                    {cloturee
+                      ? 'Le solde théorique, l’écart et les cumuls manquant / surplus sont recalculés.'
+                      : 'Journée encore ouverte : seule l’ouverture peut être corrigée.'}{' '}
+                    La correction est conservée dans l’historique.
+                  </p>
+                  <div className={`grid gap-3 ${cloturee ? 'sm:grid-cols-2' : ''}`}>
+                    <div>
+                      <label className="label">Solde d’ouverture (FCFA) *</label>
+                      <input
+                        className="input"
+                        type="number"
+                        min={0}
+                        required
+                        value={corrOuverture}
+                        onChange={(e) => setCorrOuverture(e.target.value)}
+                      />
+                      <p className="mt-1 text-xs text-slate-500">Actuel : {formatMontant(correction.ouverture)}</p>
+                    </div>
+                    {cloturee && (
+                      <div>
+                        <label className="label">Montant compté à la fermeture (FCFA) *</label>
+                        <input
+                          className="input"
+                          type="number"
+                          min={0}
+                          required
+                          value={corrCompte}
+                          onChange={(e) => setCorrCompte(e.target.value)}
+                        />
+                        <p className="mt-1 text-xs text-slate-500">Actuel : {formatMontant(correction.compte ?? 0)}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3 text-sm ring-1 ring-slate-100">
+                    {cloturee ? (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Fermeture théorique</span>
+                          <span>
+                            {formatMontant(correction.theorique ?? 0)} →{' '}
+                            <strong>{formatMontant(theoriqueApres)}</strong>
+                          </span>
+                        </div>
+                        <div className="mt-1 flex justify-between">
+                          <span className="text-slate-500">Écart</span>
+                          <span className="flex items-center gap-1.5">
+                            <BadgeEcart ecart={ecartAvant} /> → <BadgeEcart ecart={ecartApres} />
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Solde du compte caisse</span>
+                        <span>
+                          {formatMontant(soldeActuel)} → <strong>{formatMontant(soldeActuel + deltaOuv)}</strong>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="label">Motif *</label>
+                    <input
+                      className="input"
+                      required
+                      maxLength={300}
+                      value={corrMotif}
+                      onChange={(e) => setCorrMotif(e.target.value)}
+                      placeholder="Ex. erreur de saisie, recomptage"
+                    />
+                  </div>
+                  {corrErreur && <p className="text-sm font-medium text-rose-600">{corrErreur}</p>}
+                  <div className="flex justify-end gap-2">
+                    <button type="button" className="btn-secondary" onClick={() => setCorrection(null)}>
+                      Annuler
+                    </button>
+                    <button type="submit" className="btn-primary" disabled={corrEnvoi}>
+                      <Pencil className="h-4 w-4" />
+                      {corrEnvoi ? 'Correction…' : 'Enregistrer la correction'}
+                    </button>
+                  </div>
+                </form>
+              )
+            })()}
+        </Modale>
+      )}
+      {peutGerer && (
+        <Modale
+          titre={reouverture ? `Rouvrir la journée du ${formatDate(reouverture + 'T12:00:00')}` : ''}
+          ouverte={reouverture !== null}
+          onFermer={() => setReouverture(null)}
+        >
+          <form onSubmit={validerReouverture} className="space-y-4">
+            <div className="rounded-xl bg-sky-50 p-3 text-sm text-sky-900 ring-1 ring-sky-100">
+              La clôture est retirée (son écart sort des cumuls) mais <strong>les opérations du jour sont
+              conservées</strong>. Vous pourrez faire un complément de saisie sur ce jour, puis le clôturer à
+              nouveau avec un nouveau comptage.
+            </div>
+            <div>
+              <label className="label">Motif *</label>
+              <input
+                className="input"
+                required
+                maxLength={300}
+                autoFocus
+                value={reouvMotif}
+                onChange={(e) => setReouvMotif(e.target.value)}
+                placeholder="Ex. collecte du jour apportée en retard"
+              />
+            </div>
+            {reouvErreur && <p className="text-sm font-medium text-rose-600">{reouvErreur}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-secondary" onClick={() => setReouverture(null)}>
+                Annuler
+              </button>
+              <button type="submit" className="btn-primary" disabled={reouvEnvoi}>
+                <RotateCcw className="h-4 w-4" />
+                {reouvEnvoi ? 'Réouverture…' : 'Rouvrir la journée'}
               </button>
             </div>
           </form>

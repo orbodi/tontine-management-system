@@ -34,6 +34,8 @@ from .db import (
     migrate_transactions_annulation,
     migrate_transactions_client_destination,
     migrate_carnets_cycles_clotures,
+    migrate_caisse_corrections,
+    migrate_mises_transaction,
 )
 from .models.entities import SchemaMigration
 
@@ -177,6 +179,18 @@ MIGRATIONS: tuple[Migration, ...] = (
         kind="schema",
         description="Clôture anticipée d'un cycle tontine (liste des cycles clôturés)",
         apply=migrate_carnets_cycles_clotures,
+    ),
+    Migration(
+        id="013_caisse_corrections",
+        kind="schema",
+        description="Historique des corrections d'ouverture / de fermeture de caisse",
+        apply=migrate_caisse_corrections,
+    ),
+    Migration(
+        id="014_mises_transaction",
+        kind="schema",
+        description="Lien mise -> transaction (transferts tontine -> tontine / compte -> tontine)",
+        apply=migrate_mises_transaction,
     ),
 )
 

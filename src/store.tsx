@@ -131,13 +131,29 @@ interface StoreApi {
     dateCollecte?: string,
   ) => Promise<string | null>
   retraitCycle: (carnetId: string, cycle: number, nombreCarreaux: number) => Promise<string | null>
-  /** Clôture anticipée du cycle en cours : remboursement en espèces puis ouverture du cycle suivant. */
-  cloturerCycle: (carnetId: string, cycle: number) => Promise<string | null>
+  /**
+   * Clôture anticipée du cycle en cours, puis ouverture du cycle suivant.
+   * Avec retrait : mises remises en espèces. Sans retrait : elles restent disponibles sur le cycle clôturé.
+   */
+  cloturerCycle: (carnetId: string, cycle: number, avecRetrait: boolean) => Promise<string | null>
   transfertTontineCompte: (
     carnetId: string,
     cycle: number,
     nombreCarreaux: number,
     compteId: string,
+    motif?: string,
+  ) => Promise<string | null>
+  transfertTontineTontine: (
+    carnetSourceId: string,
+    cycle: number,
+    nombreCarreaux: number,
+    carnetDestinationId: string,
+    motif?: string,
+  ) => Promise<string | null>
+  transfertCompteTontine: (
+    compteSourceId: string,
+    carnetDestinationId: string,
+    montant: number,
     motif?: string,
   ) => Promise<string | null>
   transfertCompteCompte: (
@@ -208,6 +224,18 @@ interface StoreApi {
     employeId: string,
     journee?: string,
   ) => Promise<{ erreur: string | null; operationsAnnulees?: number; comptesAnnules?: number }>
+  /**
+   * Admin : corrige le solde d’ouverture et / ou le montant compté d’une journée de caisse
+   * (écart et cumuls recalculés, opérations inchangées, correction historisée).
+   */
+  corrigerJourneeCaisse: (
+    employeId: string,
+    journee: string,
+    montants: { soldeOuverture?: number; montantCompte?: number },
+    motif: string,
+  ) => Promise<string | null>
+  /** Admin / chef : rouvre une journée clôturée (opérations conservées) pour un complément de saisie. */
+  rouvrirJourneeCaisse: (employeId: string, journee: string, motif: string) => Promise<string | null>
   alimenterCompteCaisse: (employeId: string, montant: number, note?: string) => Promise<string | null>
   gelerCompteCaisse: (employeId: string, motif: string) => Promise<string | null>
   purgerJournalAudit: () => Promise<string | null>
@@ -445,8 +473,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
         return res.erreur ?? null
       },
-      async cloturerCycle(carnetId, cycle) {
-        const res = await muter('cloturerCycle', { carnetId, cycle })
+      async cloturerCycle(carnetId, cycle, avecRetrait) {
+        const res = await muter('cloturerCycle', { carnetId, cycle, avecRetrait })
         return res.erreur ?? null
       },
       async retraitCycle(carnetId, cycle, nombreCarreaux) {
@@ -461,6 +489,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           compteId,
           motif,
         })
+        return res.erreur ?? null
+      },
+      async transfertTontineTontine(carnetSourceId, cycle, nombreCarreaux, carnetDestinationId, motif) {
+        const res = await muter('transfertTontineTontine', { carnetSourceId, cycle, nombreCarreaux, carnetDestinationId, motif })
+        return res.erreur ?? null
+      },
+      async transfertCompteTontine(compteSourceId, carnetDestinationId, montant, motif) {
+        const res = await muter('transfertCompteTontine', { compteSourceId, carnetDestinationId, montant, motif })
         return res.erreur ?? null
       },
       async transfertCompteCompte(compteSourceId, compteDestinationId, montant, motif) {
@@ -604,6 +640,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             typeof res.operationsAnnulees === 'number' ? res.operationsAnnulees : undefined,
           comptesAnnules: typeof res.comptesAnnules === 'number' ? res.comptesAnnules : undefined,
         }
+      },
+      async corrigerJourneeCaisse(employeId, journee, montants, motif) {
+        const res = await muter('corrigerJourneeCaisse', { employeId, journee, ...montants, motif })
+        return res.erreur ?? null
+      },
+      async rouvrirJourneeCaisse(employeId, journee, motif) {
+        const res = await muter('rouvrirJourneeCaisse', { employeId, journee, motif })
+        return res.erreur ?? null
       },
       async alimenterCompteCaisse(employeId, montant, note) {
         const res = await muter('alimenterCompteCaisse', { employeId, montant, note })
