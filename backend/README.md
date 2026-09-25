@@ -68,6 +68,20 @@ Chaque id s’applique **une fois**. Les fonctions restent idempotentes. Après 
 
 `GET /api/health` liste les ids déjà appliqués (`migrations`). Pour ajouter une évolution : une entrée dans `MIGRATIONS` (jamais modifier un id déjà livré). Les copies `data/backups/app-avant-*.db` ne sont pas purgées automatiquement.
 
+## Tests et mesures
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+Les tests (`tests/`) travaillent sur une copie de la base de démo, date et identifiants figés ; ils ne touchent jamais `data/app.db`. Pour mesurer les performances sur un volume réaliste sans données réelles :
+
+```bash
+python scripts/generer_volume.py --base /tmp/volume.db
+python scripts/mesurer_performances.py --base /tmp/volume.db
+```
+
 ## Comptes par défaut (valeurs `.env`)
 
 | Rôle | Identifiant | Mot de passe |
