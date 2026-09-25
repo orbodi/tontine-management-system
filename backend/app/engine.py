@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import math
 import random
 import re
@@ -14,6 +15,8 @@ from . import metier as M
 from .db import verrou_ecriture
 from .repository import load_state, replace_state
 from .seed import seed_database
+
+logger = logging.getLogger("app.engine")
 
 TOUS_DROITS = [
     "gerer_clients",
@@ -267,7 +270,11 @@ def _persist(db: Session, d: dict) -> dict:
             e["motDePasse"] = h
     # Réécriture de toute la base : sous le verrou d'écriture (réentrant, déjà tenu par run_mutation)
     with verrou_ecriture:
-        replace_state(db, d, hash_plain_passwords=True)
+        try:
+            replace_state(db, d, hash_plain_passwords=True)
+        except Exception:
+            db.rollback()  # rien n'est écrit : la base reste telle qu'avant
+            raise
         return _public(load_state(db))
 
 
@@ -890,12 +897,19 @@ def run_mutation(db: Session, current_user_id: str, action: str, payload: dict) 
 
     Toute l'action (lecture -> action -> écriture -> relecture) se fait sous `verrou_ecriture` : deux
     actions simultanées ne peuvent plus lire le même état puis s'écraser l'une l'autre.
+    Si l'enregistrement échoue, la session est annulée (la base reste telle qu'avant l'action) et le
+    front reçoit une erreur au lieu d'une erreur 500.
     """
     with verrou_ecriture:
         # Relire la base, pas le cache de la session : l'employé chargé à l'authentification (avant
         # le verrou) a pu être modifié entre-temps par une autre action.
         db.expire_all()
-        return _executer_mutation(db, current_user_id, action, payload)
+        try:
+            return _executer_mutation(db, current_user_id, action, payload)
+        except Exception:  # noqa: BLE001 — les erreurs des actions elles-mêmes sont déjà renvoyées
+            db.rollback()
+            logger.exception("Action %s : enregistrement impossible", action)
+            return {"erreur": "Enregistrement impossible, réessayez."}
 
 
 def _executer_mutation(db: Session, current_user_id: str, action: str, payload: dict) -> dict[str, Any]:
