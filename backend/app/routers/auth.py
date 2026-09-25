@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..db import get_db
+from ..db import get_db, verrou_ecriture
 from ..deps import current_employe
 from ..repository import employe_public, get_employe_by_identifiant
 from ..security import create_access_token, verify_password
@@ -51,7 +51,9 @@ def login(body: LoginRequest, db: Annotated[Session, Depends(get_db)]) -> TokenR
             type="connexion",
         )
     )
-    db.commit()
+    # INSERT au commit : sous le verrou d'écriture, sinon une action en cours (qui réécrit tout le journal) l'efface
+    with verrou_ecriture:
+        db.commit()
 
     token = create_access_token(emp.id, {"role": emp.role})
     return TokenResponse(access_token=token, employe=employe_public(emp))
@@ -73,7 +75,8 @@ def logout(
             type="deconnexion",
         )
     )
-    db.commit()
+    with verrou_ecriture:  # idem connexion
+        db.commit()
     return {"ok": True}
 
 

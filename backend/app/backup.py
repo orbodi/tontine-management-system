@@ -10,6 +10,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from .db import verrou_ecriture
 from .repository import load_state, replace_state
 
 # Ordre d'export / tables listes
@@ -254,8 +255,10 @@ def import_zip_bytes(db: Session, raw: bytes) -> dict[str, Any]:
     if not data.get("employes"):
         raise ValueError("Sauvegarde incomplete : aucun employe.")
 
-    replace_state(db, data, hash_plain_passwords=True)
-    from .migrations import repair_data_after_replace
+    # Remplace toute la base : sous le verrou d'écriture, comme les actions (voir db.verrou_ecriture)
+    with verrou_ecriture:
+        replace_state(db, data, hash_plain_passwords=True)
+        from .migrations import repair_data_after_replace
 
-    repair_data_after_replace(db)
-    return load_state(db, include_password_hashes=False)
+        repair_data_after_replace(db)
+        return load_state(db, include_password_hashes=False)

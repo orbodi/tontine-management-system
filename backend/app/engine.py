@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from . import metier as M
+from .db import verrou_ecriture
 from .repository import load_state, replace_state
 from .seed import seed_database
 
@@ -264,8 +265,10 @@ def _persist(db: Session, d: dict) -> dict:
         h = e.pop("_passwordHash", None)
         if h:
             e["motDePasse"] = h
-    replace_state(db, d, hash_plain_passwords=True)
-    return _public(load_state(db))
+    # Réécriture de toute la base : sous le verrou d'écriture (réentrant, déjà tenu par run_mutation)
+    with verrou_ecriture:
+        replace_state(db, d, hash_plain_passwords=True)
+        return _public(load_state(db))
 
 
 def _realigner_numeros_clients_carnets(d: dict) -> bool:
@@ -883,6 +886,19 @@ def _verif_solde_sortie(d: dict, u: dict, montant: float) -> str | None:
 
 
 def run_mutation(db: Session, current_user_id: str, action: str, payload: dict) -> dict[str, Any]:
+    """Applique une action puis enregistre et renvoie tout l'état.
+
+    Toute l'action (lecture -> action -> écriture -> relecture) se fait sous `verrou_ecriture` : deux
+    actions simultanées ne peuvent plus lire le même état puis s'écraser l'une l'autre.
+    """
+    with verrou_ecriture:
+        # Relire la base, pas le cache de la session : l'employé chargé à l'authentification (avant
+        # le verrou) a pu être modifié entre-temps par une autre action.
+        db.expire_all()
+        return _executer_mutation(db, current_user_id, action, payload)
+
+
+def _executer_mutation(db: Session, current_user_id: str, action: str, payload: dict) -> dict[str, Any]:
     payload = payload or {}
     if action == "reinitialiserDemo":
         seed_database(db)

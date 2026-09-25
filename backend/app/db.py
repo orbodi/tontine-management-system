@@ -1,9 +1,18 @@
+import threading
 from collections.abc import Generator
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .config import settings
+
+# Verrou d'écriture : chaque action relit tout l'état puis réécrit toute la base (engine.run_mutation ->
+# repository.replace_state). Tous les écrivains de l'état (actions, import CSV, journal des connexions)
+# le prennent, sinon deux écritures simultanées s'écrasent. Réentrant : une action peut en déclencher
+# d'autres (reinitialiserDemo -> repair_data_after_replace -> _persist).
+# Il ne protège qu'UN processus : l'API doit tourner avec un seul worker uvicorn (plusieurs workers, ou
+# plusieurs processus écrivant dans la même base, ne sont pas supportés).
+verrou_ecriture = threading.RLock()
 
 engine = create_engine(
     settings.database_url,
