@@ -1,0 +1,39 @@
+# Contexte de construction des images (deploy/Dockerfile.api, deploy/Dockerfile.front).
+# Rien de secret ni de données de clients ne doit entrer dans une image.
+
+# Git et outils
+.git
+.github
+.claude
+.vscode
+.idea
+
+# Dépendances et sorties locales (réinstallées / recompilées dans l'image)
+node_modules
+dist
+*.tsbuildinfo
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+
+# Secrets et configurations locales
+**/.env
+**/.env.local
+**/.env.*.local
+*.local
+
+# Bases SQLite (vraie base, -wal / -shm, copies) et sauvegardes : jamais dans une image
+**/*.db
+**/*.db-*
+**/*.sqlite*
+backend/data/*.db*
+backend/data/backups
+
+# Inutiles à l'exécution
+backend/tests
+backend/scripts
+backend/requirements-dev.txt
+docs
+*.md
+lancer.bat
