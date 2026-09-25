@@ -2,7 +2,7 @@
 from pathlib import Path
 import json
 
-from pydantic import computed_field
+from pydantic import computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,16 +24,28 @@ _CORS_LAN_REGEX = (
     r")(:\d+)?"
 )
 
+ENVIRONNEMENTS = ("dev", "production")
+_SECRET_KEY_DEV = "dev-secret-change-me-don-de-dieu-poc"
+SECRET_KEY_LONGUEUR_MIN = 32
+# Mots de passe des comptes par défaut (dev), interdits en production
+_MOTS_DE_PASSE_PAR_DEFAUT = ("admin123", "chef123", "caisse123")
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Jamais de SECRET_KEY / mot de passe recopié dans un message d'erreur de configuration
+        hide_input_in_errors=True,
     )
 
+    # « dev » (défaut) ou « production » : en production, la configuration est contrôlée au démarrage
+    # (voir _verifier_production), le CORS se limite à CORS_ORIGINS et la réinitialisation démo est désactivée.
+    environnement: str = "dev"
+
     app_name: str = "DON DE DIEU API"
-    secret_key: str = "dev-secret-change-me-don-de-dieu-poc"
+    secret_key: str = _SECRET_KEY_DEV
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 12
     database_url: str = f"sqlite:///{(DATA_DIR / 'app.db').as_posix()}"
@@ -66,6 +78,47 @@ class Settings(BaseSettings):
     droit_adhesion_montant: float = 2500
     droit_adhesion_promo_montant: float = 500
 
+    @field_validator("environnement")
+    @classmethod
+    def _environnement_connu(cls, valeur: str) -> str:
+        # Une faute de frappe (« prod ») ne doit pas démarrer silencieusement en mode dev
+        valeur = (valeur or "").strip().lower()
+        if valeur not in ENVIRONNEMENTS:
+            raise ValueError("ENVIRONNEMENT doit valoir « dev » ou « production ».")
+        return valeur
+
+    @property
+    def est_production(self) -> bool:
+        return self.environnement == "production"
+
+    @model_validator(mode="after")
+    def _verifier_production(self) -> "Settings":
+        """En production, refuse de démarrer tant qu'un réglage de dev est encore en place."""
+        if not self.est_production:
+            return self
+        problemes: list[str] = []
+        if self.secret_key == _SECRET_KEY_DEV:
+            problemes.append("SECRET_KEY vaut la clé de développement par défaut : générez une clé aléatoire.")
+        elif len(self.secret_key) < SECRET_KEY_LONGUEUR_MIN:
+            problemes.append(f"SECRET_KEY doit faire au moins {SECRET_KEY_LONGUEUR_MIN} caractères.")
+        if self.seed_demo_on_startup:
+            problemes.append("SEED_DEMO_ON_STARTUP doit valoir false (pas de données de démo en production).")
+        if self.create_default_accounts:
+            problemes.append("CREATE_DEFAULT_ACCOUNTS doit valoir false (pas de comptes par défaut en production).")
+        for variable, mot_de_passe in (
+            ("ADMIN_PASSWORD", self.admin_password),
+            ("CHEF_PASSWORD", self.chef_password),
+            ("CAISSE_PASSWORD", self.caisse_password),
+        ):
+            if mot_de_passe in _MOTS_DE_PASSE_PAR_DEFAUT:
+                problemes.append(f"{variable} vaut un mot de passe par défaut ({mot_de_passe}) : remplacez-le.")
+        if problemes:
+            raise ValueError(
+                "Démarrage refusé, configuration de production non sûre (ENVIRONNEMENT=production) :\n- "
+                + "\n- ".join(problemes)
+            )
+        return self
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def cors_origin_list(self) -> list[str]:
@@ -77,8 +130,9 @@ class Settings(BaseSettings):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def cors_origin_regex(self) -> str:
-        return _CORS_LAN_REGEX
+    def cors_origin_regex(self) -> str | None:
+        # En production : seulement les origines explicites de CORS_ORIGINS
+        return None if self.est_production else _CORS_LAN_REGEX
 
 
 settings = Settings()

@@ -68,6 +68,10 @@ def reinitialiser_demo(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, Any]:
     from .. import engine
+    from ..config import settings
+
+    if settings.est_production:
+        raise HTTPException(status_code=403, detail="Réinitialisation de la démo désactivée en production.")
 
     result = engine.run_mutation(db, user["id"], "reinitialiserDemo", {})
     if result.get("erreur"):
