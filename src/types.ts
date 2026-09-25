@@ -395,8 +395,10 @@ export interface ArretCaisse {
  * ou réouverture pour complément de saisie (les opérations du jour ne changent pas).
  */
 export interface CorrectionJourneeCaisse {
-  /** Absent = correction. */
-  type?: 'correction' | 'reouverture'
+  /** Absent = correction. « complement » : opération ajoutée / annulée / corrigée après la clôture. */
+  type?: 'correction' | 'reouverture' | 'complement'
+  /** Complément : effet sur le théorique de la journée. */
+  montant?: number
   date: string
   parId: string
   parNom: string

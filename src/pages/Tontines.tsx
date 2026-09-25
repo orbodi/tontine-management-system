@@ -24,6 +24,7 @@ import {
 import { formatDateHeure, formatMontant, afficherNumeroClient } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
 import { useConfirmation } from '../components/Confirmation'
+import { grouperPar, Pagination, usePagination } from '../components/Pagination'
 
 const TYPES_TX_CARNET: TypeTransaction[] = [
   'vente_carnet',
@@ -138,15 +139,26 @@ export default function Tontines() {
     setModaleOuverture(true)
   }
 
+  // Index construits une seule fois : chaque carte ne relit que les mises de son carnet
+  // et les transactions de son client, au lieu de toute la base.
+  const misesParCarnet = useMemo(() => grouperPar(data.mises, (m) => m.carnetId), [data.mises])
+  const transactionsParClient = useMemo(
+    () => grouperPar(data.transactions, (t) => t.clientId),
+    [data.transactions],
+  )
+  const clientsParId = useMemo(() => new Map(data.clients.map((c) => [c.id, c])), [data.clients])
+  const zonesParId = useMemo(() => new Map(data.zones.map((z) => [z.id, z])), [data.zones])
+  const agencesParId = useMemo(() => new Map(data.agences.map((a) => [a.id, a])), [data.agences])
+
   const carnetsFiltres = useMemo(() => {
     const q = recherche.trim().toLowerCase()
     return data.carnets
       .filter((c) => c.actif)
       .filter((c) => typeFiltre === 'tous' || c.typeCarnet === typeFiltre)
       .filter((c) => {
-        const client = data.clients.find((x) => x.id === c.clientId)
-        const zone = data.zones.find((z) => z.id === c.zoneId)
-        const agence = data.agences.find((a) => a.id === c.agenceId)
+        const client = clientsParId.get(c.clientId)
+        const zone = zonesParId.get(c.zoneId)
+        const agence = agencesParId.get(c.agenceId)
         return (
           !q ||
           c.numero.toLowerCase().includes(q) ||
@@ -159,7 +171,8 @@ export default function Tontines() {
         )
       })
       .sort((a, b) => a.numero.localeCompare(b.numero))
-  }, [data.carnets, data.clients, data.zones, data.agences, recherche, typeFiltre])
+  }, [data.carnets, clientsParId, zonesParId, agencesParId, recherche, typeFiltre])
+  const pagination = usePagination(carnetsFiltres, `${recherche}|${typeFiltre}`)
 
   const carnetSelectionne = carnetSelectionneId
     ? data.carnets.find((c) => c.id === carnetSelectionneId)
@@ -195,12 +208,16 @@ export default function Tontines() {
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [carnetSelectionne, data.transactions, data.mises, estCaissier, employeConnecte])
 
-  const encoursTotal = data.carnets
-    .filter((c) => c.actif)
-    .reduce((s, c) => {
-      const cycles = situationsCycles(c, data.mises, data.transactions)
-      return s + cycles.reduce((x, et) => x + et.nets * c.mise, 0)
-    }, 0)
+  const encoursTotal = useMemo(
+    () =>
+      data.carnets
+        .filter((c) => c.actif)
+        .reduce(
+          (s, c) => s + (misesParCarnet.get(c.id) ?? []).reduce((x, m) => x + m.nombreMises, 0) * c.mise,
+          0,
+        ),
+    [data.carnets, misesParCarnet],
+  )
 
   const creerCarnet = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -320,11 +337,13 @@ export default function Tontines() {
         <EtatVide titre="Aucun carnet" description="Ouvrez un carnet pour commencer." />
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {carnetsFiltres.map((carnet) => {
-            const client = data.clients.find((c) => c.id === carnet.clientId)
+          {pagination.elements.map((carnet) => {
+            const client = clientsParId.get(carnet.clientId)
             if (!client) return null
-            const payees = carreauxDeposes(carnet, data.mises, carnet.cycleActuel)
-            const cycles = situationsCycles(carnet, data.mises, data.transactions)
+            const misesCarnet = misesParCarnet.get(carnet.id) ?? []
+            const transactionsClient = transactionsParClient.get(carnet.clientId) ?? []
+            const payees = carreauxDeposes(carnet, misesCarnet, carnet.cycleActuel)
+            const cycles = situationsCycles(carnet, misesCarnet, transactionsClient)
             const mois = moisDuCycle(carnet, carnet.cycleActuel)
             const passés = cycles.filter((c) => !c.estActuel)
             const dispo = cycles.reduce((s, c) => s + c.montantRetirable, 0)
@@ -356,7 +375,7 @@ export default function Tontines() {
                     <span className={`badge ${STYLES_CARNET[carnet.typeCarnet]}`}>
                       {LIBELLES_CARNET[carnet.typeCarnet]}
                     </span>
-                    {besoinRenouvellementCarnet(carnet, data.mises, data.transactions) ? (
+                    {besoinRenouvellementCarnet(carnet, misesCarnet, transactionsClient) ? (
                       <span className="badge bg-amber-100 text-amber-800">À renouveler</span>
                     ) : anneeCarnet(carnet.cycleActuel) > 1 ? (
                       <span className="badge bg-sky-100 text-sky-800">Renouvelé</span>
@@ -370,8 +389,8 @@ export default function Tontines() {
                   </div>
                   <p className="mt-0.5 font-mono text-xs font-semibold text-brand-700">{carnet.numero}</p>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    {data.agences.find((a) => a.id === carnet.agenceId)?.nom ?? 'Agence'} · Zone{' '}
-                    {data.zones.find((z) => z.id === carnet.zoneId)?.code ?? '—'}
+                    {agencesParId.get(carnet.agenceId)?.nom ?? 'Agence'} · Zone{' '}
+                    {zonesParId.get(carnet.zoneId)?.code ?? '—'}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {mois.label} ({libelleCycleCarnet(carnet.cycleActuel)}) —{' '}
@@ -413,6 +432,7 @@ export default function Tontines() {
           })}
         </div>
       )}
+      <Pagination pagination={pagination} libelle="carnets" />
 
       {carnetSelectionne && clientSelectionneCarnet && (
         <div className="card mt-6 !p-0 overflow-hidden">

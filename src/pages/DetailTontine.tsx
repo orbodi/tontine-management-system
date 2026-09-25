@@ -25,7 +25,6 @@ import {
   cycleCourantEffectif,
   besoinRenouvellementCarnet,
   cycleDansAnnee,
-  dateCollecteParDefaut,
   estPremierCycleRenouvellement,
   LIBELLES_CARNET,
   libelleCycleCarnet,
@@ -59,12 +58,16 @@ function SelectJourCollecte({
   onChange,
   journees,
   zoneId,
+  caisseOuverte,
+  caisseCloturee,
 }: {
   jours: string[]
   value: string
   onChange: (v: string) => void
   journees: JourneeCompteZone[]
   zoneId: string
+  caisseOuverte: (jour: string) => boolean
+  caisseCloturee: (jour: string) => boolean
 }) {
   const auj = aujourdHuiIso()
   if (jours.length === 0) return null
@@ -72,19 +75,27 @@ function SelectJourCollecte({
     <div>
       <label className="label">Collecte du *</label>
       <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="" disabled>
+          — Choisir la journée de collecte —
+        </option>
         {jours.map((j) => {
           const jz = journeeZoneDuJour(journees, zoneId, j)
+          const ouverte = caisseOuverte(j)
           return (
-            <option key={j} value={j}>
+            <option key={j} value={j} disabled={!ouverte}>
               {libelleJourCollecte(j, auj)}
               {jz ? ` — réel ${formatMontant(jz.montantReel)}` : ''}
+              {!ouverte ? ' — caisse non ouverte' : caisseCloturee(j) ? ' — caisse clôturée' : ''}
             </option>
           )
         })}
       </select>
       <p className="mt-1 text-xs text-slate-400">
-        Le dépôt alimente le théorique de cette journée zone. La saisie se fait depuis la caisse
-        d’aujourd’hui.
+        Toutes les collectes de zone encore ouvertes sont listées ; celles dont la caisse n’est pas
+        ouverte sont grisées (ouvrez d’abord la caisse de ce jour). L’opération est enregistrée à la
+        date choisie : elle alimente le théorique de cette journée zone et la caisse de ce jour-là. Si
+        cette caisse est déjà clôturée, seule cette journée est recalculée (théorique, écart, cumuls) :
+        son montant compté et la caisse actuelle ne changent pas.
       </p>
     </div>
   )
@@ -140,24 +151,46 @@ export default function DetailTontine() {
     ? joursCollecteSaisissables(data.journeesCompteZone, carnet.zoneId, aujourdhui)
     : []
   // Dépôt / renouvellement / complément sont datés du jour de collecte : la caisse de l'agence
-  // doit être ouverte et non clôturée ce jour-là (le serveur applique la même règle).
+  // doit avoir été ouverte ce jour-là (le serveur applique la même règle). Déjà clôturée : accepté,
+  // le serveur recalcule l'arrêt de ce jour seulement.
   const caisseOuverteLe = (jour: string) =>
     !!carnet &&
-    (data.ouverturesCaisse ?? []).some((o) => o.agenceId === carnet.agenceId && o.journee === jour) &&
-    !data.arretsCaisse.some((a) => a.agenceId === carnet.agenceId && a.journee === jour)
+    (data.ouverturesCaisse ?? []).some((o) => o.agenceId === carnet.agenceId && o.journee === jour)
+  const arretCaisseLe = (jour: string) =>
+    carnet ? data.arretsCaisse.find((a) => a.agenceId === carnet.agenceId && a.journee === jour) : undefined
+  const caisseClotureeLe = (jour: string) => !!arretCaisseLe(jour)
   const joursSaisissables = joursZoneSaisissables.filter(caisseOuverteLe)
   const joursSansCaisse = joursZoneSaisissables.filter((j) => !caisseOuverteLe(j))
   const collecteOuverte = joursSaisissables.length > 0
   const messageCollecteFermee =
     joursSansCaisse.length > 0
-      ? `Caisse non ouverte (ou clôturée) le ${joursSansCaisse
+      ? `Caisse non ouverte le ${joursSansCaisse
           .map((j) => formatDate(j + 'T12:00:00'))
-          .join(', ')} : ouvrez la caisse du jour, ou rouvrez la journée pour un complément de saisie.`
+          .join(', ')} : ouvrez d’abord la caisse de ce jour.`
       : 'Saisissez d’abord le montant réel collecté (journée du jour ou journée antérieure encore ouverte)'
   const journeeAujourdhui = carnet
     ? journeeZoneDuJour(data.journeesCompteZone, carnet.zoneId, aujourdhui)
     : undefined
   const collecteAujourdhuiCloturee = !!journeeAujourdhui?.cloturee
+  // Au moins une collecte de zone ouverte : le formulaire s'ouvre et liste toutes les journées
+  const collecteZoneOuverte = joursZoneSaisissables.length > 0
+  // Présélection : aujourd'hui, sinon la collecte la plus récente dont la caisse est ouverte et non
+  // clôturée ; jamais une journée de caisse clôturée (l'agent la choisit lui-même). Sinon aucune.
+  const jourCollecteParDefaut =
+    [aujourdhui, ...joursSaisissables].find((j) => joursSaisissables.includes(j) && !caisseClotureeLe(j)) ?? ''
+  const erreurJourCollecte = (jour: string): string | null => {
+    if (!collecteZoneOuverte) {
+      return collecteAujourdhuiCloturee
+        ? 'Aucune collecte ouverte : la journée d’aujourd’hui est déjà clôturée.'
+        : messageCollecteFermee
+    }
+    if (!jour) return 'Choisissez la journée de collecte.'
+    if (!caisseOuverteLe(jour)) {
+      return `La caisse du ${formatDate(`${jour}T12:00:00`)} n’est pas ouverte : ouvrez d’abord cette journée de caisse, ou choisissez une autre collecte.`
+    }
+    if (!joursSaisissables.includes(jour)) return messageCollecteFermee
+    return null
+  }
 
   const cycles = useMemo(
     () => (carnet ? situationsCycles(carnet, data.mises, data.transactions) : []),
@@ -220,12 +253,9 @@ export default function DetailTontine() {
 
   const ouvrirRecapDepot = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!collecteOuverte || !joursSaisissables.includes(dateCollecte)) {
-      setErreur(
-        !collecteOuverte && collecteAujourdhuiCloturee
-          ? 'Aucune collecte ouverte : la journée d’aujourd’hui est déjà clôturée.'
-          : messageCollecteFermee,
-      )
+    const erreurJour = erreurJourCollecte(dateCollecte)
+    if (erreurJour) {
+      setErreur(erreurJour)
       return
     }
     if (!calcDepot?.ok) {
@@ -300,12 +330,9 @@ export default function DetailTontine() {
   }
 
   const validerRenouvellement = async () => {
-    if (!collecteOuverte || !joursSaisissables.includes(dateCollecte)) {
-      setErreur(
-        !collecteOuverte && collecteAujourdhuiCloturee
-          ? 'Aucune collecte ouverte : la journée d’aujourd’hui est déjà clôturée.'
-          : messageCollecteFermee,
-      )
+    const erreurJour = erreurJourCollecte(dateCollecte)
+    if (erreurJour) {
+      setErreur(erreurJour)
       return
     }
     const err = await renouvelerCarnet(carnet.id, dateCollecte)
@@ -401,17 +428,17 @@ export default function DetailTontine() {
             {peutOperer && besoinRenouvellement && (
               <button
                 className="btn-primary"
-                disabled={carnet.verrouille || !collecteOuverte}
+                disabled={carnet.verrouille || !collecteZoneOuverte}
                 title={
                   carnet.verrouille
                     ? 'Carnet verrouillé'
-                    : !collecteOuverte
+                    : !collecteZoneOuverte
                       ? messageCollecteFermee
                       : `Encaisser ${formatMontant(PRIX_CARNET)} et ouvrir 12 nouveaux cycles`
                 }
                 onClick={() => {
                   setErreur('')
-                  setDateCollecte(dateCollecteParDefaut(joursSaisissables, aujourdhui))
+                  setDateCollecte(jourCollecteParDefaut)
                   setModaleRenouvellement(true)
                 }}
               >
@@ -422,13 +449,13 @@ export default function DetailTontine() {
             {peutOperer && (
               <button
                 className="btn-primary"
-                disabled={carnet.verrouille || !collecteOuverte || besoinRenouvellement}
+                disabled={carnet.verrouille || !collecteZoneOuverte || besoinRenouvellement}
                 title={
                   carnet.verrouille
                     ? 'Carnet verrouillé'
                     : besoinRenouvellement
                       ? `Année terminée : renouvelez le carnet (${formatMontant(PRIX_CARNET)}) pour ouvrir 12 nouveaux cycles`
-                      : !collecteOuverte
+                      : !collecteZoneOuverte
                       ? messageCollecteFermee
                       : payeesActuel >= carnet.misesParCycle
                         ? 'Mois complet : le prochain dépôt passera au mois suivant'
@@ -439,7 +466,7 @@ export default function DetailTontine() {
                   setPayerAbonnement(false)
                   setPayerPc(false)
                   setErreur('')
-                  setDateCollecte(dateCollecteParDefaut(joursSaisissables, aujourdhui))
+                  setDateCollecte(jourCollecteParDefaut)
                   setModaleDepot(true)
                 }}
               >
@@ -455,7 +482,7 @@ export default function DetailTontine() {
                 onClick={() => {
                   setNouvelleMise(String(carnet.mise))
                   setErreur('')
-                  setDateCollecte(dateCollecteParDefaut(joursSaisissables, aujourdhui))
+                  setDateCollecte(jourCollecteParDefaut)
                   setModaleMise(true)
                 }}
               >
@@ -947,11 +974,13 @@ export default function DetailTontine() {
             </div>
           </div>
           <SelectJourCollecte
-            jours={joursSaisissables}
+            jours={joursZoneSaisissables}
             value={dateCollecte}
             onChange={setDateCollecte}
             journees={data.journeesCompteZone}
             zoneId={carnet.zoneId}
+            caisseOuverte={caisseOuverteLe}
+            caisseCloturee={caisseClotureeLe}
           />
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
           <div className="flex justify-end gap-2">
@@ -1052,11 +1081,13 @@ export default function DetailTontine() {
             </div>
           )}
           <SelectJourCollecte
-            jours={joursSaisissables}
+            jours={joursZoneSaisissables}
             value={dateCollecte}
             onChange={setDateCollecte}
             journees={data.journeesCompteZone}
             zoneId={carnet.zoneId}
+            caisseOuverte={caisseOuverteLe}
+            caisseCloturee={caisseClotureeLe}
           />
           {erreur && <p className="text-sm font-medium text-rose-600">{erreur}</p>}
           <div className="flex justify-end gap-2">
@@ -1088,12 +1119,9 @@ export default function DetailTontine() {
               return
             }
             const apercu = montantComplementMise(carnet, data.mises, nm)
-            if (apercu.complement > 0 && (!collecteOuverte || !joursSaisissables.includes(dateCollecte))) {
-              setErreur(
-                !collecteOuverte && collecteAujourdhuiCloturee
-                  ? 'Aucune collecte ouverte : la journée d’aujourd’hui est déjà clôturée.'
-                  : messageCollecteFermee,
-              )
+            const erreurJour = apercu.complement > 0 ? erreurJourCollecte(dateCollecte) : null
+            if (erreurJour) {
+              setErreur(erreurJour)
               return
             }
             const ok = await confirmer({
@@ -1154,11 +1182,13 @@ export default function DetailTontine() {
           </div>
           {Number(nouvelleMise) > carnet.mise && apercuComplement && apercuComplement.complement > 0 && (
             <SelectJourCollecte
-              jours={joursSaisissables}
+              jours={joursZoneSaisissables}
               value={dateCollecte}
               onChange={setDateCollecte}
               journees={data.journeesCompteZone}
               zoneId={carnet.zoneId}
+              caisseOuverte={caisseOuverteLe}
+              caisseCloturee={caisseClotureeLe}
             />
           )}
           {Number(nouvelleMise) > carnet.mise && apercuComplement && (
@@ -1225,6 +1255,20 @@ export default function DetailTontine() {
                 <span>Collecte du</span>
                 <span className="font-bold">{libelleJourCollecte(dateCollecte, aujourdhui)}</span>
               </div>
+              {(() => {
+                const arret = arretCaisseLe(dateCollecte)
+                if (!arret) return null
+                const theorique = arret.soldeTheorique + Number(montantDepot)
+                return (
+                  <p className="mt-2 rounded-lg bg-amber-100 px-3 py-2 text-xs text-amber-900">
+                    La caisse du {formatDate(dateCollecte + 'T12:00:00')} est déjà clôturée : son
+                    théorique passe à <strong>{formatMontant(theorique)}</strong>, le montant compté (
+                    {formatMontant(arret.montantCompte)}) ne change pas, l’écart de cette journée devient{' '}
+                    <strong>{formatMontant(arret.montantCompte - theorique)}</strong> et les cumuls sont
+                    recalculés. La caisse actuelle ne bouge pas.
+                  </p>
+                )
+              })()}
               {planDepot.tranches.length > 1 && (
                 <div className="mt-3 border-t border-brand-200 pt-2">
                   <p className="mb-1.5 text-xs font-medium text-brand-800">Répartition par cycle</p>

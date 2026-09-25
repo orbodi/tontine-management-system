@@ -8,6 +8,7 @@ import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
 import { formulaireClientVide, RecapFraisOuvertureCompte, CasesFraisOuvertureCompte, ModaleClient, type FormulaireClient } from '../components/ModaleClient'
 import { useConfirmation } from '../components/Confirmation'
 import { fraisOuvertureComptePour } from '../metier'
+import { grouperPar, Pagination, usePagination } from '../components/Pagination'
 
 function clientsBanqueDe(clients: Client[], agenceId: string): Client[] {
   return clients.filter((c) => c.agenceId === agenceId && !!c.codeClientBanque)
@@ -176,6 +177,11 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
           `${a.prenom} ${a.nom}`.localeCompare(`${b.prenom} ${b.nom}`),
       )
   }, [data.clients, agenceId, recherche, accesOk])
+
+  const pagination = usePagination(clientsFiltres, `${agenceId}|${recherche}`)
+  // Comptes par client et clients ayant un carnet, calculés une seule fois
+  const comptesParClient = useMemo(() => grouperPar(data.comptes, (co) => co.clientId), [data.comptes])
+  const clientsAvecCarnet = useMemo(() => new Set(data.carnets.map((ca) => ca.clientId)), [data.carnets])
 
   const clientsAInscrire = useMemo(
     () =>
@@ -503,9 +509,9 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {clientsFiltres.map((c) => {
-                const comptes = data.comptes.filter((co) => co.clientId === c.id)
-                const aTontine = data.carnets.some((ca) => ca.clientId === c.id)
+              {pagination.elements.map((c) => {
+                const comptes = comptesParClient.get(c.id) ?? []
+                const aTontine = clientsAvecCarnet.has(c.id)
                 const total = comptes.reduce((s, co) => s + co.solde, 0)
                 return (
                   <tr key={c.id} className="transition hover:bg-slate-50">
@@ -586,6 +592,7 @@ function ListeClientsBanque({ agenceId }: { agenceId: string }) {
           </table>
         </div>
       )}
+      <Pagination pagination={pagination} libelle="clients" />
 
       <Modale
         titre={

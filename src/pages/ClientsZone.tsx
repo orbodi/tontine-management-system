@@ -7,6 +7,7 @@ import { formatDate, afficherNumeroClient } from '../utils'
 import { Avatar, EnTetePage, EtatVide, Modale } from '../components/ui'
 import { ModaleClient, formulaireClientVide, type FormulaireClient } from '../components/ModaleClient'
 import { useConfirmation } from '../components/Confirmation'
+import { Pagination, usePagination } from '../components/Pagination'
 
 export default function ClientsZone() {
   const { zoneId } = useParams<{ zoneId: string }>()
@@ -40,6 +41,7 @@ export default function ClientsZone() {
       )
       .sort((a, b) => (a.codeClient ?? '').localeCompare(b.codeClient ?? ''))
   }, [data.clients, zoneId, recherche])
+  const pagination = usePagination(clientsFiltres, `${zoneId}|${recherche}`)
 
   if (!zone) {
     return <Navigate to="/clients/tontine" replace />
@@ -207,7 +209,7 @@ export default function ClientsZone() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {clientsFiltres.map((c) => {
+              {pagination.elements.map((c) => {
                 const zoneClient = data.zones.find((z) => z.id === c.zoneId) ?? zone
                 return (
                 <tr key={c.id} className="transition hover:bg-slate-50">
@@ -266,6 +268,7 @@ export default function ClientsZone() {
           </table>
         </div>
       )}
+      <Pagination pagination={pagination} libelle="clients" />
 
       <Modale
         titre={

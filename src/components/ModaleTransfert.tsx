@@ -12,6 +12,7 @@ import {
 } from '../metier'
 import { formatMontant } from '../utils'
 import { Modale } from './ui'
+import { grouperPar } from './Pagination'
 import { useConfirmation } from './Confirmation'
 
 /** Source → destination : compte (courant / épargne) ou tontine (carnet). */
@@ -197,28 +198,43 @@ export function ModaleTransfert({
   const dansMonAgence = (clientId: string) =>
     agenceUtilisateur === null || clients.get(clientId)?.agenceId === agenceUtilisateur
 
+  // Rien n'est calculé tant que la fenêtre est fermée (elle reste montée sur les pages Comptes et carnet).
+  // Mises et transactions rangées une fois par carnet / par client : chaque carnet ne relit que les siennes.
+  const misesParCarnet = useMemo(
+    () => (ouverte ? grouperPar(data.mises, (m) => m.carnetId) : new Map<string, typeof data.mises>()),
+    [ouverte, data.mises],
+  )
+  const transactionsParClient = useMemo(
+    () => (ouverte ? grouperPar(data.transactions, (t) => t.clientId) : new Map<string, typeof data.transactions>()),
+    [ouverte, data.transactions],
+  )
+  const misesDe = (k: CarnetTontine) => misesParCarnet.get(k.id) ?? []
+  const transactionsDe = (k: CarnetTontine) => transactionsParClient.get(k.clientId) ?? []
+
   const comptesSource = useMemo(
-    () => data.comptes.filter((c) => !c.verrouille && c.solde > 0 && dansMonAgence(c.clientId)),
-    [data.comptes, clients, agenceUtilisateur], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (ouverte ? data.comptes.filter((c) => !c.verrouille && c.solde > 0 && dansMonAgence(c.clientId)) : []),
+    [ouverte, data.comptes, clients, agenceUtilisateur], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const carnetsSource = useMemo(
     () =>
-      data.carnets.filter(
-        (k) =>
-          k.actif &&
-          !k.verrouille &&
-          dansMonAgence(k.clientId) &&
-          eligibiliteRetraitCarnet(k, data.mises).autorise &&
-          situationsCycles(k, data.mises, data.transactions).some((et) => et.retirables > 0),
-      ),
-    [data.carnets, data.mises, data.transactions, clients, agenceUtilisateur], // eslint-disable-line react-hooks/exhaustive-deps
+      ouverte
+        ? data.carnets.filter(
+            (k) =>
+              k.actif &&
+              !k.verrouille &&
+              dansMonAgence(k.clientId) &&
+              eligibiliteRetraitCarnet(k, misesDe(k)).autorise &&
+              situationsCycles(k, misesDe(k), transactionsDe(k)).some((et) => et.retirables > 0),
+          )
+        : [],
+    [ouverte, data.carnets, misesParCarnet, transactionsParClient, clients, agenceUtilisateur], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   const compteSource = sourceTontine ? undefined : data.comptes.find((c) => c.id === compteSourceId)
   const carnet = sourceTontine ? data.carnets.find((k) => k.id === carnetId) : undefined
   const cyclesDispo = useMemo(
-    () => (carnet ? situationsCycles(carnet, data.mises, data.transactions).filter((et) => et.retirables > 0) : []),
-    [carnet, data.mises, data.transactions],
+    () => (carnet ? situationsCycles(carnet, misesDe(carnet), transactionsDe(carnet)).filter((et) => et.retirables > 0) : []),
+    [carnet, misesParCarnet, transactionsParClient], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const etatCycle = cyclesDispo.find((et) => et.cycle === cycle)
 
@@ -232,20 +248,22 @@ export function ModaleTransfert({
     dansMonAgence(clientId) && (peutAutreClient || !clientSourceId || clientId === clientSourceId)
 
   const comptesDest = useMemo(
-    () => data.comptes.filter((c) => !c.verrouille && c.id !== compteSourceId && autoriseClient(c.clientId)),
-    [data.comptes, compteSourceId, clientSourceId, peutAutreClient, clients, agenceUtilisateur], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (ouverte ? data.comptes.filter((c) => !c.verrouille && c.id !== compteSourceId && autoriseClient(c.clientId)) : []),
+    [ouverte, data.comptes, compteSourceId, clientSourceId, peutAutreClient, clients, agenceUtilisateur], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const carnetsDest = useMemo(
     () =>
-      data.carnets.filter(
-        (k) =>
-          k.actif &&
-          !k.verrouille &&
-          k.id !== carnetId &&
-          autoriseClient(k.clientId) &&
-          !besoinRenouvellementCarnet(k, data.mises, data.transactions),
-      ),
-    [data.carnets, data.mises, data.transactions, carnetId, clientSourceId, peutAutreClient, clients, agenceUtilisateur], // eslint-disable-line react-hooks/exhaustive-deps
+      ouverte && destTontine
+        ? data.carnets.filter(
+            (k) =>
+              k.actif &&
+              !k.verrouille &&
+              k.id !== carnetId &&
+              autoriseClient(k.clientId) &&
+              !besoinRenouvellementCarnet(k, misesDe(k), transactionsDe(k)),
+          )
+        : [],
+    [ouverte, destTontine, data.carnets, misesParCarnet, transactionsParClient, carnetId, clientSourceId, peutAutreClient, clients, agenceUtilisateur], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const compteDest = destTontine ? undefined : comptesDest.find((c) => c.id === compteDestId)
   const carnetDest = destTontine ? carnetsDest.find((k) => k.id === carnetDestId) : undefined
@@ -263,7 +281,7 @@ export function ModaleTransfert({
     carnet && carnetDest ? carnetDest.mise / pgcd(Math.round(carnet.mise), Math.round(carnetDest.mise)) : 0
   const planDest =
     carnetDest && Number.isInteger(nombreDest) && nombreDest > 0
-      ? repartirDepotSurCycles(carnetDest, data.mises, nombreDest, data.transactions)
+      ? repartirDepotSurCycles(carnetDest, misesDe(carnetDest), nombreDest, transactionsDe(carnetDest))
       : null
   const libelleTranches =
     planDest && planDest.ok && carnetDest

@@ -24,6 +24,7 @@ import {
 } from '../components/FicheOperationCompte'
 import { useConfirmation } from '../components/Confirmation'
 import { ModaleTransfert, type InitialTransfert } from '../components/ModaleTransfert'
+import { grouperPar, Pagination, usePagination } from '../components/Pagination'
 
 const LIBELLES_COMPTE: Record<TypeCompte, string> = {
   courant: 'Compte courant',
@@ -92,7 +93,14 @@ export default function Comptes() {
     })()
   }, [])
 
-  const clientDuCompte = (c: Compte) => data.clients.find((x) => x.id === c.clientId)
+  const clientsParId = useMemo(() => new Map(data.clients.map((c) => [c.id, c])), [data.clients])
+  const clientDuCompte = (c: Compte) => clientsParId.get(c.clientId)
+  // Mouvements rangés une fois par compte (du plus récent au plus ancien)
+  const mouvementsParCompte = useMemo(() => {
+    const groupes = grouperPar(data.mouvements, (m) => m.compteId)
+    groupes.forEach((liste) => liste.sort((a, b) => b.date.localeCompare(a.date)))
+    return groupes
+  }, [data.mouvements])
 
   const comptesFiltres = useMemo(() => {
     const q = recherche.trim().toLowerCase()
@@ -111,6 +119,7 @@ export default function Comptes() {
       })
       .sort((a, b) => b.solde - a.solde)
   }, [data.comptes, data.clients, recherche, typeFiltre])
+  const pagination = usePagination(comptesFiltres, `${recherche}|${typeFiltre}`)
 
   const clientsActifs = () => data.clients.filter((c) => c.actif && !!c.codeClientBanque)
 
@@ -183,11 +192,7 @@ export default function Comptes() {
     })
   }
 
-  const derniersMouvements = (compteId: string) =>
-    data.mouvements
-      .filter((m) => m.compteId === compteId)
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 3)
+  const derniersMouvements = (compteId: string) => (mouvementsParCompte.get(compteId) ?? []).slice(0, 3)
 
   const titreOperation = (o: Operation) => {
     const client = clientDuCompte(o.compte)
@@ -357,7 +362,7 @@ export default function Comptes() {
           />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {comptesFiltres.map((c) => {
+            {pagination.elements.map((c) => {
               const client = clientDuCompte(c)
               if (!client) return null
               return (
@@ -508,6 +513,7 @@ export default function Comptes() {
             })}
           </div>
         )}
+        <Pagination pagination={pagination} libelle="comptes" />
 
         <Modale
           titre="Ouvrir un compte"

@@ -281,8 +281,11 @@ export function TableauArretsCaisse({
                     <td className="px-5 py-3">
                       <BadgeEcart ecart={a.ecart} />
                       {(() => {
-                        const corrections = (a.corrections ?? []).filter((c) => c.type !== 'reouverture')
+                        const corrections = (a.corrections ?? []).filter(
+                          (c) => c.type !== 'reouverture' && c.type !== 'complement',
+                        )
                         const reouvertures = (a.corrections ?? []).filter((c) => c.type === 'reouverture')
+                        const complements = (a.corrections ?? []).filter((c) => c.type === 'complement')
                         return (
                           <>
                             {corrections.length > 0 && (
@@ -313,6 +316,19 @@ export function TableauArretsCaisse({
                                   .join('\n')}
                               >
                                 Rouverte ({reouvertures.length})
+                              </span>
+                            )}
+                            {complements.length > 0 && (
+                              <span
+                                className="badge ml-1.5 cursor-help bg-violet-100 text-violet-800"
+                                title={complements
+                                  .map(
+                                    (c) =>
+                                      `${formatDateHeure(c.date)} — ${c.parNom} : ${c.motif} (${(c.montant ?? 0) >= 0 ? '+' : ''}${formatMontant(c.montant ?? 0)}) — théorique ${formatMontant(c.theoriqueAvant ?? 0)} → ${formatMontant(c.theoriqueApres ?? 0)}, écart ${formatMontant(c.ecartAvant ?? 0)} → ${formatMontant(c.ecartApres ?? 0)}`,
+                                  )
+                                  .join('\n')}
+                              >
+                                Complété ({complements.length})
                               </span>
                             )}
                           </>

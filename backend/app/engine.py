@@ -740,7 +740,8 @@ def _erreur_date_collecte(d: dict, zone_id: str, jour: str) -> str | None:
 
 def _erreur_caisse_jour_collecte(d: dict, carnet: dict, jour: str) -> str | None:
     """Dépôt / renouvellement / complément sont datés du jour de collecte : la caisse de l'agence
-    doit être ouverte et non clôturée ce jour-là (tous rôles, admin compris)."""
+    doit avoir été ouverte ce jour-là (tous rôles, admin compris). Si elle est déjà clôturée,
+    l'opération est acceptée et seule cette journée est recalculée (voir _repercuter_sur_journees_closes)."""
     agence_id = carnet.get("agenceId") or _agence_du_client(d, carnet.get("clientId"))
     libelle = f"{jour[8:10]}/{jour[5:7]}/{jour[:4]}" if len(jour) == 10 else jour
     if not M.ouverture_caisse_agence(d.get("ouverturesCaisse") or [], agence_id, jour):
@@ -748,9 +749,127 @@ def _erreur_caisse_jour_collecte(d: dict, carnet: dict, jour: str) -> str | None
             f"La caisse du {libelle} n'est pas ouverte : choisissez la collecte d'un jour dont la caisse "
             "est ouverte, ou ouvrez d'abord cette journée."
         )
-    if M.arret_caisse_agence(d.get("arretsCaisse") or [], agence_id, jour):
-        return f"La caisse du {libelle} est clôturée : rouvrez-la pour faire un complément de saisie."
     return None
+
+
+def _empreinte_caisse(d: dict, tx_ids: set[str]) -> dict[tuple[str, str], list]:
+    """Mouvements de caisse de ces transactions, par (compte caisse, jour) : [entrées, sorties, transactions]."""
+    res: dict[tuple[str, str], list] = {}
+    for m in d.get("mouvementsCompteCaisse") or []:
+        if m.get("transactionId") not in tx_ids:
+            continue
+        cle = (m.get("compteCaisseId"), M.jour_iso_depuis_date(m.get("date") or ""))
+        e = res.setdefault(cle, [0.0, 0.0, set()])
+        e[0 if m.get("sens") == "credit" else 1] += float(m.get("montant") or 0)
+        e[2].add(m["transactionId"])
+    return res
+
+
+def _repercuter_sur_journees_closes(d: dict, u: dict, avant: dict, tx_ids: set[str], libelle: str) -> dict:
+    """Opérations ajoutées, annulées ou corrigées sur une journée de caisse déjà clôturée.
+
+    `avant` = _empreinte_caisse des mêmes transactions avant le changement. Chaque journée est
+    indépendante : seule la journée clôturée concernée est recalculée (théorique, écart, cumuls
+    manquant / surplus) ; le montant compté ce jour-là ne change pas. Son ajustement d'arrêt compense
+    l'opération pour que la caisse finisse ce jour au montant compté : les journées suivantes et la
+    caisse actuelle ne bougent pas.
+    """
+    apres = _empreinte_caisse(d, tx_ids)
+    for cle in set(avant) | set(apres):
+        compte_id, jour = cle
+        a0, a1 = avant.get(cle, [0.0, 0.0, set()]), apres.get(cle, [0.0, 0.0, set()])
+        entrees, sorties, operations = a1[0] - a0[0], a1[1] - a0[1], len(a1[2]) - len(a0[2])
+        delta = entrees - sorties
+        compte = next((c for c in d.get("comptesCaisse") or [] if c["id"] == compte_id), None)
+        arret = M.arret_caisse_agence(d.get("arretsCaisse") or [], (compte or {}).get("agenceId"), jour)
+        if not compte or not arret or (abs(delta) < 0.005 and not operations):
+            continue
+        titulaire = compte.get("employeId") or arret.get("employeId")
+        agence_id = compte["agenceId"]
+        compte_jour = float(arret.get("montantCompte") or 0)
+        t_old = float(arret.get("soldeTheorique") or 0)
+        t_new = t_old + delta
+        e_old = float(arret.get("ecart") or 0)
+        e_new = compte_jour - t_new
+
+        # 1. Ajustement d'arrêt : compense l'opération, la caisse de ce jour finit au montant compté
+        if abs(delta) >= 0.005:
+            mv = _mouvement_ajustement_arret(d, compte_id, arret)
+            date_clot = arret.get("dateCloture") or arret.get("date") or ""
+            date_ajust = (mv or {}).get("date") or (date_clot if date_clot[:10] == jour else _fin_de_journee(jour))
+            suivante = _horodatage_ouverture_suivante(d, compte_id, agence_id, jour)
+            if suivante and date_ajust >= suivante:
+                # Ancien arrêt en retard dont l'ajustement est daté après l'ouverture suivante : on le
+                # laisse ; c'est l'ouverture suivante qui absorbe l'opération.
+                d = _preserver_ouverture_suivante(
+                    d, compte=compte, employe_id=titulaire, agence_id=agence_id, jour=jour,
+                    delta_solde=delta, date_effet=f"{jour}T00:00:00", u=u,
+                )
+            else:
+                valeur = _delta_mouvement_caisse(mv) - delta
+                d = _poser_mouvement_caisse(
+                    d,
+                    existant=mv,
+                    compte=compte,
+                    employe_id=titulaire,
+                    type_="ajustement_arret",
+                    delta=valeur,
+                    date=date_ajust,
+                    description=(
+                        f"Ajustement de fermeture — {'surplus' if valeur > 0 else 'manquant'} {int(abs(valeur))} FCFA"
+                    ),
+                    u=u,
+                )
+
+        # 2. Cumuls manquant / surplus : on retire l'ancien écart, on ajoute le nouveau
+        cm = float(compte.get("cumulManquant") or 0)
+        cs = float(compte.get("cumulSurplus") or 0)
+        if e_old < 0:
+            cm = max(0.0, cm - abs(e_old))
+        elif e_old > 0:
+            cs = max(0.0, cs - e_old)
+        if e_new < 0:
+            cm += abs(e_new)
+        elif e_new > 0:
+            cs += e_new
+        d["comptesCaisse"] = [
+            {**c, "cumulManquant": cm, "cumulSurplus": cs} if c["id"] == compte_id else c
+            for c in d["comptesCaisse"]
+        ]
+
+        # 3. Arrêt recalculé + historique
+        trace = {
+            "type": "complement",
+            "date": M.maintenant(),
+            "parId": u["id"],
+            "parNom": u["nomComplet"],
+            "motif": libelle,
+            "montant": delta,
+            "ouvertureAvant": float(arret.get("soldeOuverture") or 0),
+            "ouvertureApres": float(arret.get("soldeOuverture") or 0),
+            "compteAvant": compte_jour,
+            "compteApres": compte_jour,
+            "theoriqueAvant": t_old,
+            "theoriqueApres": t_new,
+            "ecartAvant": e_old,
+            "ecartApres": e_new,
+        }
+        d["arretsCaisse"] = [
+            {
+                **a,
+                "nombreOperations": max(0, int(a.get("nombreOperations") or 0) + operations),
+                "totalEntrees": float(a.get("totalEntrees") or 0) + entrees,
+                "totalSorties": float(a.get("totalSorties") or 0) + sorties,
+                "soldeTheorique": t_new,
+                "ecart": e_new,
+                "corrections": [*(a.get("corrections") or []), trace],
+            }
+            if a.get("id") == arret.get("id")
+            else a
+            for a in d["arretsCaisse"]
+        ]
+        d = _recalculer_solde_compte_caisse(d, titulaire, 0.0)
+    return d
 
 
 def _verif_solde_sortie(d: dict, u: dict, montant: float) -> str | None:
@@ -1529,6 +1648,9 @@ def encaisser_cotisation(d, u, p):
             {**c, "cycleActuel": plan["cycleFinal"]} if c["id"] == carnet_id else c for c in d["carnets"]
         ]
     d = _enregistrer_tx(d, nouvelles)
+    d = _repercuter_sur_journees_closes(
+        d, u, {}, {t["id"] for t in nouvelles}, f"Dépôt tontine carnet {carnet['numero']} (collecte du {jour})"
+    )
     return (None, d, {})
 
 
@@ -1560,23 +1682,22 @@ def renouveler_carnet(d, u, p):
 
     date = M.horodater_sur_jour(jour)
     note_collecte = f" (collecte du {jour})" if jour != M.aujourd_hui_iso() else ""
-    d = _enregistrer_tx(
-        d,
-        [
-            _mk_tx(
-                u,
-                {
-                    "type": "vente_carnet",
-                    "clientId": carnet["clientId"],
-                    "montant": M.PRIX_CARNET,
-                    "date": date,
-                    "description": (
-                        f"Renouvellement du carnet {carnet['numero']} — {_nom_client(d, carnet['clientId'])} "
-                        f"(carnet {annee_nouvelle}, cycle 1/{M.CYCLES_PAR_CARNET}){note_collecte}"
-                    ),
-                },
-            )
-        ],
+    tx = _mk_tx(
+        u,
+        {
+            "type": "vente_carnet",
+            "clientId": carnet["clientId"],
+            "montant": M.PRIX_CARNET,
+            "date": date,
+            "description": (
+                f"Renouvellement du carnet {carnet['numero']} — {_nom_client(d, carnet['clientId'])} "
+                f"(carnet {annee_nouvelle}, cycle 1/{M.CYCLES_PAR_CARNET}){note_collecte}"
+            ),
+        },
+    )
+    d = _enregistrer_tx(d, [tx])
+    d = _repercuter_sur_journees_closes(
+        d, u, {}, {tx["id"]}, f"Renouvellement carnet {carnet['numero']} (collecte du {jour})"
     )
     return (None, d, {"annee": annee_nouvelle, "cycle": cycle_cible})
 
@@ -1625,24 +1746,23 @@ def changer_mise_carnet(d, u, p):
                 "date": date,
             },
         ]
-        d = _enregistrer_tx(
-            d,
-            [
-                _mk_tx(
-                    u,
-                    {
-                        "type": "complement_mise",
-                        "clientId": carnet["clientId"],
-                        "montant": complement,
-                        "date": date,
-                        "description": (
-                            f"Complement mise {int(ancienne)}→{int(nouvelle)} ×{deposes} carreaux "
-                            f"— {_nom_client(d, carnet['clientId'])} (cycle {cycle})"
-                            + (f" (collecte du {jour})" if jour != M.aujourd_hui_iso() else "")
-                        ),
-                    },
-                )
-            ],
+        tx = _mk_tx(
+            u,
+            {
+                "type": "complement_mise",
+                "clientId": carnet["clientId"],
+                "montant": complement,
+                "date": date,
+                "description": (
+                    f"Complement mise {int(ancienne)}→{int(nouvelle)} ×{deposes} carreaux "
+                    f"— {_nom_client(d, carnet['clientId'])} (cycle {cycle})"
+                    + (f" (collecte du {jour})" if jour != M.aujourd_hui_iso() else "")
+                ),
+            },
+        )
+        d = _enregistrer_tx(d, [tx])
+        d = _repercuter_sur_journees_closes(
+            d, u, {}, {tx["id"]}, f"Complément de mise carnet {carnet['numero']} (collecte du {jour})"
         )
 
     return (
@@ -3663,6 +3783,28 @@ def _fin_de_journee(jour: str) -> str:
     return f"{jour}T23:59:59"
 
 
+def _ouverture_suivante(d: dict, compte_id: str, agence_id: str, jour: str) -> tuple[dict | None, dict | None, str]:
+    """Première ouverture de l'agence après `jour` : (ouverture, son mouvement de caisse, sa position
+    dans la chronologie de la caisse)."""
+    suivante = min(
+        (o for o in d.get("ouverturesCaisse") or [] if o.get("agenceId") == agence_id and (o.get("journee") or "") > jour),
+        key=lambda o: o["journee"],
+        default=None,
+    )
+    if not suivante:
+        return None, None, ""
+    mv = _mouvement_ouverture_du_jour(d, compte_id, suivante["journee"])
+    date_ouv_suiv = suivante.get("dateOuverture") or ""
+    horodatage = (mv or {}).get("date") or (
+        date_ouv_suiv if date_ouv_suiv[:10] == suivante["journee"] else f"{suivante['journee']}T00:00:00"
+    )
+    return suivante, mv, horodatage
+
+
+def _horodatage_ouverture_suivante(d: dict, compte_id: str, agence_id: str, jour: str) -> str | None:
+    return _ouverture_suivante(d, compte_id, agence_id, jour)[2] or None
+
+
 def _preserver_ouverture_suivante(
     d: dict, *, compte: dict, employe_id: str, agence_id: str, jour: str, delta_solde: float, date_effet: str, u: dict
 ) -> dict:
@@ -3673,19 +3815,9 @@ def _preserver_ouverture_suivante(
     (gel) entre-temps."""
     if abs(delta_solde) < 0.005:
         return d
-    suivante = min(
-        (o for o in d.get("ouverturesCaisse") or [] if o.get("agenceId") == agence_id and (o.get("journee") or "") > jour),
-        key=lambda o: o["journee"],
-        default=None,
-    )
+    suivante, mv, horodatage_suivante = _ouverture_suivante(d, compte["id"], agence_id, jour)
     if not suivante:
         return d
-    mv = _mouvement_ouverture_du_jour(d, compte["id"], suivante["journee"])
-    # Position de l'ouverture suivante dans la chronologie de la caisse
-    date_ouv_suiv = suivante.get("dateOuverture") or ""
-    horodatage_suivante = (mv or {}).get("date") or (
-        date_ouv_suiv if date_ouv_suiv[:10] == suivante["journee"] else f"{suivante['journee']}T00:00:00"
-    )
     if (date_effet or "") >= horodatage_suivante:
         return d
     if any(
@@ -4565,6 +4697,7 @@ def corriger_montant_transaction(d, u, p):
     if M.est_operation_caisse(typ) and tx.get("operateurId"):
         d, compte_caisse = _compte_caisse_operateur(d, tx["operateurId"], tx.get("agenceId"))
         titulaire = (compte_caisse or {}).get("employeId") or tx["operateurId"]
+        avant_caisse = _empreinte_caisse(d, {tx_id})
         delta_nouveau = M.delta_solde_operation_caisse(typ, nouveau)
         mvt_caisse = next(
             (m for m in (d.get("mouvementsCompteCaisse") or []) if m.get("transactionId") == tx_id),
@@ -4604,6 +4737,10 @@ def corriger_montant_transaction(d, u, p):
                     *d["mouvementsCompteCaisse"],
                 ]
         d = _recalculer_solde_compte_caisse(d, titulaire, 0.0)
+        # Journée déjà clôturée (admin) : seule cette journée est recalculée
+        d = _repercuter_sur_journees_closes(
+            d, u, avant_caisse, {tx_id}, f"Correction {int(ancien)} → {int(nouveau)} : {tx.get('description') or typ}"
+        )
         compte_caisse = M.compte_caisse_pour_employe(
             d["comptesCaisse"], tx["operateurId"], d.get("employes") or []
         )
@@ -4985,12 +5122,15 @@ def annuler_transaction(d, u, p):
     if M.est_operation_caisse(typ) and tx.get("operateurId"):
         d, compte_caisse = _compte_caisse_operateur(d, tx["operateurId"], tx.get("agenceId"))
         titulaire = (compte_caisse or {}).get("employeId") or tx["operateurId"]
+        avant_caisse = _empreinte_caisse(d, {tx_id})
         d["mouvementsCompteCaisse"] = [
             m
             for m in (d.get("mouvementsCompteCaisse") or [])
             if m.get("transactionId") != tx_id
         ]
         d = _recalculer_solde_compte_caisse(d, titulaire, 0.0)
+        # Journée déjà clôturée (admin) : seule cette journée est recalculée
+        d = _repercuter_sur_journees_closes(d, u, avant_caisse, {tx_id}, f"Annulation : {tx.get('description') or typ}")
         compte_caisse = M.compte_caisse_pour_employe(
             d["comptesCaisse"], tx["operateurId"], d.get("employes") or []
         )
