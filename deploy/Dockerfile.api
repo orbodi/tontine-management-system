@@ -1,0 +1,51 @@
+# Image de l'API FastAPI (DON DE DIEU).
+# Construite depuis la racine du dépôt : docker build -f deploy/Dockerfile.api -t tontine-api .
+#
+# Règles de production :
+# - UN SEUL processus uvicorn, sans --reload : chaque action lit puis réécrit toute la base
+#   (engine.run_mutation), plusieurs processus en parallèle corrompraient l'état.
+# - Utilisateur non-root (uid/gid 10001) ; Litestream tourne avec le même uid (docker-compose.yml)
+#   pour pouvoir écrire les fichiers -wal / -shm de la base.
+# - La base vit sur un volume dédié (/var/lib/tontine, via DATABASE_URL) ; /app/data reste celui
+#   de l'image (demo-seed.json, plan comptable…) et n'est pas inscriptible, sauf data/backups.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DATABASE_URL=sqlite:////var/lib/tontine/app.db
+
+# tzdata : « aujourd'hui » est calculé à l'heure locale du conteneur (metier.aujourd_hui_iso), variable TZ.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends tzdata \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system --gid 10001 tontine \
+ && useradd --system --uid 10001 --gid tontine --no-create-home --home-dir /nonexistent \
+      --shell /usr/sbin/nologin tontine
+
+WORKDIR /app
+
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install -r requirements.txt
+
+# Code et fichiers de données suivis (lecture seule pour l'application).
+COPY backend/app ./app
+COPY backend/data ./data
+
+# Seuls points d'écriture : la base (volume) et les copies avant migration (volume).
+RUN mkdir -p /var/lib/tontine /app/data/backups \
+ && chown tontine:tontine /var/lib/tontine /app/data/backups
+
+USER tontine
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD ["python", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"]
+
+# --workers 1 explicite ; l'API n'est joignable que par Caddy (réseau Docker interne),
+# d'où --forwarded-allow-ips "*" pour lire les en-têtes X-Forwarded-* posés par Caddy.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", \
+     "--proxy-headers", "--forwarded-allow-ips", "*", "--no-server-header"]

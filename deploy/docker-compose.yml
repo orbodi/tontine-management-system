@@ -1,0 +1,130 @@
+# DON DE DIEU — déploiement sur un seul serveur Linux (2 vCPU, 4 Go).
+#
+# Depuis la racine du dépôt :
+#   cp deploy/.env.example deploy/.env   # puis remplir les valeurs
+#   docker compose -f deploy/docker-compose.yml up -d --build
+#
+# Services :
+#   caddy        HTTPS automatique (Let's Encrypt), front compilé, relais /api -> api:8000
+#   api          FastAPI, UN SEUL processus uvicorn (l'action lit et réécrit toute la base)
+#   litestream   réplication continue de la base SQLite vers un stockage objet S3
+#   restauration tâche ponctuelle avant l'API : restaure la base depuis S3 si le volume est vide
+#
+# Les variables ${…} viennent de deploy/.env (lu automatiquement : même dossier que ce fichier).
+# Guide complet : docs/DEPLOIEMENT.md
+
+name: tontine
+
+x-journaux: &journaux
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# Variables communes à litestream et restauration (voir litestream.yml).
+x-litestream-env: &litestream-env
+  LITESTREAM_BUCKET: ${LITESTREAM_BUCKET:?Définir LITESTREAM_BUCKET dans deploy/.env}
+  LITESTREAM_PATH: ${LITESTREAM_PATH:-tontine/app.db}
+  LITESTREAM_ENDPOINT: ${LITESTREAM_ENDPOINT:-}
+  LITESTREAM_REGION: ${LITESTREAM_REGION:-us-east-1}
+  LITESTREAM_ACCESS_KEY_ID: ${LITESTREAM_ACCESS_KEY_ID:?Définir LITESTREAM_ACCESS_KEY_ID dans deploy/.env}
+  LITESTREAM_SECRET_ACCESS_KEY: ${LITESTREAM_SECRET_ACCESS_KEY:?Définir LITESTREAM_SECRET_ACCESS_KEY dans deploy/.env}
+  LITESTREAM_SYNC_INTERVAL: ${LITESTREAM_SYNC_INTERVAL:-10s}
+  LITESTREAM_SNAPSHOT_INTERVAL: ${LITESTREAM_SNAPSHOT_INTERVAL:-24h}
+  LITESTREAM_RETENTION: ${LITESTREAM_RETENTION:-720h}
+
+services:
+  caddy:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.front
+    image: tontine-front:${VERSION:-local}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      DOMAINE: ${DOMAINE:?Définir DOMAINE dans deploy/.env}
+      ACME_EMAIL: ${ACME_EMAIL:?Définir ACME_EMAIL dans deploy/.env}
+    volumes:
+      # Certificats Let's Encrypt : à conserver (sinon nouvelle demande à chaque démarrage).
+      - caddy-data:/data
+      - caddy-config:/config
+    logging: *journaux
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    image: tontine-api:${VERSION:-local}
+    restart: unless-stopped
+    depends_on:
+      restauration:
+        condition: service_completed_successfully
+    # Aucun port publié : l'API n'est joignable que par Caddy sur le réseau interne.
+    expose:
+      - "8000"
+    environment:
+      ENVIRONNEMENT: production
+      DATABASE_URL: sqlite:////var/lib/tontine/app.db
+      SECRET_KEY: ${SECRET_KEY:?Définir SECRET_KEY dans deploy/.env}
+      CORS_ORIGINS: https://${DOMAINE:?Définir DOMAINE dans deploy/.env}
+      SEED_DEMO_ON_STARTUP: "false"
+      CREATE_DEFAULT_ACCOUNTS: "false"
+      TZ: ${TZ:-Africa/Abidjan}
+    volumes:
+      # Base SQLite (+ -wal / -shm) : volume dédié, partagé avec Litestream.
+      - base:/var/lib/tontine
+      # Copies faites avant chaque migration de données (backend/data/backups dans le dépôt).
+      # Volume sur ce seul sous-dossier : ne pas monter de volume sur /app/data (fichiers suivis).
+      - sauvegardes-migration:/app/data/backups
+    stop_grace_period: 30s
+    logging: *journaux
+
+  litestream:
+    image: litestream/litestream:0.5.17
+    restart: unless-stopped
+    # Même uid/gid que l'API : Litestream écrit les fichiers -wal / -shm à côté de la base.
+    user: "10001:10001"
+    command: ["replicate", "-config", "/etc/litestream.yml"]
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      <<: *litestream-env
+    volumes:
+      - base:/var/lib/tontine
+      - ./litestream.yml:/etc/litestream.yml:ro
+    stop_grace_period: 30s
+    logging: *journaux
+
+  # Tâche ponctuelle, avant l'API, à chaque `up` :
+  # 1. serveur neuf (volume vide) et réplique présente : restaure la dernière version (sinon l'API
+  #    créerait une base vide) ; ne fait rien si la base existe déjà ou si la réplique est vide ;
+  # 2. rend le volume à l'utilisateur 10001 (un volume neuf appartient à root ; une base copiée à la
+  #    main aussi). D'où l'exécution en root, limitée à cette tâche.
+  restauration:
+    image: litestream/litestream:0.5.17
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        litestream restore -config /etc/litestream.yml -if-db-not-exists -if-replica-exists /var/lib/tontine/app.db
+        chown -R 10001:10001 /var/lib/tontine
+    environment:
+      <<: *litestream-env
+    volumes:
+      - base:/var/lib/tontine
+      - ./litestream.yml:/etc/litestream.yml:ro
+    restart: "no"
+    logging: *journaux
+
+volumes:
+  base:
+  sauvegardes-migration:
+  caddy-data:
+  caddy-config:
