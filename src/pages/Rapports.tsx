@@ -831,7 +831,7 @@ export default function Rapports() {
         const agence = data.agences.find((a) => a.id === c.agenceId)
         const zoneClient = data.zones.find((z) => z.id === c.zoneId)
         return [
-        c.codeClient,
+        c.codeClient ?? '',
         c.nom,
         c.prenom,
         c.sexe,

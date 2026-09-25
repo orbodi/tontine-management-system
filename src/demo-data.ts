@@ -192,7 +192,8 @@ export function genererDonneesDemo(): AppData {
 
   const zoneParId = (zoneId: string) => zones.find((z) => z.id === zoneId)!
 
-  const clients: Client[] = infos.map(([nom, prenom, sexe, profession, adresse, zoneId], i) => {
+  /** Clients de démo : tous rattachés à une zone tontine (zone et ordre toujours renseignés). */
+  const clients: (Client & { zoneId: string; ordreZone: number })[] = infos.map(([nom, prenom, sexe, profession, adresse, zoneId], i) => {
     compteursOrdreZone[zoneId]++
     const ordre = compteursOrdreZone[zoneId]
     const zone = zoneParId(zoneId)
@@ -226,6 +227,7 @@ export function genererDonneesDemo(): AppData {
     carnets: [],
     mises: [],
     comptes: [],
+    demandesOuvertureCompte: [],
     mouvements: [],
     credits: [],
     remboursements: [],
