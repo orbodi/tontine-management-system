@@ -48,6 +48,14 @@ def mutate(
 ) -> dict[str, Any]:
     from .. import engine
 
+    # reinitialiserDemo remplace TOUTE la base et run_mutation la traite avant tout contrôle de rôle :
+    # jamais par ce point d'entrée, seulement par /admin/reinitialiser-demo (administrateur).
+    if action == "reinitialiserDemo":
+        raise HTTPException(
+            status_code=403,
+            detail="Réinitialisation de la démo refusée : réservée à l'administrateur (/api/admin/reinitialiser-demo).",
+        )
+
     result = engine.run_mutation(db, user["id"], action, body.payload or {})
     if result.get("erreur"):
         return result
