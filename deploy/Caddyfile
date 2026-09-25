@@ -1,0 +1,47 @@
+# Caddy — DON DE DIEU : HTTPS automatique (Let's Encrypt), front compilé, relais /api vers l'API.
+# DOMAINE et ACME_EMAIL viennent de l'environnement du conteneur (deploy/.env via docker-compose.yml).
+# Test local sans domaine : DOMAINE=localhost (certificat de l'autorité interne de Caddy).
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAINE} {
+	encode zstd gzip
+
+	header {
+		# HTTPS obligatoire pendant un an. includeSubDomains / preload à ajouter seulement une fois
+		# sûr que tous les sous-domaines du domaine sont en HTTPS.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		# Interdit l'affichage dans un cadre (anciens navigateurs + CSP).
+		X-Frame-Options "DENY"
+		Content-Security-Policy "frame-ancestors 'none'"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+
+	# API : chemins /api/... transmis tels quels (les routes FastAPI sont préfixées /api).
+	# /docs et /openapi.json de FastAPI ne sont pas exposés.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Front : application monopage, toute adresse inconnue renvoie index.html.
+	handle {
+		root * /srv
+		# Fichiers de /assets/ nommés par empreinte : cache long ; le reste (index.html) revalidé.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@pages not path /assets/*
+		header @pages Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
