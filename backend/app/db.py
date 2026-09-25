@@ -1,7 +1,7 @@
 import threading
 from collections.abc import Generator
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .config import settings
@@ -19,6 +19,19 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+if engine.url.get_backend_name() == "sqlite":
+
+    @event.listens_for(engine, "connect")
+    def _configurer_sqlite(dbapi_connection, _connection_record) -> None:
+        """WAL : les lectures ne bloquent plus l'écriture (et inversement) ; base occupée : attendre
+        jusqu'à 30 s au lieu d'échouer (« database is locked ») ; synchronous=NORMAL suffit en WAL."""
+        cur = dbapi_connection.cursor()
+        cur.execute("PRAGMA busy_timeout=30000")
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.close()
 
 
 class Base(DeclarativeBase):

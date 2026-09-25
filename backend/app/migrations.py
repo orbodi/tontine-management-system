@@ -13,7 +13,7 @@ Cette table n’est pas vidée par `replace_state` (réinit démo / import CSV).
 from __future__ import annotations
 
 import logging
-import shutil
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -75,7 +75,17 @@ def _backup_sqlite(migration_id: str) -> Path | None:
     dest_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     dest = dest_dir / f"app-avant-{migration_id}-{stamp}.db"
-    shutil.copy2(src, dest)
+    # API de sauvegarde SQLite, pas une copie du fichier : en mode WAL les dernières écritures peuvent
+    # encore être dans app.db-wal, et une copie de app.db seul les perdrait.
+    source = sqlite3.connect(src)
+    try:
+        cible = sqlite3.connect(dest)
+        try:
+            source.backup(cible)
+        finally:
+            cible.close()
+    finally:
+        source.close()
     logger.info("Sauvegarde SQLite avant %s : %s", migration_id, dest.name)
     return dest
 
