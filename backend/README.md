@@ -25,6 +25,7 @@ Variables utiles dans `.env` :
 
 | Variable | Rôle |
 |----------|------|
+| `ENVIRONNEMENT` | `dev` (défaut) ou `production` (voir [Production](#production)) |
 | `SEED_DEMO_ON_STARTUP` | `true` = charge `demo-seed.json` si base vide |
 | `CREATE_DEFAULT_ACCOUNTS` | `true` = crée admin/chef/caisse si base vide |
 | `ADMIN_*` / `CHEF_*` / `CAISSE_*` | Identifiants et mots de passe par défaut |
@@ -41,7 +42,45 @@ API locale : http://127.0.0.1:8000/api/health
 API réseau : http://<IP-LAN>:8000/api/health  
 Docs : http://127.0.0.1:8000/docs
 
-Le CORS autorise aussi les origines du réseau privé (192.168 / 10 / 172.16–31).
+En dev, le CORS autorise aussi les origines du réseau privé (192.168 / 10 / 172.16–31).
+
+## Production
+
+Configuration : copier `.env.production.example` vers `backend/.env` et remplacer les valeurs d’exemple.
+`ENVIRONNEMENT=production` (en dev, rien ne change) :
+
+- **refus de démarrer**, avec un message listant chaque problème, si `SECRET_KEY` vaut la clé de dev ou fait
+  moins de 32 caractères, si `SEED_DEMO_ON_STARTUP` ou `CREATE_DEFAULT_ACCOUNTS` vaut `true`, ou si
+  `ADMIN_PASSWORD` / `CHEF_PASSWORD` / `CAISSE_PASSWORD` vaut `admin123` / `chef123` / `caisse123` ;
+- **CORS** : seulement les origines de `CORS_ORIGINS` (pas le réseau local) ;
+- `POST /api/admin/reinitialiser-demo` **désactivée** (403).
+
+Clé JWT : `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+
+Dans tous les modes, `POST /api/mutations/reinitialiserDemo` est refusé (403) : seule la route admin
+dédiée peut réinitialiser la démo, et la connexion est bloquée (429) après **5 échecs** pour un même
+identifiant et une même adresse IP pendant **15 minutes** (remise à zéro après une connexion réussie).
+
+Lancement :
+
+```bash
+# un seul processus : compteur de tentatives en mémoire et base SQLite réécrite à chaque action
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1
+```
+
+- Derrière un serveur web (HTTPS, front `dist/` et `/api` sur la même adresse) : `--proxy-headers` et
+  `--forwarded-allow-ips` (adresse du serveur web) donnent la vraie adresse IP du client ; sans eux, tous les
+  employés partagent l’adresse du serveur web pour la limite de connexion.
+- Pas de `--reload`, pas de `--workers` > 1 (chaque processus aurait son propre compteur).
+
+Comptes : en production, aucun compte n’est créé au démarrage.
+
+- **Base existante** (`data/app.db`) : avant de passer en production, changer dans l’application les mots de
+  passe des comptes créés avec les valeurs par défaut — le contrôle au démarrage porte sur la configuration,
+  pas sur la base.
+- **Première installation** (base vide) : démarrer une fois en `ENVIRONNEMENT=dev` avec
+  `SEED_DEMO_ON_STARTUP=false`, `CREATE_DEFAULT_ACCOUNTS=true` et des mots de passe forts (écoute sur
+  `127.0.0.1` seulement), arrêter, puis passer en production (`CREATE_DEFAULT_ACCOUNTS=false`).
 
 ## Migrations (schéma + données)
 
@@ -92,9 +131,9 @@ python scripts/mesurer_performances.py --base /tmp/volume.db
 
 ## Endpoints principaux
 
-- `POST /api/auth/login` — JWT
+- `POST /api/auth/login` — JWT (429 après 5 échecs en 15 minutes)
 - `GET /api/auth/me`
 - `POST /api/auth/logout`
 - `GET /api/data` — AppData complète (sans mots de passe)
-- `POST /api/mutations/{action}` — mutations métier
-- `POST /api/admin/reinitialiser-demo` — admin only
+- `POST /api/mutations/{action}` — mutations métier (sauf `reinitialiserDemo` : 403)
+- `POST /api/admin/reinitialiser-demo` — admin only, désactivée en production
