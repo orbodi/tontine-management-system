@@ -35,6 +35,7 @@ export const LIBELLES_TYPE: Record<TypeTransaction, string> = {
   transfert_tontine_tontine: 'Transfert tontine → tontine',
   transfert_compte_tontine: 'Transfert compte → tontine',
   cloture_cycle: 'Clôture de cycle (sans retrait)',
+  reduction_mise: 'Réduction de mise',
   octroi_credit: 'Octroi de crédit',
   remboursement_credit: 'Remboursement crédit',
   part_sociale: 'Part sociale',
@@ -78,9 +79,15 @@ export function estTransfertInterne(type: TypeTransaction): boolean {
   )
 }
 
-/** Ligne de journal sans entrée ni sortie d'argent (transfert interne, clôture de cycle sans retrait). */
+/** Ligne de journal sans argent : clôture de cycle sans retrait, réduction de mise (conversion). */
+export function estLigneSansArgent(type: TypeTransaction): boolean {
+  return type === 'cloture_cycle' || type === 'reduction_mise'
+}
+
+/** Ligne de journal sans entrée ni sortie d'argent (transfert interne, clôture de cycle sans retrait,
+ * réduction de mise). */
 export function estOperationNeutre(type: TypeTransaction): boolean {
-  return estTransfertInterne(type) || type === 'cloture_cycle'
+  return estTransfertInterne(type) || estLigneSansArgent(type)
 }
 
 /** Types d'opérations qui alimentent le compte de caisse d'un caissier. */
@@ -207,11 +214,45 @@ export function montantComplementMise(
   nouvelleMise: number,
   cycle?: number,
 ): { carreaux: number; complement: number; ancienneMise: number } {
-  const c = cycle ?? carnet.cycleActuel
+  const c = cycle ?? cycleCourantEffectif(carnet, mises)
   const carreaux = carreauxDeposes(carnet, mises, c)
   const ancienneMise = carnet.mise
   const complement = Math.max(0, carreaux * (nouvelleMise - ancienneMise))
   return { carreaux, complement, ancienneMise }
+}
+
+/** Mise en vigueur sur un cycle : un changement de mise vaut pour le cycle en cours à ce moment et les
+ * suivants, un cycle terminé ou clôturé garde la sienne (même règle que `mise_du_cycle` côté API). */
+export function miseDuCycle(carnet: Pick<CarnetTontine, 'mise' | 'historiqueMises'>, cycle: number): number {
+  let mise = carnet.mise
+  const historique = carnet.historiqueMises ?? []
+  for (let i = historique.length - 1; i >= 0; i--) {
+    if (cycle < historique[i].cycle) mise = historique[i].ancienne
+  }
+  return mise
+}
+
+/** Mises plus basses possibles pour un cycle en cours déjà alimenté : l'argent versé est reconverti en
+ * carreaux entiers de la nouvelle mise, 31 au plus (même règle que `mises_possibles_reduction` côté API).
+ * De la plus haute à la plus basse. */
+export function misesPossiblesReduction(
+  carnet: CarnetTontine,
+  mises: MiseTontine[],
+  cycle: number,
+): { mise: number; carreaux: number; carreauxRetires: number }[] {
+  const ancienne = miseDuCycle(carnet, cycle)
+  const deposes = carreauxDeposes(carnet, mises, cycle)
+  const retires = deposes - carreauxNets(carnet, mises, cycle)
+  const total = Math.round(deposes * ancienne)
+  const retire = Math.round(retires * ancienne)
+  const possibles: { mise: number; carreaux: number; carreauxRetires: number }[] = []
+  for (let carreaux = deposes + 1; carreaux <= carnet.misesParCycle; carreaux++) {
+    if (total % carreaux) continue
+    const mise = total / carreaux
+    if (mise <= 0 || mise >= ancienne || (retire && retire % mise)) continue
+    possibles.push({ mise, carreaux, carreauxRetires: retire / mise })
+  }
+  return possibles
 }
 
 /** Carreaux déjà retirés sur un cycle. */
@@ -506,7 +547,7 @@ export function situationsCycles(
         complet,
         cloture,
         grise,
-        montantRetirable: retirables * carnet.mise,
+        montantRetirable: retirables * miseDuCycle(carnet, cycle),
         estActuel,
       }
     })

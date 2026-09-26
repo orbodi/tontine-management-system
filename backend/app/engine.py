@@ -1703,7 +1703,12 @@ def renouveler_carnet(d, u, p):
 
 
 def changer_mise_carnet(d, u, p):
-    """Augmente la mise du cycle en cours ; le client complète l'écart sur les carreaux déjà déposés."""
+    """Change la mise du cycle en cours et des suivants ; un cycle terminé ou clôturé garde la sienne
+    (historiqueMises, voir metier.mise_du_cycle).
+
+    - Hausse : le client complète l'écart, en espèces, sur les carreaux déjà déposés du cycle.
+    - Baisse (administrateur ou chef d'agence) : voir _reduire_mise_carnet.
+    """
     carnet_id = p["carnetId"]
     nouvelle = float(p.get("nouvelleMise") or 0)
     if nouvelle <= 0:
@@ -1717,35 +1722,39 @@ def changer_mise_carnet(d, u, p):
     ancienne = float(carnet["mise"])
     if nouvelle == ancienne:
         return {"erreur": "La nouvelle mise est identique a la mise actuelle."}
-    if nouvelle < ancienne:
-        return {"erreur": "Seule une augmentation de mise est autorisee."}
 
-    cycle = carnet["cycleActuel"]
+    cycle = M.cycle_courant_effectif(carnet, d["mises"])
+    # Des dépôts d'avance sur un cycle suivant seraient réévalués à la nouvelle mise
+    avance = sorted({int(m["cycle"]) for m in d["mises"] if m["carnetId"] == carnet_id and int(m["cycle"]) > cycle})
+    if avance:
+        return {"erreur": f"Des dépôts d'avance existent déjà sur le cycle {avance[0]} : la mise ne peut pas être changée."}
+    changement = {
+        "cycle": cycle,
+        "ancienne": ancienne,
+        "nouvelle": nouvelle,
+        "date": M.maintenant(),
+        "parId": u["id"],
+        "parNom": u["nomComplet"],
+        "transactionId": None,
+        # Lignes du cycle faites à l'ancienne mise : leurs opérations ne s'annulent ni ne se corrigent
+        # tant que ce changement tient (voir _erreur_ligne_avant_changement_mise)
+        "misesAvant": [m["id"] for m in d["mises"] if m["carnetId"] == carnet_id and int(m["cycle"]) == cycle],
+        # Lignes créées par le changement (complément ou conversion), retirées s'il est annulé
+        "lignes": [],
+    }
+    if nouvelle < ancienne:
+        return _reduire_mise_carnet(d, u, carnet, changement)
+
     deposes = M.carreaux_deposes(carnet, d["mises"], cycle)
     complement = deposes * (nouvelle - ancienne)
-
+    nouvelles_tx: list[dict] = []
     if complement > 0:
         jour = _jour_collecte_payload(p)
         err_jour = _erreur_caisse_jour_collecte(d, carnet, jour) or _erreur_date_collecte(d, carnet["zoneId"], jour)
         if err_jour:
             return {"erreur": err_jour}
         date = M.horodater_sur_jour(jour)
-    else:
-        date = M.maintenant()
-    d["carnets"] = [{**c, "mise": nouvelle} if c["id"] == carnet_id else c for c in d["carnets"]]
-
-    if complement > 0:
-        d["mises"] = [
-            *d["mises"],
-            {
-                "id": uid(),
-                "carnetId": carnet_id,
-                "cycle": cycle,
-                "nombreMises": 0,
-                "montant": complement,
-                "date": date,
-            },
-        ]
+        ligne = {"id": uid(), "carnetId": carnet_id, "cycle": cycle, "nombreMises": 0, "montant": complement, "date": date}
         tx = _mk_tx(
             u,
             {
@@ -1760,9 +1769,14 @@ def changer_mise_carnet(d, u, p):
                 ),
             },
         )
-        d = _enregistrer_tx(d, [tx])
+        d["mises"] = [*d["mises"], ligne]
+        changement.update({"transactionId": tx["id"], "lignes": [ligne["id"]]})
+        nouvelles_tx.append(tx)
+    d = _appliquer_changement_mise(d, carnet_id, changement)
+    if nouvelles_tx:
+        d = _enregistrer_tx(d, nouvelles_tx)
         d = _repercuter_sur_journees_closes(
-            d, u, {}, {tx["id"]}, f"Complément de mise carnet {carnet['numero']} (collecte du {jour})"
+            d, u, {}, {nouvelles_tx[0]["id"]}, f"Complément de mise carnet {carnet['numero']} (collecte du {jour})"
         )
 
     return (
@@ -1776,6 +1790,171 @@ def changer_mise_carnet(d, u, p):
             "cycle": cycle,
         },
     )
+
+
+def _reduire_mise_carnet(d: dict, u: dict, carnet: dict, changement: dict):
+    """Baisse de la mise du cycle en cours, sans mouvement d'argent (administrateur ou chef d'agence).
+
+    Sans dépôt sur le cycle : simple changement. Avec dépôts : l'argent du cycle est reconverti en
+    carreaux de la nouvelle mise (seules les mises de metier.mises_possibles_reduction sont acceptées,
+    31 carreaux au plus). Une P.C. déjà payée suit la nouvelle mise : la différence revient au client,
+    en carreaux ; le montant de la ligne de journal est cette P.C. rendue (reclassement comptable).
+    """
+    if not (_est_admin(u) or _est_chef(u)):
+        return {"erreur": "Réduire la mise est réservé à l'administrateur ou au chef d'agence."}
+    cycle, ancienne, nouvelle = changement["cycle"], changement["ancienne"], changement["nouvelle"]
+    deposes = M.carreaux_deposes(carnet, d["mises"], cycle)
+    date = changement["date"]
+    lignes: list[dict] = []
+    pc_rendue = 0.0
+    detail = "aucun dépôt sur le cycle"
+    if deposes > 0:
+        possibles = M.mises_possibles_reduction(carnet, d["mises"], cycle)
+        choix = next((x for x in possibles if abs(x["mise"] - nouvelle) < 0.005), None)
+        if not choix:
+            liste = ", ".join(f"{int(x['mise'])} F ({x['carreaux']} carreaux)" for x in possibles)
+            return {
+                "erreur": (
+                    f"Mise de {int(nouvelle)} F impossible sur ce cycle : les {int(deposes * ancienne)} F déjà "
+                    "versés doivent tomber juste en carreaux, 31 au plus. "
+                    + (f"Mises possibles : {liste}." if liste else "Aucune mise plus basse possible.")
+                )
+            }
+        retires = deposes - M.carreaux_nets(carnet, d["mises"], cycle)
+        # Carreaux ajoutés côté dépôts (et côté retraits s'il y en a eu) : l'argent du cycle ne change pas
+        for ajout in (choix["carreaux"] - deposes, -(choix["carreauxRetires"] - retires)):
+            if ajout:
+                lignes.append({"id": uid(), "carnetId": carnet["id"], "cycle": cycle, "nombreMises": ajout,
+                               "montant": 0.0, "date": date})
+        if M.pc_payee_sur_cycle(carnet, d.get("transactions") or [], cycle):
+            pc_rendue = ancienne - nouvelle
+        detail = f"{deposes} → {choix['carreaux']} carreaux"
+        if pc_rendue:
+            detail += f", P.C. ramenée à {int(nouvelle)} F ({int(pc_rendue)} F rendus au client)"
+    tx = _mk_tx(
+        u,
+        {
+            "type": "reduction_mise",
+            "clientId": carnet["clientId"],
+            "montant": pc_rendue,
+            "date": date,
+            "description": (
+                f"Réduction de mise {int(ancienne)}→{int(nouvelle)} : {detail} — "
+                f"{_nom_client(d, carnet['clientId'])} (carnet {carnet['numero']}, cycle {cycle})"
+            ),
+        },
+    )
+    for ligne in lignes:
+        ligne["transactionId"] = tx["id"]
+    changement.update({"transactionId": tx["id"], "lignes": [x["id"] for x in lignes]})
+    d["mises"] = [*d["mises"], *lignes]
+    d = _appliquer_changement_mise(d, carnet["id"], changement)
+    d = _enregistrer_tx(d, [tx])
+    return (
+        None,
+        d,
+        {
+            "ancienneMise": ancienne,
+            "nouvelleMise": nouvelle,
+            "carreaux": M.carreaux_deposes(next(c for c in d["carnets"] if c["id"] == carnet["id"]), d["mises"], cycle),
+            "pcRendue": pc_rendue,
+            "cycle": cycle,
+        },
+    )
+
+
+def _appliquer_changement_mise(d: dict, carnet_id: str, changement: dict) -> dict:
+    d["carnets"] = [
+        {**c, "mise": changement["nouvelle"], "historiqueMises": [*(c.get("historiqueMises") or []), changement]}
+        if c["id"] == carnet_id
+        else c
+        for c in d["carnets"]
+    ]
+    return d
+
+
+def _changement_de_mise(d: dict, tx_id: str) -> tuple[dict | None, dict | None]:
+    """(carnet, changement) enregistré par cette transaction (hausse avec complément ou baisse)."""
+    for carnet in d.get("carnets") or []:
+        for changement in carnet.get("historiqueMises") or []:
+            if changement.get("transactionId") == tx_id:
+                return carnet, changement
+    return None, None
+
+
+def _erreur_annulation_changement_mise(d: dict, tx_id: str) -> str | None:
+    """Un changement de mise ne s'annule que s'il est le dernier du carnet et que rien n'a bougé depuis
+    sur son cycle (ni dépôt, ni retrait, ni transfert)."""
+    carnet, changement = _changement_de_mise(d, tx_id)
+    if not changement:
+        return None  # hausse antérieure à l'historique des mises : comportement d'origine
+    if (carnet.get("historiqueMises") or [])[-1].get("transactionId") != tx_id:
+        return "Annulation impossible : la mise a été changée de nouveau depuis. Annulez d'abord le dernier changement."
+    connues = set(changement.get("misesAvant") or []) | set(changement.get("lignes") or [])
+    if any(
+        m["carnetId"] == carnet["id"] and int(m.get("cycle") or 0) >= int(changement["cycle"]) and m["id"] not in connues
+        for m in d["mises"]
+    ):
+        return "Annulation impossible : des opérations ont eu lieu sur ce carnet depuis le changement de mise."
+    return None
+
+
+def _retirer_changement_mise(d: dict, tx_id: str, *, restaurer_mise: bool = False) -> dict:
+    """Retire le changement de mise lié à cette transaction (et ses lignes) ; remet l'ancienne mise si demandé."""
+    carnet, changement = _changement_de_mise(d, tx_id)
+    if not changement:
+        return d
+    lignes = set(changement.get("lignes") or [])
+    d["mises"] = [m for m in d["mises"] if m["id"] not in lignes]
+    d["carnets"] = [
+        {
+            **c,
+            "mise": changement["ancienne"] if restaurer_mise else c["mise"],
+            "historiqueMises": [x for x in c.get("historiqueMises") or [] if x.get("transactionId") != tx_id],
+        }
+        if c["id"] == carnet["id"]
+        else c
+        for c in d["carnets"]
+    ]
+    return _recalculer_cycle_actuel_carnet(d, carnet["id"])
+
+
+def _mises_connues_du_cycle(carnet: dict, cycle: int) -> set[float]:
+    """Mises qu'a connues un cycle : celle en vigueur et, si elle a changé pendant le cycle, les anciennes
+    (pour retrouver la ligne d'une opération faite avant le changement)."""
+    mises = {M.mise_du_cycle(carnet, cycle)}
+    mises |= {float(x["ancienne"]) for x in carnet.get("historiqueMises") or [] if int(x.get("cycle") or 0) == int(cycle)}
+    return {x for x in mises if x > 0}
+
+
+def _erreur_ligne_avant_changement_mise(d: dict, lignes: list[dict]) -> str | None:
+    """Une opération faite sur un cycle avant que sa mise ne change a été calculée à l'ancienne mise :
+    elle ne s'annule ni ne se corrige tant que ce changement tient."""
+    ids = {x["id"] for x in lignes}
+    for carnet in d.get("carnets") or []:
+        for changement in carnet.get("historiqueMises") or []:
+            if ids & set(changement.get("misesAvant") or []):
+                return (
+                    f"Impossible : la mise du carnet {carnet['numero']} a été changée après cette opération "
+                    f"({int(changement['ancienne'])} → {int(changement['nouvelle'])} F, cycle {changement['cycle']}). "
+                    "Annulez d'abord ce changement de mise."
+                )
+    return None
+
+
+def _erreur_cycle_rouvert_apres_changement(d: dict, carnet_id: str, cycle: int) -> str | None:
+    """Un cycle antérieur à un changement de mise était terminé : il ne doit pas redevenir « en cours »
+    (les dépôts y iraient à la nouvelle mise alors qu'il garde l'ancienne)."""
+    carnet = next((c for c in d["carnets"] if c["id"] == carnet_id), None)
+    if not carnet:
+        return None
+    apres = [x for x in carnet.get("historiqueMises") or [] if int(x.get("cycle") or 0) > int(cycle)]
+    if apres and not M.cycle_termine(carnet, d["mises"], int(cycle)):
+        return (
+            f"Impossible : le cycle {cycle} du carnet {carnet['numero']} redeviendrait en cours alors que la mise "
+            f"a été changée au cycle {apres[0]['cycle']}. Annulez d'abord le changement de mise."
+        )
+    return None
 
 
 def retrait_cycle(d, u, p):
@@ -1799,7 +1978,7 @@ def retrait_cycle(d, u, p):
     retirables = M.carreaux_retirables(carnet, d["mises"], cycle, d.get("transactions") or [])
     if nombre > retirables:
         return {"erreur": "Pas assez de carreaux."}
-    montant = carnet["mise"] * nombre
+    montant = M.mise_du_cycle(carnet, cycle) * nombre
     err2 = _verif_solde_sortie(d, u, montant)
     if err2:
         return {"erreur": err2}
@@ -1872,7 +2051,7 @@ def cloturer_cycle(d, u, p):
         return {"erreur": "Aucune mise sur ce cycle : rien à clôturer."}
     txs = d.get("transactions") or []
     nombre = M.carreaux_retirables(carnet, d["mises"], cycle, txs)
-    montant = carnet["mise"] * nombre
+    montant = M.mise_du_cycle(carnet, cycle) * nombre
     if avec_retrait:
         if nombre <= 0:
             return {"erreur": "Rien à rembourser sur ce cycle (seule la P.C. y est inscrite)."}
@@ -2003,7 +2182,7 @@ def transfert_tontine_compte(d, u, p):
     if err:
         return {"erreur": err}
 
-    montant = carnet["mise"] * nombre
+    montant = M.mise_du_cycle(carnet, cycle) * nombre
     if montant <= 0:
         return {"erreur": "Montant invalide."}
 
@@ -2142,8 +2321,9 @@ def transfert_tontine_tontine(d, u, p):
     )
     if err:
         return {"erreur": err}
-    montant = float(source["mise"]) * nombre
-    err = _erreur_montant_mises(montant, float(dest["mise"]), float(source["mise"]))
+    mise_source = M.mise_du_cycle(source, cycle)
+    montant = mise_source * nombre
+    err = _erreur_montant_mises(montant, float(dest["mise"]), mise_source)
     if err:
         return {"erreur": err}
 
@@ -2238,6 +2418,9 @@ def _annuler_mises_transfert(d: dict, tx: dict) -> tuple[str | None, dict]:
     lignes = [mi for mi in d.get("mises") or [] if mi.get("transactionId") == tx["id"]]
     if not lignes:
         return "Mises liées au transfert introuvables.", d
+    err = _erreur_ligne_avant_changement_mise(d, lignes)
+    if err:
+        return err, d
     entrees = [mi for mi in lignes if int(mi.get("nombreMises") or 0) > 0]
     # Destination : refus si des dépôts ont été faits depuis sur les cycles suivants
     for carnet_id in {mi["carnetId"] for mi in entrees}:
@@ -3272,6 +3455,17 @@ def annuler_ouverture_journee_caisse(d, u, p):
                 {**c, "mise": float(ancienne)} if c["id"] == cid else c for c in d["carnets"]
             ]
 
+    # Changements de mise du jour (hausse ou baisse, plus récent d'abord) : retour à l'ancienne mise ;
+    # leurs lignes (complément, conversion) sont datées du jour et partent avec les mises du jour ci-dessous
+    def _sans_changements_du_jour(c: dict) -> dict:
+        historique = list(c.get("historiqueMises") or [])
+        mise = c["mise"]
+        while historique and M.jour_iso_depuis_date(historique[-1].get("date") or "") in jours:
+            mise = historique.pop()["ancienne"]
+        return {**c, "mise": mise, "historiqueMises": historique}
+
+    d["carnets"] = [_sans_changements_du_jour(c) if c["id"] in carnets_agence else c for c in d["carnets"]]
+
     # Clôtures anticipées du jour (avec retrait = opération de caisse, sans retrait = ligne à 0 F) :
     # le cycle est rouvert (les mises d'une clôture avec retrait sont restituées ci-dessous)
     op_ids = M.operateurs_caisse_agence(d.get("employes") or [], agence_id)
@@ -3419,7 +3613,7 @@ def annuler_ouverture_journee_caisse(d, u, p):
         for t in d.get("transactions") or []
         if t.get("type") in (
             "transfert_tontine_compte", "transfert_compte_compte", "transfert_tontine_tontine",
-            "transfert_compte_tontine", "cloture_cycle",
+            "transfert_compte_tontine", "cloture_cycle", "reduction_mise",
         )
         and not t.get("annulee")
         and (t.get("agenceId") == agence_id or t.get("operateurId") in op_ids)
@@ -4077,6 +4271,7 @@ TYPES_TX_MODIFIABLES = {
 TYPES_TX_ANNULABLES = TYPES_TX_MODIFIABLES | {
     "vente_carnet",
     "cloture_cycle",
+    "reduction_mise",
     # Transferts vers la tontine : annulables (pas de correction de montant : annuler puis refaire)
     "transfert_tontine_tontine",
     "transfert_compte_tontine",
@@ -4269,9 +4464,9 @@ def _trouver_mise_tontine(
                 if float(mi.get("nombreMises") or 0) <= 0:
                     continue
                 # montant P.C ≈ 1 × mise unitaire (ou montant total si dépôt d'1 carreau)
-                mise_u = float(carnet.get("mise") or 0)
-                if abs(float(mi.get("montant") or 0) - montant) < 0.005 or (
-                    mise_u > 0 and abs(montant - mise_u) < 0.005
+                mises_u = _mises_connues_du_cycle(carnet, int(mi.get("cycle") or 1))
+                if abs(float(mi.get("montant") or 0) - montant) < 0.005 or any(
+                    abs(montant - x) < 0.005 for x in mises_u
                 ):
                     candidats.append((carnet, mi))
             else:  # mise_tontine
@@ -4279,10 +4474,10 @@ def _trouver_mise_tontine(
                     continue
                 mt = float(mi.get("montant") or 0)
                 # Dépôt splité P.C + reste : la ligne mise peut valoir ancien ou ancien+PC
-                mise_u = float(carnet.get("mise") or 0)
+                mises_u = _mises_connues_du_cycle(carnet, int(mi.get("cycle") or 1))
                 if abs(mt - montant) < 0.005:
                     candidats.append((carnet, mi))
-                elif mise_u > 0 and abs(mt - (montant + mise_u)) < 0.005:
+                elif any(abs(mt - (montant + x)) < 0.005 for x in mises_u):
                     # Ligne totale = P.C + reste
                     candidats.append((carnet, mi))
 
@@ -4301,8 +4496,8 @@ def _appliquer_correction_mise_tontine(
     d: dict, typ: str, carnet: dict, mi: dict, ancien: float, nouveau: float
 ) -> tuple[str | None, dict]:
     """Met à jour la ligne de mise et recalcule carreaux + cycleActuel."""
-    mise_unit = float(carnet.get("mise") or 0)
     cycle = int(mi.get("cycle") or carnet.get("cycleActuel") or 1)
+    mise_unit = M.mise_du_cycle(carnet, cycle)
     par_cycle = int(carnet.get("misesParCycle") or M.CARREAUX_PAR_CYCLE)
 
     if typ == "complement_mise":
@@ -4604,7 +4799,13 @@ def corriger_montant_transaction(d, u, p):
         if not trouve:
             return {"erreur": "Mise / carreaux liés à la transaction introuvables."}
         carnet, mi = trouve
+        err_m = _erreur_ligne_avant_changement_mise(d, [mi])
+        if err_m:
+            return {"erreur": err_m}
         err_m, d = _appliquer_correction_mise_tontine(d, typ, carnet, mi, ancien, nouveau)
+        if err_m:
+            return {"erreur": err_m}
+        err_m = _erreur_cycle_rouvert_apres_changement(d, carnet["id"], int(mi.get("cycle") or 1))
         if err_m:
             return {"erreur": err_m}
 
@@ -4620,7 +4821,13 @@ def corriger_montant_transaction(d, u, p):
         if not trouve:
             return {"erreur": "Mise / carreaux liés à la transaction introuvables."}
         carnet, mi = trouve
+        err_m = _erreur_ligne_avant_changement_mise(d, [mi])
+        if err_m:
+            return {"erreur": err_m}
         err_m, d = _appliquer_correction_mise_tontine(d, typ, carnet, mi, ancien, nouveau)
+        if err_m:
+            return {"erreur": err_m}
+        err_m = _erreur_cycle_rouvert_apres_changement(d, carnet["id"], int(mi.get("cycle") or 1))
         if err_m:
             return {"erreur": err_m}
         cible, mvt = _trouver_compte_depot_tx(
@@ -4799,8 +5006,8 @@ def _appliquer_annulation_mise_tontine(
     d: dict, typ: str, carnet: dict, mi: dict, montant_tx: float, description: str
 ) -> tuple[str | None, dict]:
     """Retire ou réduit la ligne de mise liée à la transaction annulée."""
-    mise_unit = float(carnet.get("mise") or 0)
     cycle = int(mi.get("cycle") or carnet.get("cycleActuel") or 1)
+    mise_unit = M.mise_du_cycle(carnet, cycle)
     par_cycle = int(carnet.get("misesParCycle") or M.CARREAUX_PAR_CYCLE)
     mt_ligne = abs(float(mi.get("montant") or 0))
     nb = int(mi.get("nombreMises") or 0)
@@ -4984,6 +5191,12 @@ def annuler_transaction(d, u, p):
         d["mouvements"] = [mv for mv in d["mouvements"] if mv["id"] != mvt["id"]]
         d = _recalculer_solde_compte_client(d, source["id"])
 
+    elif typ == "reduction_mise":
+        err_c = _erreur_annulation_changement_mise(d, tx_id)
+        if err_c:
+            return {"erreur": err_c}
+        d = _retirer_changement_mise(d, tx_id, restaurer_mise=True)
+
     elif _infos_cloture_tx(tx):
         # Clôture anticipée : on rouvre le cycle (et, si elle était avec retrait, on lui rend ses mises)
         numero, cycle_clos = _infos_cloture_tx(tx)
@@ -4992,6 +5205,8 @@ def annuler_transaction(d, u, p):
         )
         if not carnet:
             return {"erreur": "Carnet lié à la clôture introuvable."}
+        if any(int(x.get("cycle") or 0) > cycle_clos for x in carnet.get("historiqueMises") or []):
+            return {"erreur": "Annulation impossible : la mise a été changée depuis. Annulez d'abord le changement de mise."}
         if any(
             mi.get("carnetId") == carnet["id"] and int(mi.get("cycle") or 0) > cycle_clos
             and int(mi.get("nombreMises") or 0) > 0
@@ -5037,11 +5252,20 @@ def annuler_transaction(d, u, p):
         if not trouve:
             return {"erreur": "Mise / carreaux liés à la transaction introuvables."}
         carnet, mi = trouve
+        err_m = _erreur_ligne_avant_changement_mise(d, [mi]) or (
+            _erreur_annulation_changement_mise(d, tx_id) if typ == "complement_mise" else None
+        )
+        if err_m:
+            return {"erreur": err_m}
         err_m, d = _appliquer_annulation_mise_tontine(
             d, typ, carnet, mi, montant, tx.get("description") or ""
         )
         if err_m:
             return {"erreur": err_m}
+        err_m = _erreur_cycle_rouvert_apres_changement(d, carnet["id"], int(mi.get("cycle") or 1))
+        if err_m:
+            return {"erreur": err_m}
+        d = _retirer_changement_mise(d, tx_id)
         if typ in ("mise_tontine", "commission_tontine", "complement_mise") and not _est_admin(u):
             err2 = _verif_solde_sortie(d, u, montant)
             if err2:
@@ -5059,11 +5283,20 @@ def annuler_transaction(d, u, p):
         if not trouve:
             return {"erreur": "Mise / carreaux liés à la transaction introuvables."}
         carnet, mi = trouve
+        err_m = _erreur_ligne_avant_changement_mise(d, [mi]) or (
+            _erreur_annulation_changement_mise(d, tx_id) if typ == "complement_mise" else None
+        )
+        if err_m:
+            return {"erreur": err_m}
         err_m, d = _appliquer_annulation_mise_tontine(
             d, typ, carnet, mi, montant, tx.get("description") or ""
         )
         if err_m:
             return {"erreur": err_m}
+        err_m = _erreur_cycle_rouvert_apres_changement(d, carnet["id"], int(mi.get("cycle") or 1))
+        if err_m:
+            return {"erreur": err_m}
+        d = _retirer_changement_mise(d, tx_id)
         cible, mvt = _trouver_compte_depot_tx(
             d,
             client_id=client_id,

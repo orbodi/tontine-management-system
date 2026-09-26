@@ -129,6 +129,8 @@ class Carnet(Base):
     reprise_papier: Mapped[bool] = mapped_column(Boolean, default=False)
     # Cycles clôturés avant d'être pleins (client remboursé, cycle suivant ouvert) — liste JSON
     cycles_clotures_json: Mapped[str] = mapped_column(Text, default="[]")
+    # Changements de mise (liste JSON) : un cycle terminé garde sa mise, voir metier.mise_du_cycle
+    historique_mises_json: Mapped[str] = mapped_column(Text, default="[]")
 
 
 class Mise(Base):

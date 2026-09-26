@@ -186,6 +186,23 @@ export interface CarnetTontine {
   reprisePapier?: boolean
   /** Cycles clôturés avant d’être pleins (client remboursé, cycle suivant ouvert). */
   cyclesClotures?: number[]
+  /** Changements de mise (du plus ancien au plus récent) : un cycle terminé garde sa mise. */
+  historiqueMises?: ChangementMise[]
+}
+
+/** Changement de mise d’un carnet : vaut pour le cycle en cours à ce moment et pour les suivants. */
+export interface ChangementMise {
+  cycle: number
+  ancienne: number
+  nouvelle: number
+  date: string
+  parId: string
+  parNom: string
+  transactionId?: string | null
+  /** Lignes du cycle faites à l’ancienne mise (plus annulables tant que le changement tient). */
+  misesAvant?: string[]
+  /** Lignes créées par le changement (complément ou conversion). */
+  lignes?: string[]
 }
 
 export interface MiseTontine {
@@ -440,6 +457,7 @@ export type TypeTransaction =
   | 'transfert_tontine_tontine'
   | 'transfert_compte_tontine'
   | 'cloture_cycle'
+  | 'reduction_mise'
   | 'octroi_credit'
   | 'remboursement_credit'
   | 'part_sociale'

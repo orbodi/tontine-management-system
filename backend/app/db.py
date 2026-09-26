@@ -259,6 +259,16 @@ def migrate_mises_transaction(conn) -> None:
         conn.execute(text("ALTER TABLE mises ADD COLUMN transaction_id VARCHAR"))
 
 
+def migrate_carnets_historique_mises(conn) -> None:
+    """Historique des changements de mise : chaque cycle garde la mise en vigueur quand il était en cours."""
+    try:
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(carnets)")).fetchall()}
+    except Exception:  # noqa: BLE001
+        return
+    if cols and "historique_mises_json" not in cols:
+        conn.execute(text("ALTER TABLE carnets ADD COLUMN historique_mises_json TEXT DEFAULT '[]'"))
+
+
 def migrate_clients_origine_tontine(conn) -> None:
     """Client ancien (papier) : origine_tontine + reprise_papier sur les carnets."""
     try:

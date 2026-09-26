@@ -28,6 +28,8 @@ import {
   estPremierCycleRenouvellement,
   LIBELLES_CARNET,
   libelleCycleCarnet,
+  miseDuCycle,
+  misesPossiblesReduction,
   pcASaisir,
   pcPayeeSurCycle,
   preparerDepotTontine,
@@ -108,6 +110,7 @@ export default function DetailTontine() {
     data,
     aDroit,
     estAdmin,
+    estChefAgence,
     encaisserCotisation,
     renouvelerCarnet,
     changerMiseCarnet,
@@ -238,6 +241,16 @@ export default function DetailTontine() {
   const apercuComplement = carnet
     ? montantComplementMise(carnet, data.mises, Number(nouvelleMise) || 0)
     : null
+  // Baisse de mise : cycle en cours, reconverti en carreaux de la nouvelle mise s'il a déjà des dépôts
+  const cycleEnCours = carnet ? cycleCourantEffectif(carnet, data.mises) : 1
+  const deposesEnCours = carnet ? carreauxDeposes(carnet, data.mises, cycleEnCours) : 0
+  const possiblesBaisse = carnet ? misesPossiblesReduction(carnet, data.mises, cycleEnCours) : []
+  const baisseChoisie = possiblesBaisse.find((x) => x.mise === Number(nouvelleMise))
+  const pcRendue =
+    carnet && baisseChoisie && pcPayeeSurCycle(carnet, data.transactions, cycleEnCours)
+      ? carnet.mise - baisseChoisie.mise
+      : 0
+  const peutReduireMise = estAdmin || estChefAgence
 
   if (!carnet || !client) {
     return (
@@ -350,15 +363,59 @@ export default function DetailTontine() {
     )
   }
 
+  const validerBaisseMise = async (nm: number) => {
+    if (!peutReduireMise) {
+      setErreur('Réduire la mise est réservé à l’administrateur ou au chef d’agence.')
+      return
+    }
+    const choix = possiblesBaisse.find((x) => x.mise === nm)
+    if (deposesEnCours > 0 && !choix) {
+      setErreur(
+        possiblesBaisse.length
+          ? `Choisissez une des mises proposées : ${possiblesBaisse.map((x) => formatMontant(x.mise)).join(', ')}.`
+          : 'Aucune mise plus basse ne tombe juste en carreaux sur ce cycle.',
+      )
+      return
+    }
+    const pc = choix && pcPayeeSurCycle(carnet, data.transactions, cycleEnCours) ? carnet.mise - nm : 0
+    const ok = await confirmer({
+      titre: 'Confirmer la réduction de mise',
+      message:
+        `Mise ${formatMontant(carnet.mise)} → ${formatMontant(nm)} (cycle ${cycleEnCours} et suivants).\n` +
+        (choix
+          ? `${deposesEnCours} carreaux déjà versés (${formatMontant(deposesEnCours * carnet.mise)}) → ` +
+            `${choix.carreaux} carreaux de ${formatMontant(nm)}, sans mouvement d’argent.` +
+            (pc > 0 ? `\nP.C. ramenée à ${formatMontant(nm)} : ${formatMontant(pc)} rendus au client.` : '')
+          : 'Aucun dépôt sur ce cycle : pas de conversion.') +
+        '\nLes cycles terminés gardent leur mise.',
+      labelValider: 'Réduire la mise',
+    })
+    if (!ok) return
+    const err = await changerMiseCarnet(carnet.id, nm)
+    if (err) {
+      setErreur(err)
+      await alerter('Changement impossible', err)
+      return
+    }
+    setModaleMise(false)
+    setErreur('')
+    await alerter(
+      'Mise mise à jour',
+      choix
+        ? `Nouvelle mise : ${formatMontant(nm)}.\nCycle ${cycleEnCours} : ${choix.carreaux} carreaux.`
+        : `Nouvelle mise : ${formatMontant(nm)}.`,
+    )
+  }
+
   const validerRetrait = async (total: boolean) => {
     if (!retraitSur) return
     const n = total ? retraitSur.retirables : Number(nbCarreaux)
-    const montant = carnet.mise * n
+    const montant = miseDuCycle(carnet, retraitSur.cycle) * n
     const cycle = retraitSur.cycle
     const moisLabel = retraitSur.moisLabel
     const retiresApres = retraitSur.retires + n
     const disponiblesApres = Math.max(0, retraitSur.retirables - n)
-    const montantDispoApres = disponiblesApres * carnet.mise
+    const montantDispoApres = disponiblesApres * miseDuCycle(carnet, cycle)
     const resultat = await retraitCycle(carnet.id, cycle, n)
     setRetraitSur(null)
     setNbCarreaux('1')
@@ -1114,8 +1171,12 @@ export default function DetailTontine() {
               setErreur('Nouvelle mise invalide.')
               return
             }
-            if (nm <= carnet.mise) {
-              setErreur('La nouvelle mise doit être supérieure à la mise actuelle.')
+            if (nm === carnet.mise) {
+              setErreur('La nouvelle mise est identique à la mise actuelle.')
+              return
+            }
+            if (nm < carnet.mise) {
+              await validerBaisseMise(nm)
               return
             }
             const apercu = montantComplementMise(carnet, data.mises, nm)
@@ -1162,9 +1223,12 @@ export default function DetailTontine() {
               Mise actuelle : <strong>{formatMontant(carnet.mise)}</strong>
             </p>
             <p className="mt-1">
-              Cycle {carnet.cycleActuel}
+              Cycle {cycleEnCours}
               {moisActuel ? ` (${moisActuel.label})` : ''} — carreaux cotisés :{' '}
-              <strong>{apercuComplement?.carreaux ?? 0}</strong>
+              <strong>{deposesEnCours}</strong>
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Le cycle en cours et les suivants changent de mise ; un cycle terminé ou clôturé garde la sienne.
             </p>
           </div>
           <div>
@@ -1172,7 +1236,7 @@ export default function DetailTontine() {
             <input
               className="input"
               type="number"
-              min={carnet.mise + 1}
+              min={1}
               step={1}
               required
               autoFocus
@@ -1208,6 +1272,59 @@ export default function DetailTontine() {
                 </>
               ) : (
                 <p className="text-xs">Aucun complément : aucun carreau encore cotisé sur ce cycle.</p>
+              )}
+            </div>
+          )}
+          {Number(nouvelleMise) > 0 && Number(nouvelleMise) < carnet.mise && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+              {!peutReduireMise ? (
+                <p>Réduire la mise est réservé à l’administrateur ou au chef d’agence.</p>
+              ) : deposesEnCours === 0 ? (
+                <p>
+                  Aucun dépôt sur ce cycle : la mise passe simplement à{' '}
+                  <strong>{formatMontant(Number(nouvelleMise))}</strong>, sans conversion.
+                </p>
+              ) : (
+                <>
+                  <p className="font-medium">Mises possibles pour ce cycle</p>
+                  <p className="mt-1 text-xs">
+                    Les {formatMontant(deposesEnCours * carnet.mise)} déjà versés sont reconvertis en carreaux de
+                    la nouvelle mise (31 au plus), sans mouvement d’argent.
+                  </p>
+                  {possiblesBaisse.length === 0 ? (
+                    <p className="mt-2 text-xs font-medium">
+                      Aucune mise plus basse ne tombe juste en carreaux sur ce cycle.
+                    </p>
+                  ) : (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {possiblesBaisse.map((x) => (
+                        <button
+                          key={x.mise}
+                          type="button"
+                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold ring-1 ${
+                            Number(nouvelleMise) === x.mise
+                              ? 'bg-sky-600 text-white ring-sky-600'
+                              : 'bg-white text-sky-800 ring-sky-200 hover:bg-sky-100'
+                          }`}
+                          onClick={() => setNouvelleMise(String(x.mise))}
+                        >
+                          {formatMontant(x.mise)} → {x.carreaux} carreaux
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {baisseChoisie && (
+                    <p className="mt-2 text-xs">
+                      {deposesEnCours} carreaux →{' '}
+                      <strong>
+                        {baisseChoisie.carreaux} carreaux de {formatMontant(baisseChoisie.mise)}
+                      </strong>
+                      {pcRendue > 0
+                        ? ` ; P.C. ramenée à ${formatMontant(baisseChoisie.mise)} : ${formatMontant(pcRendue)} rendus au client.`
+                        : '.'}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -1360,7 +1477,7 @@ export default function DetailTontine() {
                 <div className="rounded-xl bg-slate-50 p-3 text-sm space-y-1.5">
                   <div className="flex justify-between font-semibold text-rose-800">
                     <span>Montant du retrait</span>
-                    <span>{formatMontant(carnet.mise * n)}</span>
+                    <span>{formatMontant(miseDuCycle(carnet, retraitSur.cycle) * n)}</span>
                   </div>
                   <div className="flex justify-between text-slate-600 border-t border-slate-200 pt-1.5">
                     <span>Mises retirées après</span>
@@ -1372,7 +1489,9 @@ export default function DetailTontine() {
                   </div>
                   <div className="flex justify-between text-slate-600">
                     <span>Montant disponible après</span>
-                    <span className="font-bold text-emerald-700">{formatMontant(dispoApres * carnet.mise)}</span>
+                    <span className="font-bold text-emerald-700">
+                      {formatMontant(dispoApres * miseDuCycle(carnet, retraitSur.cycle))}
+                    </span>
                   </div>
                 </div>
               )

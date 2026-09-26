@@ -36,6 +36,7 @@ from .db import (
     migrate_carnets_cycles_clotures,
     migrate_caisse_corrections,
     migrate_mises_transaction,
+    migrate_carnets_historique_mises,
 )
 from .models.entities import SchemaMigration
 
@@ -191,6 +192,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         kind="schema",
         description="Lien mise -> transaction (transferts tontine -> tontine / compte -> tontine)",
         apply=migrate_mises_transaction,
+    ),
+    Migration(
+        id="015_carnets_historique_mises",
+        kind="schema",
+        description="Mise par cycle : historique des changements de mise d'un carnet",
+        apply=migrate_carnets_historique_mises,
     ),
 )
 
