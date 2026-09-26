@@ -14,6 +14,7 @@ import gzip
 import json
 import os
 import shutil
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -36,7 +37,13 @@ def main() -> None:
     if not args.base.is_file():
         raise SystemExit(f"Base introuvable : {args.base}")
     copie = Path(tempfile.mkdtemp(prefix="mesure-")) / "copie.db"
-    shutil.copy2(args.base, copie)
+    # API de sauvegarde SQLite : copie complète même si la base est en mode WAL (écritures dans le -wal)
+    source, cible = sqlite3.connect(args.base), sqlite3.connect(copie)
+    try:
+        source.backup(cible)
+    finally:
+        cible.close()
+        source.close()
     os.environ["DATABASE_URL"] = f"sqlite:///{copie.as_posix()}"
     os.environ["SEED_DEMO_ON_STARTUP"] = "false"
     sys.path.insert(0, str(RACINE))
