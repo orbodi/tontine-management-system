@@ -6,7 +6,10 @@ croisement (toutes les actions lisent avant que la première n'écrive). Depuis 
 API <-> base, les actions sont sérialisées (db.verrou_ecriture) : le croisement est impossible, chaque
 action attend la précédente (la barrière expire au bout de 2 s, puis les actions passent une à une).
 """
+import inspect
 import threading
+
+from starlette.requests import Request
 
 from app import engine as E
 
@@ -85,7 +88,10 @@ def test_connexion_pendant_une_action_garde_sa_ligne_de_journal(banc, monkeypatc
     assert lue.wait(timeout=10)
     session = banc.Session()
     try:
-        auth.login(auth.LoginRequest(identifiant=settings.admin_identifiant, motDePasse=settings.admin_password), db=session)
+        params = {"db": session}
+        if "request" in inspect.signature(auth.login).parameters:  # limite des tentatives : adresse IP du client
+            params["request"] = Request({"type": "http", "client": ("127.0.0.1", 0), "headers": []})
+        auth.login(auth.LoginRequest(identifiant=settings.admin_identifiant, motDePasse=settings.admin_password), **params)
     finally:
         session.close()
         connecte.set()
