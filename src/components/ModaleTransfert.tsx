@@ -6,6 +6,7 @@ import {
   besoinRenouvellementCarnet,
   eligibiliteRetraitCarnet,
   LIBELLES_CARNET,
+  miseDuCycle,
   moisDuCycle,
   repartirDepotSurCycles,
   situationsCycles,
@@ -271,7 +272,7 @@ export function ModaleTransfert({
   const n = Number(nbCarreaux)
   const montantTransfert = sourceTontine
     ? carnet && Number.isInteger(n)
-      ? carnet.mise * n
+      ? miseDuCycle(carnet, cycle) * n
       : 0
     : Number(montant)
 

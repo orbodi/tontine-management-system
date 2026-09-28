@@ -323,6 +323,43 @@ def carreaux_retirables(
     return max(0, nets - reserve_pc)
 
 
+def mise_du_cycle(carnet: dict, cycle: int) -> float:
+    """Mise en vigueur sur un cycle.
+
+    Un changement de mise vaut pour le cycle en cours au moment du changement et pour les suivants : un
+    cycle terminé ou clôturé garde sa mise (historiqueMises : {cycle, ancienne, nouvelle, …}, du plus
+    ancien au plus récent). Sans historique, tous les cycles sont à la mise du carnet.
+    """
+    mise = float(carnet.get("mise") or 0)
+    for changement in reversed(carnet.get("historiqueMises") or []):
+        if int(cycle) < int(changement.get("cycle") or 0):
+            mise = float(changement.get("ancienne") or mise)
+    return mise
+
+
+def mises_possibles_reduction(carnet: dict, mises: list, cycle: int) -> list[dict[str, Any]]:
+    """Mises plus basses possibles pour un cycle en cours qui a déjà des dépôts.
+
+    L'argent du cycle ne bouge pas : il est reconverti en carreaux de la nouvelle mise (ex. 10 × 500 F =
+    5 000 F -> 25 × 200 F). Une mise est proposée si les montants déposés et retirés tombent juste en
+    carreaux entiers et si le cycle ne dépasse pas ses 31 carreaux. De la plus haute à la plus basse.
+    """
+    ancienne = mise_du_cycle(carnet, cycle)
+    deposes = carreaux_deposes(carnet, mises, cycle)
+    retires = deposes - carreaux_nets(carnet, mises, cycle)
+    par_cycle = int(carnet.get("misesParCycle") or CARREAUX_PAR_CYCLE)
+    total, retire = round(deposes * ancienne), round(retires * ancienne)
+    possibles: list[dict[str, Any]] = []
+    for carreaux in range(deposes + 1, par_cycle + 1):
+        if total % carreaux:
+            continue
+        mise = total // carreaux
+        if mise <= 0 or mise >= ancienne or (retire and retire % mise):
+            continue
+        possibles.append({"mise": float(mise), "carreaux": carreaux, "carreauxRetires": retire // mise})
+    return possibles
+
+
 def calculer_mises_depuis_montant(montant: float, mise: float) -> dict[str, Any]:
     if mise <= 0:
         return {"ok": False, "erreur": "Mise invalide."}
