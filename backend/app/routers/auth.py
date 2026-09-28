@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import math
+import threading
+import time
 from datetime import datetime, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -34,11 +37,45 @@ class TokenResponse(BaseModel):
     employe: dict[str, Any]
 
 
+# Tentatives de connexion : au plus MAX_ECHECS_CONNEXION échecs par identifiant + adresse IP sur
+# FENETRE_ECHECS_CONNEXION secondes. En mémoire (un seul processus) ; remise à zéro après une connexion réussie.
+MAX_ECHECS_CONNEXION = 5
+FENETRE_ECHECS_CONNEXION = 15 * 60
+_echecs_connexion: dict[tuple[str, str], list[float]] = {}
+_verrou_echecs_connexion = threading.Lock()
+
+
+def _compter_tentative_connexion(cle: tuple[str, str]) -> None:
+    """Refuse (429) si la limite d'échecs est atteinte, sinon compte la tentative comme un échec tant
+    qu'elle n'a pas réussi (des tentatives simultanées ne peuvent pas dépasser la limite)."""
+    maintenant = time.monotonic()
+    with _verrou_echecs_connexion:
+        echecs = [t for t in _echecs_connexion.get(cle, ()) if maintenant - t < FENETRE_ECHECS_CONNEXION]
+        if len(echecs) >= MAX_ECHECS_CONNEXION:
+            attente = FENETRE_ECHECS_CONNEXION - (maintenant - echecs[0])
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    "Trop de tentatives de connexion échouées. "
+                    f"Réessayez dans {math.ceil(attente / 60)} minute(s)."
+                ),
+                headers={"Retry-After": str(math.ceil(attente))},
+            )
+        _echecs_connexion[cle] = echecs + [maintenant]
+        if len(_echecs_connexion) > 10_000:  # identifiants au hasard : on oublie les clés expirées
+            for k in [k for k, v in _echecs_connexion.items() if maintenant - v[-1] >= FENETRE_ECHECS_CONNEXION]:
+                del _echecs_connexion[k]
+
+
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest, db: Annotated[Session, Depends(get_db)]) -> TokenResponse:
+def login(body: LoginRequest, request: Request, db: Annotated[Session, Depends(get_db)]) -> TokenResponse:
+    cle_tentative = (body.identifiant.strip().lower(), request.client.host if request.client else "")
+    _compter_tentative_connexion(cle_tentative)
     emp = get_employe_by_identifiant(db, body.identifiant)
     if not emp or not emp.actif or not verify_password(body.motDePasse, emp.mot_de_passe_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Identifiant ou mot de passe incorrect.")
+    with _verrou_echecs_connexion:
+        _echecs_connexion.pop(cle_tentative, None)
 
     now = datetime.now(timezone.utc).isoformat()
     db.add(
