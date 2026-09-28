@@ -23,7 +23,6 @@ const TYPES_MODIFIABLES = new Set<TypeTransaction>([
   'mise_tontine',
   'retrait_tontine',
   'commission_tontine',
-  'complement_mise',
   'remboursement_credit',
   'part_sociale',
   'droit_adhesion',
@@ -35,6 +34,8 @@ const TYPES_ANNULABLES = new Set<TypeTransaction>([
   ...TYPES_MODIFIABLES,
   'vente_carnet',
   'cloture_cycle',
+  // Complément de mise : calculé par l'application, annulable mais pas corrigeable
+  'complement_mise',
   'reduction_mise',
   // Transferts vers la tontine : annulables, pas de correction (annuler puis refaire)
   'transfert_tontine_tontine',

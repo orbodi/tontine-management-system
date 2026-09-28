@@ -1719,6 +1719,8 @@ def changer_mise_carnet(d, u, p):
         return {"erreur": "Carnet introuvable."}
     if carnet.get("verrouille"):
         return {"erreur": "Ce carnet est verrouille."}
+    if not _est_admin(u) and (carnet.get("agenceId") or _agence_du_client(d, carnet["clientId"])) != u.get("agenceId"):
+        return {"erreur": "Ce carnet n'appartient pas à votre agence."}
     ancienne = float(carnet["mise"])
     if nouvelle == ancienne:
         return {"erreur": "La nouvelle mise est identique a la mise actuelle."}
@@ -1745,8 +1747,9 @@ def changer_mise_carnet(d, u, p):
     if nouvelle < ancienne:
         return _reduire_mise_carnet(d, u, carnet, changement)
 
-    deposes = M.carreaux_deposes(carnet, d["mises"], cycle)
-    complement = deposes * (nouvelle - ancienne)
+    # Complément sur les carreaux encore inscrits au cycle : un carreau déjà retiré a été payé à l'ancienne mise
+    carreaux = M.carreaux_nets(carnet, d["mises"], cycle)
+    complement = carreaux * (nouvelle - ancienne)
     nouvelles_tx: list[dict] = []
     if complement > 0:
         jour = _jour_collecte_payload(p)
@@ -1763,14 +1766,15 @@ def changer_mise_carnet(d, u, p):
                 "montant": complement,
                 "date": date,
                 "description": (
-                    f"Complement mise {int(ancienne)}→{int(nouvelle)} ×{deposes} carreaux "
+                    f"Complement mise {int(ancienne)}→{int(nouvelle)} ×{carreaux} carreaux "
                     f"— {_nom_client(d, carnet['clientId'])} (cycle {cycle})"
                     + (f" (collecte du {jour})" if jour != M.aujourd_hui_iso() else "")
                 ),
             },
         )
         d["mises"] = [*d["mises"], ligne]
-        changement.update({"transactionId": tx["id"], "lignes": [ligne["id"]]})
+        # Daté comme son complément (jour de collecte) : l'annulation de cette journée défait les deux
+        changement.update({"transactionId": tx["id"], "lignes": [ligne["id"]], "date": date})
         nouvelles_tx.append(tx)
     d = _appliquer_changement_mise(d, carnet_id, changement)
     if nouvelles_tx:
@@ -1785,7 +1789,7 @@ def changer_mise_carnet(d, u, p):
         {
             "ancienneMise": ancienne,
             "nouvelleMise": nouvelle,
-            "carreaux": deposes,
+            "carreaux": carreaux,
             "complement": complement,
             "cycle": cycle,
         },
@@ -2446,6 +2450,9 @@ def _annuler_mises_transfert(d: dict, tx: dict) -> tuple[str | None, dict]:
                     f"Annulation impossible : les mises transférées ont déjà été retirées du carnet {carnet['numero']}.",
                     d,
                 )
+            err = _erreur_cycle_rouvert_apres_changement(d, carnet_id, cycle)
+            if err:
+                return err, d
         d = _recalculer_cycle_actuel_carnet(d, carnet_id)
     return None, d
 
@@ -3457,14 +3464,29 @@ def annuler_ouverture_journee_caisse(d, u, p):
 
     # Changements de mise du jour (hausse ou baisse, plus récent d'abord) : retour à l'ancienne mise ;
     # leurs lignes (complément, conversion) sont datées du jour et partent avec les mises du jour ci-dessous
+    changements_defaits: list[dict] = []
+
     def _sans_changements_du_jour(c: dict) -> dict:
         historique = list(c.get("historiqueMises") or [])
         mise = c["mise"]
         while historique and M.jour_iso_depuis_date(historique[-1].get("date") or "") in jours:
-            mise = historique.pop()["ancienne"]
+            changement = historique.pop()
+            changements_defaits.append(changement)
+            mise = changement["ancienne"]
         return {**c, "mise": mise, "historiqueMises": historique}
 
     d["carnets"] = [_sans_changements_du_jour(c) if c["id"] in carnets_agence else c for c in d["carnets"]]
+    types_tx = {t["id"]: t.get("type") for t in d.get("transactions") or []}
+    if any(
+        x.get("transactionId") and types_tx.get(x["transactionId"]) == "complement_mise" and x["transactionId"] not in tx_ids
+        for x in changements_defaits
+    ):
+        return {
+            "erreur": (
+                "Annulation impossible : un complément de mise de cette journée a été encaissé dans une autre "
+                "caisse. Annulez d'abord ce changement de mise."
+            )
+        }
 
     # Clôtures anticipées du jour (avec retrait = opération de caisse, sans retrait = ligne à 0 F) :
     # le cycle est rouvert (les mises d'une clôture avec retrait sont restituées ci-dessous)
@@ -3511,6 +3533,27 @@ def annuler_ouverture_journee_caisse(d, u, p):
         if mi.get("carnetId") in carnets_agence
         and M.jour_iso_depuis_date(mi.get("date") or "") in jours
     }
+    # Une opération faite avant un changement de mise (non défait ci-dessus) ne part pas avec la journée : elle a
+    # été convertie ou complétée ; et un cycle antérieur à un changement de mise doit rester terminé
+    ids_gardes = {mi["id"] for mi in mises_gardees}
+    retirees = [mi for mi in d.get("mises") or [] if mi["id"] not in ids_gardes]
+    for c in d["carnets"]:
+        historique = c.get("historiqueMises") or []
+        if c["id"] not in carnets_touches or not historique:
+            continue
+        lignes = [mi for mi in retirees if mi.get("carnetId") == c["id"]]
+        ids = {mi["id"] for mi in lignes}
+        if any(ids & set(x.get("misesAvant") or []) for x in historique) or any(
+            int(mi["cycle"]) < int(x["cycle"]) and not M.cycle_termine(c, mises_gardees, int(mi["cycle"]))
+            for mi in lignes
+            for x in historique
+        ):
+            return {
+                "erreur": (
+                    f"Annulation impossible : la mise du carnet {c['numero']} a été changée après des opérations "
+                    "de cette journée. Annulez d'abord le changement de mise."
+                )
+            }
     d["mises"] = mises_gardees
     for cid in carnets_touches:
         d = _recalculer_cycle_actuel_carnet(d, cid)
@@ -3619,6 +3662,8 @@ def annuler_ouverture_journee_caisse(d, u, p):
         and (t.get("agenceId") == agence_id or t.get("operateurId") in op_ids)
         and M.jour_iso_depuis_date(t.get("date") or "") in jours
     }
+    # Lignes des changements de mise défaits (« Réduction de mise » saisie depuis une autre agence comprise)
+    transferts_ids |= {x["transactionId"] for x in changements_defaits if x.get("transactionId")}
 
     # Transactions du jour
     d["transactions"] = [
@@ -4260,7 +4305,6 @@ TYPES_TX_MODIFIABLES = {
     "mise_tontine",
     "retrait_tontine",
     "commission_tontine",
-    "complement_mise",
     "remboursement_credit",
     "part_sociale",
     "droit_adhesion",
@@ -4271,6 +4315,8 @@ TYPES_TX_MODIFIABLES = {
 TYPES_TX_ANNULABLES = TYPES_TX_MODIFIABLES | {
     "vente_carnet",
     "cloture_cycle",
+    # Complément de mise : calculé par l'application (carreaux × écart), annulable mais pas corrigeable
+    "complement_mise",
     "reduction_mise",
     # Transferts vers la tontine : annulables (pas de correction de montant : annuler puis refaire)
     "transfert_tontine_tontine",
@@ -4488,6 +4534,10 @@ def _trouver_mise_tontine(
     # Préférer égalité exacte de date + montant
     for carnet, mi in candidats:
         if mi.get("date") == date_tx and abs(abs(float(mi["montant"])) - montant) < 0.005:
+            return carnet, mi
+    # Puis la ligne créée avec l'opération (même horodatage), ex. le dépôt dont la P.C. a été prélevée
+    for carnet, mi in candidats:
+        if mi.get("date") == date_tx:
             return carnet, mi
     return candidats[0]
 

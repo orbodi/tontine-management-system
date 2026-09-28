@@ -1190,7 +1190,7 @@ export default function DetailTontine() {
               message:
                 apercu.complement > 0
                   ? `Mise ${formatMontant(carnet.mise)} → ${formatMontant(nm)}.\n` +
-                    `${apercu.carreaux} carreau(x) déjà cotisé(s) : complément à encaisser ${formatMontant(apercu.complement)}.\n` +
+                    `${apercu.carreaux} carreau(x) encore sur ce cycle : complément à encaisser ${formatMontant(apercu.complement)}.\n` +
                     `Collecte du ${libelleJourCollecte(dateCollecte, aujourdhui)}.\n` +
                     `Les dépôts suivants se feront à ${formatMontant(nm)}.`
                   : `Mise ${formatMontant(carnet.mise)} → ${formatMontant(nm)}.\nAucun carreau encore cotisé sur ce cycle : pas de complément.`,

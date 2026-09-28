@@ -207,7 +207,7 @@ export function carreauxDeposes(carnet: CarnetTontine, mises: MiseTontine[], cyc
     .reduce((s, m) => s + m.nombreMises, 0)
 }
 
-/** Montant à encaisser pour passer d'une mise à une autre sur les carreaux déjà déposés du cycle. */
+/** Montant à encaisser pour passer d'une mise à une autre sur les carreaux encore inscrits au cycle. */
 export function montantComplementMise(
   carnet: CarnetTontine,
   mises: MiseTontine[],
@@ -215,7 +215,8 @@ export function montantComplementMise(
   cycle?: number,
 ): { carreaux: number; complement: number; ancienneMise: number } {
   const c = cycle ?? cycleCourantEffectif(carnet, mises)
-  const carreaux = carreauxDeposes(carnet, mises, c)
+  // Carreaux encore inscrits : un carreau déjà retiré a été payé à l'ancienne mise
+  const carreaux = carreauxNets(carnet, mises, c)
   const ancienneMise = carnet.mise
   const complement = Math.max(0, carreaux * (nouvelleMise - ancienneMise))
   return { carreaux, complement, ancienneMise }
