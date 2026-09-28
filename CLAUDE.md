@@ -26,6 +26,20 @@ d'agence, collecte par zone. Code, commentaires et messages en **français**.
 - Rester dans le périmètre de fichiers de la tâche ; imiter le style existant (nommage, densité de commentaires).
 - Une tâche = une branche `agent/<tache>` = une pull request vers `dev`, avec les mesures avant/après.
 
+## Règles métier à ne pas casser
+- **Une mise par cycle.** Un changement de mise ne vaut que pour le cycle en cours et les suivants ; un cycle
+  terminé ou clôturé garde sa mise (`carnet.historiqueMises`, colonne JSON `historique_mises_json`).
+  - Valoriser des carreaux d'un cycle : `M.mise_du_cycle(carnet, cycle)` (API) / `miseDuCycle` (front).
+    Jamais `carnet["mise"] × carreaux` pour un cycle qui n'est pas le cycle en cours : `carnet["mise"]` n'est
+    que la mise du cycle en cours et des dépôts à venir.
+  - Baisse de mise (`changerMiseCarnet`, transaction `reduction_mise`, sans caisse) : l'argent du cycle en cours
+    est reconverti en carreaux de la nouvelle mise (lignes de mise à `montant` 0 liées par `transactionId`,
+    listées dans `historiqueMises[].lignes`) ; les lignes antérieures sont dans `historiqueMises[].misesAvant`.
+  - Toute nouvelle façon d'écrire en base (ex. écriture différentielle) doit conserver `historique_mises_json`,
+    comme `cycles_clotures_json` ; `tests/test_mise.py` et le scénario de référence couvrent ces cas.
+- **Lignes de journal sans argent** : `cloture_cycle` (clôture sans retrait) et `reduction_mise`
+  (`estLigneSansArgent` côté front) : ni caisse, ni entrée, ni sortie dans les totaux.
+
 ## Tests (`backend/tests`)
 - Chaque test reçoit une copie neuve de la base de démo ; date du jour, heure et identifiants figés
   (`outils.Horloge`, « aujourd'hui » = `JOUR_TEST`). Fixtures : `banc` (base seule), `collecte` (caisse du
