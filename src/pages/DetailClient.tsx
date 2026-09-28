@@ -19,10 +19,12 @@ import {
   CARNETS_RETRAIT_6_MOIS,
   LIBELLES_CARNET,
   TYPES_SORTIE,
+  estLigneSansArgent,
   estTransfertInterne,
   besoinRenouvellementCarnet,
   fraisOuvertureComptePour,
   libelleCycleCarnet,
+  miseDuCycle,
   moisDuCycle,
   situationCredit,
   situationsCycles,
@@ -124,7 +126,7 @@ export default function DetailClient() {
 
     const soldeTontine = carnets.reduce((s, carnet) => {
       const cycles = situationsCycles(carnet, data.mises, data.transactions)
-      return s + cycles.reduce((x, et) => x + et.nets * carnet.mise, 0)
+      return s + cycles.reduce((x, et) => x + et.nets * miseDuCycle(carnet, et.cycle), 0)
     }, 0)
     const soldeEpargne = comptes.reduce((s, c) => s + c.solde, 0)
     const detteCredits = credits
@@ -684,7 +686,7 @@ export default function DetailClient() {
                   </div>
                   <span
                     className={`shrink-0 font-bold ${
-                      t.type === 'cloture_cycle'
+                      estLigneSansArgent(t.type)
                         ? 'text-slate-500'
                         : transfert
                           ? 'text-sky-700'
@@ -693,8 +695,8 @@ export default function DetailClient() {
                             : 'text-emerald-600'
                     }`}
                   >
-                    {t.type === 'cloture_cycle' ? (
-                      'Clôture'
+                    {estLigneSansArgent(t.type) ? (
+                      t.type === 'cloture_cycle' ? 'Clôture' : 'Mise modifiée'
                     ) : (
                       <>
                         {transfert ? '' : sortie ? '-' : '+'}

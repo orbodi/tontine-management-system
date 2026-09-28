@@ -61,4 +61,9 @@ def scenario_complet(b: Banc) -> None:
     b.ok(b.admin, "arreterCaisse", {"cibleEmployeId": b.caissier, "journee": j0, "montantFermeture": b.theorique(j0)})
     b.ok(b.admin, "corrigerJourneeCaisse",
          {"employeId": b.caissier, "journee": j0, "montantCompte": b.theorique(j0) + 300, "motif": "scénario"})
+    # Baisse de mise sur le carnet augmenté la veille : conversion du cycle en cours
+    d = b.etat()
+    k3 = b.carnet("020001", d)
+    possibles = M.mises_possibles_reduction(k3, d["mises"], M.cycle_courant_effectif(k3, d["mises"]))
+    b.ok(b.chef, "changerMiseCarnet", {"carnetId": k3["id"], "nouvelleMise": possibles[0]["mise"]})
     b.ok(b.chef, "arreterCaisse", {"cibleEmployeId": b.caissier, "journee": J1, "montantFermeture": b.theorique(J1)})
