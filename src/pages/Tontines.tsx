@@ -18,6 +18,7 @@ import {
   libelleCycleCarnet,
   anneeCarnet,
   besoinRenouvellementCarnet,
+  miseDuCycle,
   moisDuCycle,
   situationsCycles,
 } from '../metier'
@@ -213,7 +214,7 @@ export default function Tontines() {
       data.carnets
         .filter((c) => c.actif)
         .reduce(
-          (s, c) => s + (misesParCarnet.get(c.id) ?? []).reduce((x, m) => x + m.nombreMises, 0) * c.mise,
+          (s, c) => s + (misesParCarnet.get(c.id) ?? []).reduce((x, m) => x + m.nombreMises * miseDuCycle(c, m.cycle), 0),
           0,
         ),
     [data.carnets, misesParCarnet],

@@ -6,6 +6,7 @@ import { useStore } from '../store'
 import type { Transaction, TypeTransaction } from '../types'
 import {
   estOperationCaisse,
+  estLigneSansArgent,
   estOperationNeutre,
   estTransactionActive,
   estTransfertInterne,
@@ -22,7 +23,6 @@ const TYPES_MODIFIABLES = new Set<TypeTransaction>([
   'mise_tontine',
   'retrait_tontine',
   'commission_tontine',
-  'complement_mise',
   'remboursement_credit',
   'part_sociale',
   'droit_adhesion',
@@ -34,6 +34,9 @@ const TYPES_ANNULABLES = new Set<TypeTransaction>([
   ...TYPES_MODIFIABLES,
   'vente_carnet',
   'cloture_cycle',
+  // Complément de mise : calculé par l'application, annulable mais pas corrigeable
+  'complement_mise',
+  'reduction_mise',
   // Transferts vers la tontine : annulables, pas de correction (annuler puis refaire)
   'transfert_tontine_tontine',
   'transfert_compte_tontine',
@@ -155,7 +158,9 @@ export default function Transactions() {
         t.montant,
         t.type === 'cloture_cycle'
           ? 'Clôture'
-          : estTransfertInterne(t.type)
+          : t.type === 'reduction_mise'
+            ? 'Sans mouvement'
+            : estTransfertInterne(t.type)
             ? 'Transfert'
             : TYPES_SORTIE.includes(t.type)
               ? 'Sortie'
@@ -250,7 +255,9 @@ export default function Transactions() {
         'Transaction annulée',
         txAnnulation.type === 'cloture_cycle'
           ? 'La clôture a été annulée : le mois redevient le mois en cours. La ligne reste visible au journal.'
-          : `L'opération de ${formatMontant(txAnnulation.montant)} a été contrepassée.\n` +
+          : txAnnulation.type === 'reduction_mise'
+            ? 'La réduction de mise a été annulée : le carnet revient à son ancienne mise. La ligne reste visible au journal.'
+            : `L'opération de ${formatMontant(txAnnulation.montant)} a été contrepassée.\n` +
               'Le compte, le carnet et la caisse ont été reculés. La ligne reste visible au journal.',
       )
     } catch (e) {
@@ -320,7 +327,7 @@ export default function Transactions() {
             <tbody className="divide-y divide-slate-100">
               {transactionsFiltrees.map((t) => {
                 const transfert = estTransfertInterne(t.type)
-                const neutre = t.type === 'cloture_cycle'
+                const neutre = estLigneSansArgent(t.type)
                 const sortie = TYPES_SORTIE.includes(t.type)
                 const annulee = !!t.annulee
                 return (
@@ -358,7 +365,7 @@ export default function Transactions() {
                           <ArrowDownRight className="h-3.5 w-3.5" />
                         )}
                         {transfert || neutre ? '' : sortie ? '-' : '+'}
-                        {t.type === 'cloture_cycle' ? '—' : formatMontant(t.montant)}
+                        {neutre ? '—' : formatMontant(t.montant)}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">
@@ -464,6 +471,10 @@ export default function Transactions() {
                   <>
                     Annuler la <strong>clôture de cycle sans retrait</strong>.
                   </>
+                ) : txAnnulation.type === 'reduction_mise' ? (
+                  <>
+                    Annuler la <strong>réduction de mise</strong> : le carnet revient à son ancienne mise.
+                  </>
                 ) : (
                   <>
                     Contrepasser <strong>{LIBELLES_TYPE[txAnnulation.type]}</strong> de{' '}
@@ -476,6 +487,9 @@ export default function Transactions() {
                 {txAnnulation.type === 'cloture_cycle' ||
                 txAnnulation.description.toLowerCase().includes('clôture anticipée')
                   ? 'Le mois clôturé redevient le mois en cours (refusé si des dépôts ont déjà été faits sur le mois suivant). '
+                  : ''}
+                {txAnnulation.type === 'reduction_mise'
+                  ? 'Refusé si des opérations ont eu lieu sur le carnet depuis. '
                   : ''}
                 Le compte, le carnet et la caisse sont reculés. La ligne reste au journal, barrée.
                 Ce n’est pas une correction de montant.

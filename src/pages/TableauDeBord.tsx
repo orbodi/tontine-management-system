@@ -24,7 +24,15 @@ import {
 } from 'recharts'
 import { MODULE_CREDITS_ACTIF } from '../config'
 import { useStore } from '../store'
-import { TYPES_SORTIE, LIBELLES_CARNET, compteCaissePourEmploye, estOperationCaisse, situationCredit } from '../metier'
+import {
+  TYPES_SORTIE,
+  LIBELLES_CARNET,
+  compteCaissePourEmploye,
+  estLigneSansArgent,
+  estOperationCaisse,
+  miseDuCycle,
+  situationCredit,
+} from '../metier'
 import type { TypeCarnet } from '../types'
 import { formatDate, formatMontant } from '../utils'
 import { EnTetePage } from '../components/ui'
@@ -106,13 +114,14 @@ export default function TableauDeBord() {
     const carnets = agenceFiltreOperations
       ? data.carnets.filter((c) => c.agenceId === agenceFiltreOperations)
       : data.carnets
-    // Encours = mises nettes de chaque carnet actif × sa mise (même résultat que la somme des
-    // cycles, sans recalculer l'état de tous les cycles de tous les carnets)
-    const netsParCarnet = new Map<string, number>()
-    for (const m of data.mises) netsParCarnet.set(m.carnetId, (netsParCarnet.get(m.carnetId) ?? 0) + m.nombreMises)
-    const encoursTontine = carnets
-      .filter((c) => c.actif)
-      .reduce((s, carnet) => s + (netsParCarnet.get(carnet.id) ?? 0) * carnet.mise, 0)
+    // Encours = mises nettes de chaque cycle × la mise de ce cycle (un cycle terminé garde sa mise), sans
+    // recalculer l'état de tous les cycles de tous les carnets
+    const carnetParId = new Map(carnets.map((c) => [c.id, c]))
+    let encoursTontine = 0
+    for (const m of data.mises) {
+      const carnet = carnetParId.get(m.carnetId)
+      if (carnet?.actif) encoursTontine += m.nombreMises * miseDuCycle(carnet, m.cycle)
+    }
     const creditsActifs = data.credits.filter((c) => c.statut === 'en_cours' || c.statut === 'en_retard')
     const encoursCredits = creditsActifs.reduce(
       (s, c) => s + situationCredit(c, data.remboursements).resteAPayer,
@@ -510,8 +519,10 @@ export default function TableauDeBord() {
                     {formatDate(t.date)} — par {t.operateur}
                   </p>
                 </div>
-                {t.type === 'cloture_cycle' ? (
-                  <div className="text-sm font-bold text-slate-500">Clôture</div>
+                {estLigneSansArgent(t.type) ? (
+                  <div className="text-sm font-bold text-slate-500">
+                    {t.type === 'cloture_cycle' ? 'Clôture' : 'Mise modifiée'}
+                  </div>
                 ) : (
                   <div className={`text-sm font-bold ${sortie ? 'text-rose-600' : 'text-emerald-600'}`}>
                     {sortie ? '-' : '+'}
