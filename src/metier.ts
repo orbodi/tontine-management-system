@@ -848,7 +848,7 @@ export function journeesCaisseEnRetard(
  */
 export function messageBlocageCaisseJournaliere(
   employeId: string,
-  transactions: Transaction[],
+  _transactions: Transaction[],
   arretsCaisse: ArretCaisse[],
   ouverturesCaisse: OuvertureCaisse[] = [],
   employes: Employe[] = [],

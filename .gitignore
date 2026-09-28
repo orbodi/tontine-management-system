@@ -14,3 +14,4 @@ __pycache__
 .pytest_cache
 backend/data/*.db-wal
 backend/data/*.db-shm
+*.tsbuildinfo

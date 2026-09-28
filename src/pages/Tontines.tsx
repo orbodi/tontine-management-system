@@ -116,7 +116,7 @@ export default function Tontines() {
     )
   }, [clientChoisi, data.carnets])
 
-  const libelleClient = (c: { codeClient: string; prenom: string; nom: string }) =>
+  const libelleClient = (c: { codeClient?: string | null; prenom: string; nom: string }) =>
     `${afficherNumeroClient(c.codeClient)} — ${c.prenom} ${c.nom}`
 
   const choisirClient = (id: string) => {
@@ -125,7 +125,7 @@ export default function Tontines() {
     setClientChoisi(c.id)
     setRechercheClient(libelleClient(c))
     setAgenceChoisie(c.agenceId)
-    setZoneChoisie(c.zoneId)
+    setZoneChoisie(c.zoneId ?? '')
   }
 
   const ouvrirModale = () => {
