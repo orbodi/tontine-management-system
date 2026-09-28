@@ -12,4 +12,6 @@ backend/data/backups/
 __pycache__
 *.pyc
 .pytest_cache
+backend/data/*.db-wal
+backend/data/*.db-shm
 *.tsbuildinfo

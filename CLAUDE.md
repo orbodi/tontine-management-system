@@ -46,4 +46,5 @@ d'agence, collecte par zone. Code, commentaires et messages en **français**.
   jour ouverte + montant réel des zones saisi).
 - `test_equivalence.py` : un scénario complet joué deux fois doit donner la même base ; ajouter un mode
   d'écriture dans `MODES_PERSISTANCE` / `persistance()` (`tests/outils.py`) le compare à la réécriture complète.
-- `test_concurrence.py` : échec attendu (`xfail strict`) tant que les actions simultanées ne sont pas sérialisées.
+- `test_concurrence.py` : actions simultanées toutes enregistrées. Chaque action (lecture -> écriture) se fait sous
+  `db.verrou_ecriture` : un seul processus uvicorn, jamais plusieurs workers.

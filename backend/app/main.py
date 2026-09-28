@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -44,6 +45,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Réponses compressées (tout l'état renvoyé après chaque action : ~20 fois plus petit en gzip)
+    application.add_middleware(GZipMiddleware, minimum_size=1000)
     application.include_router(auth_router, prefix="/api")
     application.include_router(data_router, prefix="/api")
     application.include_router(comptabilite_router, prefix="/api")
