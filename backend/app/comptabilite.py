@@ -32,6 +32,8 @@ MAPPINGS_DEFAUT = [
     ("transfert_tontine_compte", "OD", "4673", "4671", "Transfert tontine vers compte courant"),
     ("transfert_tontine_compte_epargne", "OD", "4673", "4672", "Transfert tontine vers compte épargne"),
     ("commission_tontine", "CAISSE", "571", "7061", "Commission tontine"),
+    # Baisse de mise : la part de P.C. rendue au client passe de la commission à ses cotisations
+    ("reduction_mise", "OD", "7061", "4673", "Réduction de mise : P.C. rendue au client"),
     ("vente_carnet", "CAISSE", "571", "7071", "Vente de carnet"),
     ("octroi_credit", "CAISSE", "4119", "571", "Octroi de crédit"),
     ("remboursement_credit", "CAISSE", "571", "4119", "Remboursement de crédit"),

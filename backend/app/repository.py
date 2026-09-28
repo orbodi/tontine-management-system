@@ -185,6 +185,7 @@ def replace_state(db: Session, data: dict[str, Any], *, hash_plain_passwords: bo
                 cycles_clotures_json=json.dumps(
                     sorted({int(x) for x in (c.get("cyclesClotures") or [])})
                 ),
+                historique_mises_json=json.dumps(c.get("historiqueMises") or [], ensure_ascii=False),
             )
         )
 
@@ -543,6 +544,7 @@ def load_state(db: Session, *, include_password_hashes: bool = False) -> dict[st
                 "actif": c.actif,
                 "reprisePapier": bool(getattr(c, "reprise_papier", False)),
                 "cyclesClotures": json.loads(getattr(c, "cycles_clotures_json", None) or "[]"),
+                "historiqueMises": json.loads(getattr(c, "historique_mises_json", None) or "[]"),
             }
             for c in db.query(m.Carnet).all()
         ],
