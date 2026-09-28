@@ -1,0 +1,31 @@
+# Litestream 0.5 — réplication continue de la base SQLite vers un stockage objet compatible S3.
+# Toutes les valeurs ${…} viennent de l'environnement du conteneur (deploy/.env via docker-compose.yml).
+#
+# Prérequis : base en mode WAL (Litestream suit le fichier app.db-wal).
+# Attention : l'application réécrit toute la base à chaque action ; chaque synchronisation envoie
+# donc à peu près toutes les pages de la base. LITESTREAM_SYNC_INTERVAL (10 s par défaut) regroupe
+# les actions d'un même intervalle : c'est aussi la perte maximale de données en cas de panne disque.
+
+logging:
+  level: info
+  type: text
+
+# Instantané complet périodique ; les instantanés et journaux (LTX) plus vieux que la rétention sont
+# supprimés du seau. Rétention = fenêtre de restauration à un instant donné (720h = 30 jours).
+snapshot:
+  interval: ${LITESTREAM_SNAPSHOT_INTERVAL}
+  retention: ${LITESTREAM_RETENTION}
+
+dbs:
+  - path: /var/lib/tontine/app.db
+    replica:
+      type: s3
+      bucket: ${LITESTREAM_BUCKET}
+      path: ${LITESTREAM_PATH}
+      # Vide pour AWS S3 ; sinon URL du fournisseur compatible (Scaleway, OVHcloud, Backblaze B2,
+      # Cloudflare R2, MinIO…). Le style « chemin » est activé automatiquement avec un point d'accès.
+      endpoint: ${LITESTREAM_ENDPOINT}
+      region: ${LITESTREAM_REGION}
+      access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+      secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+      sync-interval: ${LITESTREAM_SYNC_INTERVAL}
